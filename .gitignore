@@ -1,0 +1,25 @@
+# deps / build
+node_modules
+dist
+dist-ssr
+.vite
+
+# rust / tauri
+src-tauri/target
+src-tauri/gen/schemas
+
+# local data — never commit personal DBs or keys
+*.db
+*.db-wal
+*.db-shm
+.env
+.env.local
+*.ppn
+
+# os / editor
+.DS_Store
+Thumbs.db
+.idea
+.vscode/*
+!.vscode/extensions.json
+*.log

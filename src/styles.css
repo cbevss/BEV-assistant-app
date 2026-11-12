@@ -1,0 +1,52 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: radial-gradient(1200px 800px at 70% -10%, #0c1424 0%, #05070d 60%);
+  overflow: hidden;
+  user-select: none;
+}
+
+/* Thin futuristic scrollbars */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(56, 232, 255, 0.25);
+  border-radius: 8px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(56, 232, 255, 0.45);
+}
+
+/* Glass panel utility */
+.glass {
+  background: rgba(17, 24, 38, 0.6);
+  border: 1px solid rgba(56, 232, 255, 0.12);
+  backdrop-filter: blur(16px);
+}
+
+.text-glow {
+  text-shadow: 0 0 12px rgba(56, 232, 255, 0.5);
+}
+
+/* Draggable top chrome region for the frameless main window */
+.drag {
+  -webkit-app-region: drag;
+}
+.no-drag {
+  -webkit-app-region: no-drag;
+}
