@@ -43,10 +43,35 @@ export function Security() {
         </div>
       </Section>
 
+      <Section title="Approvals">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <div className="text-sm text-slate-200">Trust my requests (skip approval prompts)</div>
+            <div className="text-xs text-slate-500">
+              When on, asking BEV to do something <em>is</em> the approval — sensitive actions like
+              closing apps or shutting down run immediately, with no Approve/Cancel prompt. Every
+              action is still recorded in the log below. Leave off if you want a confirmation each time.
+            </div>
+            {settings.autoApproveActions && (
+              <div className="mt-2 rounded-md border border-bev-danger/25 bg-bev-danger/10 px-3 py-1.5 text-xs text-bev-danger">
+                Approvals are off. BEV will carry out destructive actions the moment you ask.
+              </div>
+            )}
+          </div>
+          <Toggle
+            label="Trust my requests"
+            checked={settings.autoApproveActions}
+            onChange={(autoApproveActions) => update({ autoApproveActions })}
+          />
+        </div>
+      </Section>
+
       <Section title="Tool permissions">
         <p className="text-xs text-slate-500">
           Revoked tools are hidden from BEV entirely — it can't call them by voice or chat.
-          Tools marked “needs approval” always show an Approve/Cancel prompt before running.
+          {settings.autoApproveActions
+            ? " Approval prompts are currently off (see above)."
+            : " Tools marked “needs approval” show an Approve/Cancel prompt before running."}
         </p>
         <div className="divide-y divide-white/5">
           {allTools.map((t) => {

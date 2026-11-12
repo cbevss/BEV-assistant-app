@@ -1,6 +1,6 @@
 import { tools, isSensitive } from "@/ai/tools";
 import { native } from "@/lib/native";
-import { toolAllowed } from "@/state/settings";
+import { toolAllowed, autoApproveOn } from "@/state/settings";
 import type { Routine, RoutineStep, RunReport, StepResult, StepCondition } from "./types";
 
 export interface RunHooks {
@@ -54,7 +54,7 @@ async function runStep(step: RoutineStep, signal: AbortSignal, hooks: RunHooks):
 
   if (step.delayMs && step.delayMs > 0) await sleep(step.delayMs, signal);
 
-  if (isSensitive(step.tool)) {
+  if (isSensitive(step.tool) && !autoApproveOn()) {
     const ok = (await hooks.requestApproval?.(`Routine step: ${describeStep(step)}`)) ?? false;
     if (!ok) return { ...base, status: "declined", message: "declined by user" };
   }

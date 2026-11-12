@@ -93,3 +93,127 @@ export class PorcupineWakeWord implements WakeWordEngine {
     return this.running;
   }
 }
+
+interface SpeechRecognitionCtor {
+  new (): {
+    lang: string;
+    continuous: boolean;
+    interimResults: boolean;
+    start(): void;
+    abort(): void;
+    onresult: ((e: { resultIndex: number; results: ArrayLike<ArrayLike<{ transcript: string }>> }) => void) | null;
+    onerror: ((e: { error: string }) => void) | null;
+    onend: (() => void) | null;
+  };
+}
+
+/**
+ * Zero-setup wake word using the WebView2 SpeechRecognition API. Listens
+ * continuously for "BEV" (and "hey/yo BEV") and fires onWake. No Picovoice key
+ * needed. The recogniser is paused while the conversation STT runs (only one
+ * SpeechRecognition can be active at once) and resumed afterwards.
+ */
+export class WebSpeechWakeWord implements WakeWordEngine {
+  readonly id = "webspeech-wake";
+  private mic = new MicInput();
+  private rec: InstanceType<SpeechRecognitionCtor> | null = null;
+  private running = false;
+  private paused = false;
+  private onWakeCb?: () => void;
+
+  constructor(private cfg: { deviceId?: string } = {}) {}
+
+  async start(onWake: () => void): Promise<void> {
+    const w = window as unknown as {
+      SpeechRecognition?: SpeechRecognitionCtor;
+      webkitSpeechRecognition?: SpeechRecognitionCtor;
+    };
+    const Ctor = w.SpeechRecognition ?? w.webkitSpeechRecognition;
+    if (!Ctor) {
+      throw new Error(
+        "Speech recognition isn't available in this runtime. Use Ctrl+Alt+B, or add a Picovoice key in Integrations."
+      );
+    }
+    this.onWakeCb = onWake;
+    await this.mic.start(this.cfg.deviceId).catch(() => {}); // level meter, best-effort
+    this.running = true;
+    this.paused = false;
+    this.listen(Ctor);
+  }
+
+  private listen(Ctor: SpeechRecognitionCtor) {
+    if (!this.running || this.paused) return;
+    const rec = new Ctor();
+    rec.lang = "en-GB";
+    rec.continuous = true;
+    rec.interimResults = true;
+    this.rec = rec;
+
+    rec.onresult = (e) => {
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        const t = e.results[i][0].transcript.toLowerCase();
+        // Word-boundary "bev", plus common lead-ins. Avoids matching "beverage".
+        if (/(^|\s)(hey |yo |ok )?bev(\s|,|\.|!|\?|$)/.test(t)) {
+          this.pauseListening();
+          this.onWakeCb?.();
+          return;
+        }
+      }
+    };
+    rec.onerror = (ev) => {
+      // no-speech / network blips are normal; keep going. 'aborted' = our pause.
+      if (this.running && !this.paused && ev.error !== "aborted") {
+        setTimeout(() => this.listen(Ctor), 500);
+      }
+    };
+    rec.onend = () => {
+      // SpeechRecognition stops itself periodically — restart while active.
+      if (this.running && !this.paused) setTimeout(() => this.listen(Ctor), 250);
+    };
+
+    try {
+      rec.start();
+    } catch {
+      /* already started — ignore */
+    }
+  }
+
+  /** Stop recognising while the conversation STT uses the mic. */
+  pauseListening() {
+    this.paused = true;
+    try {
+      this.rec?.abort();
+    } catch {
+      /* ignore */
+    }
+    this.rec = null;
+  }
+
+  /** Resume listening for the wake word after a conversation ends. */
+  resumeListening() {
+    if (!this.running || !this.paused) return;
+    this.paused = false;
+    const w = window as unknown as {
+      SpeechRecognition?: SpeechRecognitionCtor;
+      webkitSpeechRecognition?: SpeechRecognitionCtor;
+    };
+    const Ctor = w.SpeechRecognition ?? w.webkitSpeechRecognition;
+    if (Ctor) this.listen(Ctor);
+  }
+
+  stop() {
+    this.running = false;
+    this.paused = false;
+    try {
+      this.rec?.abort();
+    } catch {
+      /* ignore */
+    }
+    this.rec = null;
+    this.mic.stop();
+  }
+
+  onLevel(cb: (l: number) => void) {
+    this.mic.onLevel(cb);
+  }
+}

@@ -38,12 +38,17 @@ export interface Settings {
   reducedMotion: boolean;
   // General
   startWithWindows: boolean;
+  /** Begin listening for the wake word automatically on launch. */
+  listenOnStartup: boolean;
   gamingQuietMode: boolean;
   proactiveMonitoring: boolean;
   cpuAlertPercent: number;
   ramAlertPercent: number;
   // Permissions: tool name → allowed
   toolPermissions: Record<string, boolean>;
+  /** When true, a spoken/typed request is itself the approval — sensitive tools
+   *  run without the Approve/Cancel modal. Off by default. */
+  autoApproveActions: boolean;
 }
 
 export const defaultSettings: Settings = {
@@ -69,11 +74,13 @@ export const defaultSettings: Settings = {
   overlayScale: 1,
   reducedMotion: false,
   startWithWindows: false,
+  listenOnStartup: true,
   gamingQuietMode: false,
   proactiveMonitoring: false,
   cpuAlertPercent: 90,
   ramAlertPercent: 90,
   toolPermissions: {},
+  autoApproveActions: false,
 };
 
 interface SettingsStore {
@@ -138,4 +145,9 @@ export function followSettingsBroadcasts(): Promise<() => void> {
 export function toolAllowed(name: string): boolean {
   const p = useSettings.getState().settings.toolPermissions[name];
   return p !== false;
+}
+
+/** When on, the user's request itself counts as approval for sensitive tools. */
+export function autoApproveOn(): boolean {
+  return useSettings.getState().settings.autoApproveActions === true;
 }

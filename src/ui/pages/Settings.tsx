@@ -36,6 +36,9 @@ export function Settings() {
         <Field label="Start BEV with Windows" hint="Launches minimised to the tray on sign-in.">
           <Toggle label="Start with Windows" checked={!!autostart} onChange={toggleAutostart} />
         </Field>
+        <Field label="Listen for “BEV” on launch" hint="Starts the microphone wake-word listener automatically. Privacy mode always overrides this.">
+          <Toggle label="Listen on startup" checked={settings.listenOnStartup} onChange={(listenOnStartup) => update({ listenOnStartup })} />
+        </Field>
       </Section>
 
       <Section title="Personality">

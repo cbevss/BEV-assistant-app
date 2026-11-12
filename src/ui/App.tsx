@@ -19,7 +19,7 @@ import { Settings } from "./pages/Settings";
 import { Onboarding } from "./pages/Onboarding";
 import { ApprovalModal } from "./components/ApprovalModal";
 import { TitleBar } from "./components/TitleBar";
-import { bootstrapVoice } from "@/voice/bootstrap";
+import { bootstrapVoice, getController } from "@/voice/bootstrap";
 
 const nav = [
   { to: "/dashboard", label: "Dashboard", icon: "◎" },
@@ -110,11 +110,27 @@ export function App() {
             </NavLink>
           ))}
         </nav>
-        <div className="px-5 py-4 text-xs text-slate-400">
+        <button
+          className="no-drag m-3 flex items-center gap-2 rounded-lg px-2 py-2 text-left text-xs text-slate-400 transition hover:bg-white/5"
+          onClick={() => {
+            const c = getController();
+            if (!c) return;
+            if (privacyMode) {
+              useAssistant.getState().setPrivacyMode(false);
+              c.enableListening();
+            } else if (micEnabled) c.disableListening();
+            else c.enableListening();
+          }}
+          title={micEnabled ? "Click to stop listening" : "Click to start listening for “BEV”"}
+        >
           <StatusDot on={micEnabled && !privacyMode} />
-          {privacyMode ? "Privacy mode" : micEnabled ? "Listening" : "Mic off"}
-          <div className="mt-1 text-[10px] text-slate-500">state: {state}</div>
-        </div>
+          <span className="flex-1">
+            {privacyMode ? "Privacy mode — mic off" : micEnabled ? "Listening for “BEV”" : "Mic off — click to listen"}
+            <span className="mt-0.5 block text-[10px] text-slate-500">
+              {state} · Ctrl+Alt+B to talk
+            </span>
+          </span>
+        </button>
       </aside>
 
       {/* Main */}

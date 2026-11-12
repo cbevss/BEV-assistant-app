@@ -39,6 +39,13 @@ async function start(): Promise<VoiceController> {
     useAssistant.getState().setPrivacyMode(on);
   });
 
+  // Start listening for "BEV" automatically, so the assistant is actually
+  // available on launch. Opt out in Settings, or Privacy mode kills it.
+  const s = useSettings.getState().settings;
+  if (s.onboarded && s.listenOnStartup && !useAssistant.getState().privacyMode) {
+    c.enableListening().catch(() => {});
+  }
+
   return c;
 }
 

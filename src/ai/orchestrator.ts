@@ -1,5 +1,5 @@
 import { native } from "@/lib/native";
-import { useSettings, toolAllowed } from "@/state/settings";
+import { useSettings, toolAllowed, autoApproveOn } from "@/state/settings";
 import { AiMessage, AiProvider, ProviderError, ToolCall } from "./types";
 import { tools, toolSpecs, isSensitive } from "./tools";
 import { buildSystemPrompt } from "./persona";
@@ -124,7 +124,8 @@ export class Orchestrator {
       return { ok: false, text: `permission for ${call.name} is revoked in Security settings` };
     }
 
-    if (isSensitive(call.name)) {
+    // Auto-approve: when the setting is on, the user's request is the approval.
+    if (isSensitive(call.name) && !autoApproveOn()) {
       const desc = describeCall(call);
       const approved = await this.hooks.requestApproval(call, desc);
       if (!approved) return { ok: false, text: "user declined this action" };

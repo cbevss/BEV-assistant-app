@@ -19,6 +19,19 @@ body {
   user-select: none;
 }
 
+/* Form controls must stay selectable/editable: user-select:none on an input
+   blocks the caret and native dropdowns in WebView2. Also keep them out of any
+   window-drag region so clicks/focus reach them. */
+input,
+textarea,
+select,
+button,
+[contenteditable="true"] {
+  user-select: text;
+  -webkit-user-select: text;
+  -webkit-app-region: no-drag;
+}
+
 /* Thin futuristic scrollbars */
 ::-webkit-scrollbar {
   width: 8px;

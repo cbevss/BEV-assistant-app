@@ -5,7 +5,7 @@ import { useSettings } from "@/state/settings";
 import { makeProvider } from "@/ai/factory";
 import { Orchestrator } from "@/ai/orchestrator";
 import { WebSpeechRecognizer, WebSpeechSynthesizer } from "./webspeech";
-import { PorcupineWakeWord } from "./wakeword";
+import { PorcupineWakeWord, WebSpeechWakeWord } from "./wakeword";
 import { useRoutines, matchRoutine } from "@/routines/store";
 import { runRoutine, summariseRun } from "@/routines/engine";
 
@@ -33,7 +33,7 @@ export function isStopPhrase(utterance: string): boolean {
  * speaking (TTS) → listening (follow-up window) → idle.
  */
 export class VoiceController {
-  private wake?: PorcupineWakeWord;
+  private wake?: PorcupineWakeWord | WebSpeechWakeWord;
   private stt = new WebSpeechRecognizer("en-GB");
   private tts = new WebSpeechSynthesizer();
   private orchestrator: Orchestrator;
@@ -68,11 +68,15 @@ export class VoiceController {
       return;
     }
     this.wake?.stop();
-    this.wake = new PorcupineWakeWord({
-      accessKey: this.cfg.picovoiceKey,
-      deviceId: settings().micDeviceId || undefined,
-      sensitivity: settings().wakeSensitivity,
-    });
+    // Picovoice gives on-device "BEV" when a key is set; otherwise fall back to
+    // the WebView2 speech recogniser so "BEV" works with zero setup.
+    this.wake = this.cfg.picovoiceKey
+      ? new PorcupineWakeWord({
+          accessKey: this.cfg.picovoiceKey,
+          deviceId: settings().micDeviceId || undefined,
+          sensitivity: settings().wakeSensitivity,
+        })
+      : new WebSpeechWakeWord({ deviceId: settings().micDeviceId || undefined });
     this.wake.onLevel((l) => {
       if (useAssistant.getState().state === "listening") this.setAudio(l);
     });
@@ -94,6 +98,8 @@ export class VoiceController {
   async onWake() {
     if (this.active) return;
     this.active = true;
+    // Free the mic for the conversation recogniser (only one at a time).
+    if (this.wake && "pauseListening" in this.wake) this.wake.pauseListening();
     this.applySettings();
     await native.showOverlay().catch(() => {});
     this.setState("activating");
@@ -196,6 +202,10 @@ export class VoiceController {
     this.setState("idle", "");
     await native.hideOverlay().catch(() => {});
     this.active = false;
+    // Resume listening for the wake word, unless the mic was turned off.
+    if (useAssistant.getState().micEnabled && this.wake && "resumeListening" in this.wake) {
+      this.wake.resumeListening();
+    }
   }
 
   private async approve(description: string): Promise<boolean> {

@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1024" y2="1024" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#0d1526"/>
+      <stop offset="1" stop-color="#05070d"/>
+    </linearGradient>
+    <linearGradient id="wave" x1="0" y1="140" x2="0" y2="884" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#38e8ff"/>
+      <stop offset="0.5" stop-color="#22d3ee"/>
+      <stop offset="1" stop-color="#8b5cf6"/>
+    </linearGradient>
+    <linearGradient id="rim" x1="0" y1="0" x2="0" y2="1024" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#38e8ff" stop-opacity="0.55"/>
+      <stop offset="0.5" stop-color="#22d3ee" stop-opacity="0.12"/>
+      <stop offset="1" stop-color="#8b5cf6" stop-opacity="0.35"/>
+    </linearGradient>
+  </defs>
+  <rect x="8" y="8" width="1008" height="1008" rx="232" fill="url(#bg)"/>
+  <rect x="12" y="12" width="1000" height="1000" rx="226" fill="none" stroke="url(#rim)" stroke-width="10"/>
+  <g>
+    <rect x="168" y="362" width="96" height="300" rx="48" fill="url(#wave)"/>
+    <rect x="316" y="252" width="96" height="520" rx="48" fill="url(#wave)"/>
+    <rect x="464" y="172" width="96" height="680" rx="48" fill="url(#wave)"/>
+    <rect x="612" y="282" width="96" height="460" rx="48" fill="url(#wave)"/>
+    <rect x="760" y="342" width="96" height="340" rx="48" fill="url(#wave)"/>
+  </g>
+</svg>
