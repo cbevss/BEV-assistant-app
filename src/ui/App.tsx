@@ -20,6 +20,7 @@ import { Onboarding } from "./pages/Onboarding";
 import { ApprovalModal } from "./components/ApprovalModal";
 import { TitleBar } from "./components/TitleBar";
 import { bootstrapVoice, getController } from "@/voice/bootstrap";
+import { check } from "@tauri-apps/plugin-updater";
 
 const nav = [
   { to: "/dashboard", label: "Dashboard", icon: "◎" },
@@ -59,6 +60,12 @@ export function App() {
 
       // Wire the full voice vertical slice (shortcut + tray + controller).
       bootstrapVoice().catch(() => {});
+
+      // Background auto-update: silently stage any newer signed release so it
+      // applies on next launch. No-op when offline or no release is published.
+      check()
+        .then((u) => u?.downloadAndInstall())
+        .catch(() => {});
     })();
 
     const un = listen("tray://privacy-mode", () => {

@@ -11,6 +11,16 @@ gh auth login
 Choose **GitHub.com → HTTPS → Login with a web browser**, and paste the one-time
 code. (This is the step that can't be automated — it proves it's really you.)
 
+## One-time: the update signing secret (for auto-updates)
+The app auto-updates from signed releases. CI signs them with a private key that
+must live in a GitHub secret (never committed — it's gitignored locally):
+```powershell
+gh secret set TAURI_SIGNING_PRIVATE_KEY < src-tauri/bev-update.key
+```
+Without this secret the release build fails to sign and auto-update won't work.
+Keep `src-tauri/bev-update.key` safe — losing it means future updates can't be
+signed and installed apps won't accept them.
+
 ## Publish v1.0.0 (two options)
 
 ### Option A — let GitHub Actions build + release (recommended)

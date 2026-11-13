@@ -23,3 +23,5 @@ Thumbs.db
 .vscode/*
 !.vscode/extensions.json
 *.log
+bev-update.key
+src-tauri/bev-update.key

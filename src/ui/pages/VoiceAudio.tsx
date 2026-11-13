@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useSettings } from "@/state/settings";
 import { MicInput } from "@/voice/wakeword";
 import { WebSpeechSynthesizer } from "@/voice/webspeech";
+import { native } from "@/lib/native";
 import { PageHeader, Section, Field, Select, Slider, Toggle, Button, TextInput } from "../components/Form";
 
 export function VoiceAudio() {
@@ -9,6 +10,7 @@ export function VoiceAudio() {
   const [mics, setMics] = useState<MediaDeviceInfo[]>([]);
   const [voices, setVoices] = useState<{ id: string; name: string }[]>([]);
   const [micErr, setMicErr] = useState<string | null>(null);
+  const [voiceErr, setVoiceErr] = useState<string | null>(null);
 
   useEffect(() => {
     const refresh = async () => {
@@ -98,7 +100,11 @@ export function VoiceAudio() {
         <Field label="Voice volume">
           <Slider ariaLabel="Voice volume" min={0} max={1} step={0.05} value={settings.speakVolume} onChange={(speakVolume) => update({ speakVolume })} format={(v) => `${Math.round(v * 100)}%`} />
         </Field>
-        <div className="flex justify-end">
+        {voiceErr && <p className="text-sm text-bev-danger">Voice failed: {voiceErr}</p>}
+        <div className="flex justify-end gap-2">
+          <Button variant="ghost" onClick={() => native.openSettingsPage("speech").catch(() => {})}>
+            Add voices
+          </Button>
           <Button
             variant="ghost"
             onClick={() =>
@@ -108,7 +114,8 @@ export function VoiceAudio() {
                 volume: settings.speakVolume,
               })
                 .speak("Alright. Everything's running smoothly. What's the plan?")
-                .catch(() => {})
+                .then(() => setVoiceErr(null))
+                .catch((e) => setVoiceErr(e instanceof Error ? e.message : String(e)))
             }
           >
             Test voice

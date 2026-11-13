@@ -26,6 +26,8 @@
     "store:default",
     "notification:default",
     "global-shortcut:default",
-    "autostart:default"
+    "autostart:default",
+    "updater:default",
+    "process:default"
   ]
 }

@@ -47,11 +47,16 @@
     }
   },
   "plugins": {
-    "shell": { "open": true }
+    "shell": { "open": true },
+    "updater": {
+      "endpoints": ["https://github.com/cbevss/BEV-assistant-app/releases/latest/download/latest.json"],
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDk1ODAxMjhDNEI1NTUxNzgKUldSNFVWVkxqQktBbGNKb2F4Wm9wNjhVT0JpQ2tPYnZaR1BGbkY1aWdjVDN6MFRXUzRpOERvaisK"
+    }
   },
   "bundle": {
     "active": true,
     "targets": ["nsis"],
+    "createUpdaterArtifacts": true,
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
