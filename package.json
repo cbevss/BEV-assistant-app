@@ -1,7 +1,7 @@
 {
   "name": "bev-assistant",
   "private": true,
-  "version": "1.0.1",
+  "version": "1.0.2",
   "type": "module",
   "description": "BEV — futuristic always-available AI voice assistant for Windows 11",
   "author": "cbevss",

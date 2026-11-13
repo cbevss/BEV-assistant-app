@@ -34,7 +34,8 @@ export class AnthropicProvider implements AiProvider {
     const body = {
       model: this.model,
       max_tokens: req.maxTokens ?? 1024,
-      temperature: req.temperature ?? 0.4,
+      // Only send temperature when explicitly set — newer Claude models reject it.
+      ...(req.temperature !== undefined ? { temperature: req.temperature } : {}),
       system: req.system,
       tools: req.tools.map((t) => ({
         name: t.name,
