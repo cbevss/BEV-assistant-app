@@ -81,7 +81,7 @@ export function Toggle({ checked, onChange, label }: { checked: boolean; onChang
       aria-label={label}
       onClick={() => onChange(!checked)}
       className={clsx(
-        "no-drag relative h-6 w-11 rounded-full transition",
+        "no-drag relative h-6 w-11 shrink-0 rounded-full transition",
         checked ? "bg-bev-cyan/70 shadow-glow" : "bg-white/10"
       )}
     >

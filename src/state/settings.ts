@@ -38,6 +38,8 @@ export interface Settings {
   reducedMotion: boolean;
   // General
   startWithWindows: boolean;
+  closeToTray: boolean; // X hides to tray instead of quitting
+  minimizeToTray: boolean; // – hides to tray instead of minimising
   /** Begin listening for the wake word automatically on launch. */
   listenOnStartup: boolean;
   gamingQuietMode: boolean;
@@ -74,6 +76,8 @@ export const defaultSettings: Settings = {
   overlayScale: 1,
   reducedMotion: false,
   startWithWindows: false,
+  closeToTray: true,
+  minimizeToTray: false,
   listenOnStartup: true,
   gamingQuietMode: false,
   proactiveMonitoring: false,

@@ -36,6 +36,12 @@ export function Settings() {
         <Field label="Start BEV with Windows" hint="Launches minimised to the tray on sign-in.">
           <Toggle label="Start with Windows" checked={!!autostart} onChange={toggleAutostart} />
         </Field>
+        <Field label="Close to system tray" hint="The ✕ button hides BEV to the tray instead of quitting. Off = ✕ quits BEV.">
+          <Toggle label="Close to system tray" checked={settings.closeToTray} onChange={(closeToTray) => update({ closeToTray })} />
+        </Field>
+        <Field label="Minimize to system tray" hint="The – button hides BEV to the tray instead of the taskbar.">
+          <Toggle label="Minimize to system tray" checked={settings.minimizeToTray} onChange={(minimizeToTray) => update({ minimizeToTray })} />
+        </Field>
         <Field label="Listen for “BEV” on launch" hint="Starts the microphone wake-word listener automatically. Privacy mode always overrides this.">
           <Toggle label="Listen on startup" checked={settings.listenOnStartup} onChange={(listenOnStartup) => update({ listenOnStartup })} />
         </Field>
