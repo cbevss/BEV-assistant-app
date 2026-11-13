@@ -1,8 +1,8 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useSettings } from "@/state/settings";
 import { MicInput } from "@/voice/wakeword";
 import { WebSpeechSynthesizer } from "@/voice/webspeech";
-import { native } from "@/lib/native";
+import { native, OutputDevice } from "@/lib/native";
 import { PageHeader, Section, Field, Select, Slider, Toggle, Button, TextInput } from "../components/Form";
 
 export function VoiceAudio() {
@@ -33,7 +33,7 @@ export function VoiceAudio() {
 
   return (
     <div>
-      <PageHeader title="Voice & Audio" subtitle="Microphone, wake word and BEV's voice." />
+      <PageHeader title="Voice & Audio" subtitle="Microphone, output device, wake word and BEV's voice." />
 
       <Section title="Microphone">
         {micErr && <p className="text-sm text-bev-danger">Microphone unavailable: {micErr}</p>}
@@ -50,6 +50,8 @@ export function VoiceAudio() {
         </Field>
         <MicTest deviceId={settings.micDeviceId} />
       </Section>
+
+      <OutputDeviceSection />
 
       <Section title="Wake word & conversation">
         <Field label="Wake-word sensitivity" hint="Higher catches quieter speech but risks false triggers from speakers.">
@@ -123,6 +125,80 @@ export function VoiceAudio() {
         </div>
       </Section>
     </div>
+  );
+}
+
+/**
+ * Output picker. BEV speaks through the system speech engine, which always
+ * plays to the Windows default device, so choosing a device here switches that
+ * default. Windows stays the source of truth: nothing is stored in settings,
+ * and the list follows changes made elsewhere (taskbar, plugging in a headset).
+ */
+function OutputDeviceSection() {
+  const [outputs, setOutputs] = useState<OutputDevice[]>([]);
+  const [err, setErr] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const refresh = useCallback(async () => {
+    try {
+      setOutputs(await native.listOutputDevices());
+      setErr(null);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+    }
+  }, []);
+
+  useEffect(() => {
+    refresh();
+    navigator.mediaDevices?.addEventListener("devicechange", refresh);
+    // Catch a default changed from the Windows taskbar while BEV was in the background.
+    window.addEventListener("focus", refresh);
+    return () => {
+      navigator.mediaDevices?.removeEventListener("devicechange", refresh);
+      window.removeEventListener("focus", refresh);
+    };
+  }, [refresh]);
+
+  const current = outputs.find((o) => o.is_default)?.id ?? "";
+
+  const choose = async (id: string) => {
+    if (!id || id === current) return;
+    setBusy(true);
+    try {
+      await native.setOutputDevice(id);
+      setErr(null);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      // Re-read either way so the dropdown shows what Windows is really using.
+      await refresh();
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Section title="Output">
+      {err && <p className="text-sm text-bev-danger">Couldn't change output: {err}</p>}
+      <Field
+        label="Output device"
+        hint="Where BEV's voice plays. This switches the Windows default output, so other apps' sound moves with it."
+      >
+        <Select
+          ariaLabel="Output device"
+          value={current}
+          onChange={choose}
+          disabled={busy || outputs.length === 0}
+          options={
+            outputs.length === 0
+              ? [{ value: "", label: err ? "Unavailable" : "No output devices found" }]
+              : [
+                  ...(current ? [] : [{ value: "", label: "Choose a device…" }]),
+                  ...outputs.map((o) => ({ value: o.id, label: o.name })),
+                ]
+          }
+        />
+      </Field>
+    </Section>
   );
 }
 

@@ -73,6 +73,8 @@ pub fn run() {
             audio::set_volume,
             audio::set_muted,
             audio::is_muted,
+            audio::list_output_devices,
+            audio::set_output_device,
             // Application control
             apps::launch_app,
             apps::close_app,

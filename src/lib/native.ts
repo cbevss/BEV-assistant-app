@@ -19,6 +19,12 @@ export interface RunningApp {
   mem_mb: number;
 }
 
+export interface OutputDevice {
+  id: string;
+  name: string;
+  is_default: boolean;
+}
+
 export interface MemoryRow {
   id: number;
   key: string;
@@ -41,6 +47,9 @@ export const native = {
   setVolume: (percent: number) => invoke<void>("set_volume", { percent }),
   setMuted: (muted: boolean) => invoke<void>("set_muted", { muted }),
   isMuted: () => invoke<boolean>("is_muted"),
+  listOutputDevices: () => invoke<OutputDevice[]>("list_output_devices"),
+  /** Makes the device the Windows default, so all sound (BEV included) follows. */
+  setOutputDevice: (id: string) => invoke<void>("set_output_device", { id }),
 
   // Apps
   launchApp: (name: string) => invoke<string>("launch_app", { name }),
