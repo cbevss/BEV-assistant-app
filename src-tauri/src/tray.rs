@@ -25,6 +25,8 @@ pub fn build(app: &tauri::AppHandle) -> BevResult<()> {
         .on_menu_event(|app, event| match event.id.as_ref() {
             "open" => {
                 if let Some(w) = app.get_webview_window("main") {
+                    // A minimised (not hidden) window needs restoring too.
+                    let _ = w.unminimize();
                     let _ = w.show();
                     let _ = w.set_focus();
                 }
@@ -47,6 +49,8 @@ pub fn build(app: &tauri::AppHandle) -> BevResult<()> {
             {
                 let app = tray.app_handle();
                 if let Some(w) = app.get_webview_window("main") {
+                    // A minimised (not hidden) window needs restoring too.
+                    let _ = w.unminimize();
                     let _ = w.show();
                     let _ = w.set_focus();
                 }

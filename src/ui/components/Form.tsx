@@ -50,16 +50,19 @@ export function Select<T extends string>({
   onChange,
   options,
   ariaLabel,
+  disabled,
 }: {
   value: T;
   onChange: (v: T) => void;
   options: { value: T; label: string }[];
   ariaLabel?: string;
+  disabled?: boolean;
 }) {
   return (
     <select
       aria-label={ariaLabel}
-      className={clsx(inputCls, "cursor-pointer")}
+      disabled={disabled}
+      className={clsx(inputCls, "cursor-pointer disabled:cursor-not-allowed disabled:opacity-50")}
       value={value}
       onChange={(e) => onChange(e.target.value as T)}
     >
