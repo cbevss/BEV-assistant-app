@@ -15,7 +15,7 @@ code. (This is the step that can't be automated — it proves it's really you.)
 The app auto-updates from signed releases. CI signs them with a private key that
 must live in a GitHub secret (never committed — it's gitignored locally):
 ```powershell
-gh secret set TAURI_SIGNING_PRIVATE_KEY < src-tauri/bev-update.key
+Get-Content src-tauri/bev-update.key -Raw | gh secret set TAURI_SIGNING_PRIVATE_KEY
 ```
 Without this secret the release build fails to sign and auto-update won't work.
 Keep `src-tauri/bev-update.key` safe — losing it means future updates can't be

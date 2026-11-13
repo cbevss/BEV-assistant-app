@@ -50,6 +50,8 @@ export class AnthropicProvider implements AiProvider {
         "content-type": "application/json",
         "x-api-key": key,
         "anthropic-version": "2023-06-01",
+        // The request carries a browser Origin; Anthropic requires this to allow it.
+        "anthropic-dangerous-direct-browser-access": "true",
       },
       body: JSON.stringify(body),
       signal: req.signal,
