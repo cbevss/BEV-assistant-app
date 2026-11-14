@@ -210,6 +210,11 @@ STEPS = 30000  #@param {type:"integer"}
 SOUND_ALIKES = "hey ben, hey beth, hey bed, hey kev, hey dev, hey deb, hey babe, hey bear, heavy, hey there"  #@param {type:"string"}
 
 MODEL_NAME = WAKE_PHRASE.strip().lower().replace(" ", "_")
+
+# Colab sets MPLBACKEND to its own inline backend, which the training
+# environment's matplotlib rejects (it crashes on import). Use a plain one.
+import os
+os.environ["MPLBACKEND"] = "Agg"
 print("Will train:", repr(WAKE_PHRASE), "→", MODEL_NAME + ".onnx")
 """,
         title=True,
@@ -236,6 +241,7 @@ else:
 # 3. Install (about 3 minutes)
 set -euo pipefail
 cd /content
+export MPLBACKEND=Agg  # Colab's inline backend crashes matplotlib in the venv
 # Helper scripts get their own folder: next to the openwakeword clone, Python
 # would import the clone's folder instead of the installed package.
 mkdir -p /content/bev_scripts
@@ -295,7 +301,7 @@ fi
     code(
         """
 #@title 4. Download training data (about 10 minutes) { display-mode: "form" }
-!/content/bev-venv/bin/python -W ignore /content/bev_scripts/download_data.py
+!MPLBACKEND=Agg /content/bev-venv/bin/python -W ignore /content/bev_scripts/download_data.py
 """,
         title=True,
     ),
@@ -338,21 +344,21 @@ print(json.dumps({k: config[k] for k in ("target_phrase", "custom_negative_phras
         """
 #@title 6. Generate voices saying the phrase (and sound-alikes) { display-mode: "form" }
 # Re-run this cell if it stops part-way: it continues where it left off.
-!cd /content && /content/bev-venv/bin/python -W ignore openwakeword/openwakeword/train.py --training_config /content/bev_wakeword.yaml --generate_clips
+!cd /content && MPLBACKEND=Agg /content/bev-venv/bin/python -W ignore openwakeword/openwakeword/train.py --training_config /content/bev_wakeword.yaml --generate_clips
 """,
         title=True,
     ),
     code(
         """
 #@title 7. Add room echo and background noise { display-mode: "form" }
-!cd /content && /content/bev-venv/bin/python -W ignore openwakeword/openwakeword/train.py --training_config /content/bev_wakeword.yaml --augment_clips
+!cd /content && MPLBACKEND=Agg /content/bev-venv/bin/python -W ignore openwakeword/openwakeword/train.py --training_config /content/bev_wakeword.yaml --augment_clips
 """,
         title=True,
     ),
     code(
         """
 #@title 8. Train the model (about 20 minutes) { display-mode: "form" }
-!cd /content && /content/bev-venv/bin/python -W ignore openwakeword/openwakeword/train.py --training_config /content/bev_wakeword.yaml --train_model
+!cd /content && MPLBACKEND=Agg /content/bev-venv/bin/python -W ignore openwakeword/openwakeword/train.py --training_config /content/bev_wakeword.yaml --train_model
 import os
 path = f"/content/output/{MODEL_NAME}.onnx"
 assert os.path.exists(path), "Training didn't produce a model. Check the output above for the error."
@@ -366,7 +372,7 @@ print("Model saved:", path)
     code(
         """
 #@title 9. Check how well it works { display-mode: "form" }
-!/content/bev-venv/bin/python -W ignore /content/bev_scripts/check_model.py /content/bev_wakeword.yaml
+!MPLBACKEND=Agg /content/bev-venv/bin/python -W ignore /content/bev_scripts/check_model.py /content/bev_wakeword.yaml
 """,
         title=True,
     ),
