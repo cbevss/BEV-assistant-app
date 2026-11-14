@@ -11,7 +11,7 @@ import { ChainSynthesizer, ELEVEN_SECRET, type VoiceNote } from "./tts";
 import { notify } from "@/lib/notify";
 import { WebSpeechWakeWord } from "./wakeword";
 import type { WakeWordEngine } from "./types";
-import { loadWakeModel, fromBase64 } from "./oww/model-store";
+import { loadWakeModels, fromBase64 } from "./oww/model-store";
 import { thresholdFor } from "./oww/pipeline";
 import { useRoutines, matchRoutine } from "@/routines/store";
 import { runRoutine, summariseRun } from "@/routines/engine";
@@ -140,8 +140,8 @@ export class VoiceController {
   private async makeWakeEngine(): Promise<{ engine: WakeWordEngine; note: string | null }> {
     const s = settings();
     if (s.wakeEngine !== "on-device") return { engine: this.speechEngine(), note: null };
-    const model = await loadWakeModel();
-    if (!model) {
+    const models = await loadWakeModels();
+    if (!models.length) {
       return {
         engine: this.speechEngine(),
         note: "On-device wake word is selected but no model is loaded. Using speech recognition instead.",
@@ -151,7 +151,7 @@ export class VoiceController {
     const { OnDeviceWakeWord } = await import("./oww/engine");
     return {
       engine: new OnDeviceWakeWord({
-        model: fromBase64(model.base64),
+        models: models.map((m) => fromBase64(m.base64)),
         deviceId: s.micDeviceId || undefined,
         threshold: thresholdFor(s.wakeSensitivity),
       }),

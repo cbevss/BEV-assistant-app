@@ -20,9 +20,10 @@ import { useAssistant } from "@/state/assistant";
 import { restartListening, getController } from "@/voice/bootstrap";
 import { thresholdFor } from "@/voice/oww/pipeline";
 import {
-  loadWakeModel,
-  saveWakeModel,
-  clearWakeModel,
+  loadWakeModels,
+  addWakeModel,
+  removeWakeModel,
+  phraseFromFile,
   toBase64,
   fromBase64,
   StoredWakeModel,
@@ -514,13 +515,13 @@ function WakeWordSection() {
   const { settings, update } = useSettings();
   const wake = useAssistant((s) => s.wake);
   const micEnabled = useAssistant((s) => s.micEnabled);
-  const [model, setModel] = useState<StoredWakeModel | null>(null);
+  const [models, setModels] = useState<StoredWakeModel[]>([]);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    loadWakeModel().then(setModel);
+    loadWakeModels().then(setModels);
   }, []);
 
   const chooseEngine = async (wakeEngine: "speech" | "on-device") => {
@@ -541,9 +542,12 @@ function WakeWordSection() {
       const runner = await openRunner(bytes);
       await runner.release();
       const stored = { name: file.name, base64: toBase64(bytes), addedAt: Date.now() };
-      await saveWakeModel(stored);
-      setModel(stored);
-      setMsg({ ok: true, text: `Loaded ${file.name}.` });
+      const replaced = models.some((m) => m.name === file.name);
+      setModels(await addWakeModel(stored));
+      setMsg({
+        ok: true,
+        text: `${replaced ? "Updated" : "Added"} “${phraseFromFile(file.name)}”.${phraseFromFile(file.name).toLowerCase() === "bev" ? " A one-word wake phrase triggers by accident more often; lower the sensitivity if it does." : ""}`,
+      });
       if (settings.wakeEngine === "on-device") await restartListening();
     } catch (e) {
       setMsg({ ok: false, text: e instanceof Error ? e.message : String(e) });
@@ -553,9 +557,8 @@ function WakeWordSection() {
     }
   };
 
-  const remove = async () => {
-    await clearWakeModel();
-    setModel(null);
+  const remove = async (name: string) => {
+    setModels(await removeWakeModel(name));
     setMsg(null);
     if (settings.wakeEngine === "on-device") await restartListening();
   };
@@ -571,7 +574,7 @@ function WakeWordSection() {
     <Section title="Wake word" aside={<StatusPill ok={live.ok} label={live.label} />}>
       <Field
         label="Engine"
-        hint="Speech recognition works with no setup. On-device runs your own “hey BEV” model on this PC, so audio never leaves it."
+        hint="Speech recognition works with no setup and answers to “BEV”, “hey BEV”, “yo BEV” and “OK BEV”. On-device runs your own trained phrases on this PC, so audio never leaves it."
       >
         <Select
           ariaLabel="Wake word engine"
@@ -588,11 +591,11 @@ function WakeWordSection() {
       {settings.wakeEngine === "on-device" && (
         <>
           <Field
-            label="Wake word model"
+            label="Wake phrases"
             hint={
-              model
-                ? `${model.name}, added ${new Date(model.addedAt).toLocaleDateString("en-GB")}.`
-                : "No model loaded yet. Train one with the guide, then load the .onnx file here."
+              models.length
+                ? `BEV wakes when it hears any of these. Add one .onnx model per phrase, e.g. “hey BEV” and “yo BEV”.`
+                : "No model loaded yet. Train one with the guide, then add the .onnx file here."
             }
           >
             <div className="flex justify-end gap-2">
@@ -610,18 +613,32 @@ function WakeWordSection() {
                 }>
                 Training guide
               </Button>
-              {model && (
-                <Button variant="danger" onClick={remove} disabled={busy}>
-                  Remove
-                </Button>
-              )}
               <Button onClick={() => fileRef.current?.click()} disabled={busy}>
-                {busy ? "Checking…" : model ? "Replace" : "Load model"}
+                {busy ? "Checking…" : models.length ? "Add phrase" : "Load model"}
               </Button>
             </div>
           </Field>
+          {models.length > 0 && (
+            <ul className="divide-y divide-white/5 rounded-lg border border-white/5">
+              {models.map((m) => (
+                <li key={m.name} className="flex items-center justify-between gap-3 px-3 py-2">
+                  <div className="min-w-0">
+                    <div className="text-sm text-slate-200">“{phraseFromFile(m.name)}”</div>
+                    <div className="truncate text-xs text-slate-500">
+                      {m.name}, added {new Date(m.addedAt).toLocaleDateString("en-GB")}
+                    </div>
+                  </div>
+                  <Button variant="danger" onClick={() => remove(m.name)} disabled={busy}>
+                    Remove
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          )}
           {msg && <p className={`text-sm ${msg.ok ? "text-bev-ok" : "text-bev-danger"}`}>{msg.text}</p>}
-          {model && <WakeTest model={model} deviceId={settings.micDeviceId} sensitivity={settings.wakeSensitivity} />}
+          {models.length > 0 && (
+            <WakeTest models={models} deviceId={settings.micDeviceId} sensitivity={settings.wakeSensitivity} />
+          )}
         </>
       )}
     </Section>
@@ -632,7 +649,15 @@ function WakeWordSection() {
  * Live score meter for the loaded model, so the user can see how strongly
  * "hey BEV" registers and tune sensitivity. Runs its own engine instance.
  */
-function WakeTest({ model, deviceId, sensitivity }: { model: StoredWakeModel; deviceId: string; sensitivity: number }) {
+function WakeTest({
+  models,
+  deviceId,
+  sensitivity,
+}: {
+  models: StoredWakeModel[];
+  deviceId: string;
+  sensitivity: number;
+}) {
   const [on, setOn] = useState(false);
   const [score, setScore] = useState(0);
   const [hits, setHits] = useState(0);
@@ -650,7 +675,11 @@ function WakeTest({ model, deviceId, sensitivity }: { model: StoredWakeModel; de
     (async () => {
       try {
         const { OnDeviceWakeWord } = await import("@/voice/oww/engine");
-        const e = new OnDeviceWakeWord({ model: fromBase64(model.base64), deviceId: deviceId || undefined, threshold });
+        const e = new OnDeviceWakeWord({
+          models: models.map((m) => fromBase64(m.base64)),
+          deviceId: deviceId || undefined,
+          threshold,
+        });
         engine.current = e;
         e.onScore((s) => !cancelled && setScore(s));
         e.onFatal = (m) => setErr(m);
@@ -674,12 +703,15 @@ function WakeTest({ model, deviceId, sensitivity }: { model: StoredWakeModel; de
     };
     // threshold changes are applied live above; don't restart for them
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [on, model, deviceId]);
+  }, [on, models, deviceId]);
 
   return (
     <Field
       label="Test wake word"
-      hint={err ?? `Say “hey BEV”. Detections: ${hits}. Trigger point ${Math.round(threshold * 100)}%.`}
+      hint={
+        err ??
+        `Say ${models.map((m) => `“${phraseFromFile(m.name)}”`).join(" or ")}. Detections: ${hits}. Trigger point ${Math.round(threshold * 100)}%.`
+      }
     >
       <div className="flex items-center gap-3">
         <div className="relative h-2 flex-1 overflow-hidden rounded bg-white/5">

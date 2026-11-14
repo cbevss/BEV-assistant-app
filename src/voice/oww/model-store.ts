@@ -13,20 +13,45 @@ export interface StoredWakeModel {
 let store: Store | null = null;
 const getStore = async () => (store ??= await load("wakeword.json", { autoSave: true }));
 
-export async function loadWakeModel(): Promise<StoredWakeModel | null> {
+/**
+ * All loaded wake-phrase models. Older versions kept a single model under
+ * "model"; that one is moved into the list on first read.
+ */
+export async function loadWakeModels(): Promise<StoredWakeModel[]> {
   try {
-    return (await (await getStore()).get<StoredWakeModel>("model")) ?? null;
+    const st = await getStore();
+    const list = (await st.get<StoredWakeModel[]>("models")) ?? [];
+    const legacy = await st.get<StoredWakeModel>("model");
+    if (legacy) {
+      const merged = list.some((m) => m.name === legacy.name) ? list : [legacy, ...list];
+      await st.set("models", merged);
+      await st.delete("model");
+      return merged;
+    }
+    return list;
   } catch {
-    return null;
+    return [];
   }
 }
 
-export async function saveWakeModel(m: StoredWakeModel): Promise<void> {
-  await (await getStore()).set("model", m);
+/** Add a model; one with the same file name replaces the old copy. */
+export async function addWakeModel(m: StoredWakeModel): Promise<StoredWakeModel[]> {
+  const list = (await loadWakeModels()).filter((x) => x.name !== m.name);
+  list.push(m);
+  await (await getStore()).set("models", list);
+  return list;
 }
 
-export async function clearWakeModel(): Promise<void> {
-  await (await getStore()).delete("model");
+export async function removeWakeModel(name: string): Promise<StoredWakeModel[]> {
+  const list = (await loadWakeModels()).filter((x) => x.name !== name);
+  await (await getStore()).set("models", list);
+  return list;
+}
+
+/** "yo_bev.onnx" → "yo BEV", for showing which phrases BEV answers to. */
+export function phraseFromFile(name: string): string {
+  const base = name.replace(/\.onnx$/i, "").replace(/[_-]+/g, " ").replace(/\s+/g, " ").trim();
+  return base.replace(/\bbev\b/gi, "BEV") || name;
 }
 
 export function toBase64(bytes: Uint8Array): string {

@@ -1,11 +1,11 @@
-# On-device wake word ("hey BEV")
+# On-device wake word ("hey BEV", "yo BEV"…)
 
 BEV can listen for its wake word in two ways (Voice & Audio → Wake word → Engine):
 
 | Engine | Setup | Where the listening happens |
 |---|---|---|
 | **Speech recognition** (default) | None | The WebView2 speech service. Responds to "BEV", "hey BEV", "yo BEV" |
-| **On-device (openWakeWord)** | Train a model once (about an hour, free) | Entirely on your PC. Responds to "hey BEV" |
+| **On-device (openWakeWord)** | Train a model once (about an hour, free) | Entirely on your PC. Responds to each phrase you train ("hey BEV", "yo BEV"…) |
 
 If on-device is selected but no model is loaded, or the model fails to start, BEV falls back to speech recognition and says so on the Voice & Audio page, so the wake word never just goes dead.
 
@@ -20,10 +20,19 @@ If on-device is selected but no model is loaded, or the model fails to start, BE
 
 The notebook needs a free Google account and nothing else. It generates thousands of synthetic voices saying "hey BEV", mixes them with room echo and background noise, and trains a small detector against about 2,000 hours of ordinary audio so everyday speech and TV don't set it off.
 
+## More than one phrase
+
+There are two ways to make BEV answer to several phrases. You can mix them.
+
+- **One model per phrase.** Run the notebook again with `WAKE_PHRASE` set to `yo bev`, then **Add phrase** in BEV. Your existing "hey BEV" model keeps working alongside it, and you can remove each phrase on its own later.
+- **One model for several phrases.** Set `WAKE_PHRASE` to `hey bev, yo bev`. The notebook trains a single `hey_bev_or_yo_bev.onnx` that answers to both.
+
+Two or more syllables work best. "BEV" on its own is short enough that everyday speech sets it off more often; if you train it, lower the sensitivity a little.
+
 ## Load it into BEV
 
 1. **Voice & Audio → Wake word → Engine: On-device (openWakeWord)**.
-2. **Load model** and pick `hey_bev.onnx`. BEV checks the file before saving it.
+2. **Load model** (or **Add phrase** for another one) and pick the `.onnx` file. BEV checks the file before saving it.
 3. Press **Test** and say "hey BEV" a few times. The bar shows the model's score live; the white line is the trigger point.
 4. Adjust **Wake-word sensitivity** (in the Conversation section):
    - Missing you? Raise it.
