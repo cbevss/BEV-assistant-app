@@ -5,9 +5,10 @@ import { useSettings } from "@/state/settings";
 import { makeProvider } from "@/ai/factory";
 import { Orchestrator } from "@/ai/orchestrator";
 import { WebSpeechRecognizer, WebSpeechSynthesizer } from "./webspeech";
-import { PorcupineWakeWord, WebSpeechWakeWord } from "./wakeword";
+import { WebSpeechWakeWord } from "./wakeword";
 import { useRoutines, matchRoutine } from "@/routines/store";
 import { runRoutine, summariseRun } from "@/routines/engine";
+import { playChime } from "./sounds";
 
 export interface ControllerConfig {
   picovoiceKey?: string;
@@ -33,14 +34,14 @@ export function isStopPhrase(utterance: string): boolean {
  * speaking (TTS) → listening (follow-up window) → idle.
  */
 export class VoiceController {
-  private wake?: PorcupineWakeWord | WebSpeechWakeWord;
+  private wake?: WebSpeechWakeWord;
   private stt = new WebSpeechRecognizer("en-GB");
   private tts = new WebSpeechSynthesizer();
   private orchestrator: Orchestrator;
   private abort?: AbortController;
   private active = false;
 
-  constructor(private cfg: ControllerConfig) {
+  constructor(readonly cfg: ControllerConfig) {
     this.orchestrator = new Orchestrator(makeProvider(settings()), {
       onState: (s) => this.setState(s),
       onAssistantText: (t) => this.pushAssistant(t),
@@ -68,15 +69,23 @@ export class VoiceController {
       return;
     }
     this.wake?.stop();
-    // Picovoice gives on-device "BEV" when a key is set; otherwise fall back to
-    // the WebView2 speech recogniser so "BEV" works with zero setup.
-    this.wake = this.cfg.picovoiceKey
-      ? new PorcupineWakeWord({
-          accessKey: this.cfg.picovoiceKey,
-          deviceId: settings().micDeviceId || undefined,
-          sensitivity: settings().wakeSensitivity,
-        })
-      : new WebSpeechWakeWord({ deviceId: settings().micDeviceId || undefined });
+    // The WebView2 speech recogniser listens for "BEV" with zero setup.
+    // PorcupineWakeWord (on-device, needs a Picovoice key) is not wired up yet:
+    // its start() never reports a detection, so selecting it whenever a key was
+    // saved left BEV deaf. Keep using the working engine until it is finished
+    // (see docs/VOICE.md); cfg.picovoiceKey is kept for that.
+    this.wake = new WebSpeechWakeWord({ deviceId: settings().micDeviceId || undefined });
+    this.wake.onFatal = (error) => {
+      useAssistant.getState().setMic(false);
+      useAssistant
+        .getState()
+        .setState(
+          "error",
+          error === "audio-capture"
+            ? "No microphone found. Check the input device in Voice & Audio."
+            : "Microphone access is blocked. Allow it in Windows Settings → Privacy → Microphone."
+        );
+    };
     this.wake.onLevel((l) => {
       if (useAssistant.getState().state === "listening") this.setAudio(l);
     });
@@ -99,10 +108,11 @@ export class VoiceController {
     if (this.active) return;
     this.active = true;
     // Free the mic for the conversation recogniser (only one at a time).
-    if (this.wake && "pauseListening" in this.wake) this.wake.pauseListening();
+    this.wake?.pauseListening();
     this.applySettings();
     await native.showOverlay().catch(() => {});
     this.setState("activating");
+    playChime("wake");
     if (!settings().gamingQuietMode) await this.tts.speak("Yeah?").catch(() => {});
     await this.conversationTurn();
   }
@@ -197,15 +207,14 @@ export class VoiceController {
       await new Promise((r) => setTimeout(r, 3500));
     } else {
       this.setState("completed");
+      playChime("done");
       await new Promise((r) => setTimeout(r, 900));
     }
     this.setState("idle", "");
     await native.hideOverlay().catch(() => {});
     this.active = false;
     // Resume listening for the wake word, unless the mic was turned off.
-    if (useAssistant.getState().micEnabled && this.wake && "resumeListening" in this.wake) {
-      this.wake.resumeListening();
-    }
+    if (useAssistant.getState().micEnabled) this.wake?.resumeListening();
   }
 
   private async approve(description: string): Promise<boolean> {

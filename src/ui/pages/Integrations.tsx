@@ -176,7 +176,7 @@ function PicovoiceCard() {
     >
       <Field
         label="Access key"
-        hint="Free at console.picovoice.ai. Wake-word audio is processed locally and never uploaded."
+        hint="Free at console.picovoice.ai. On-device wake word is coming in a future update; until then BEV uses the built-in speech wake word, so saving a key changes nothing yet."
       >
         <div className="flex gap-2">
           <TextInput type="password" autoComplete="off" value={val} onChange={(e) => setVal(e.target.value)} placeholder="paste access key" />
