@@ -1,6 +1,6 @@
 <div align="center">
 
-# BEV
+ # BEV
 
 **A futuristic, always-available AI voice assistant for Windows 11.**
 
