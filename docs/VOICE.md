@@ -9,25 +9,17 @@ Everything is orchestrated by `src/voice/controller.ts` and driven by the shared
 ## Engines (swappable)
 | Stage | Default (works today) | Upgrade |
 |---|---|---|
-| Wake word | Ctrl+Alt+B shortcut / tray | **Picovoice Porcupine** on-device ("BEV") |
+| Wake word | WebView2 `SpeechRecognition` listening for "BEV", plus Ctrl+Alt+B / tray | **openWakeWord** on-device ("hey BEV"), see [`WAKE_WORD.md`](WAKE_WORD.md) |
 | STT | WebView2 `SpeechRecognition` (en-GB) | Whisper (local) / cloud |
 | TTS | WebView2 `SpeechSynthesis` | ElevenLabs / Azure neural |
 
-## Wiring Porcupine (the remaining seam)
-`src/voice/wakeword.ts` already captures the mic and exposes a live RMS level. To finish on-device detection:
+## Wake word engines
+Both implement `WakeWordEngine` (`src/voice/types.ts`) and are chosen in Voice & Audio:
 
-```ts
-import { Porcupine } from "@picovoice/porcupine-web";
-// in PorcupineWakeWord.start():
-const porcupine = await Porcupine.create(
-  this.cfg.accessKey!,
-  { publicPath: "/bev.ppn", label: "BEV" },
-  (detection) => { if (detection.label === "BEV") onWake(); },
-);
-// feed 16kHz int16 frames from a WebVoiceProcessor into porcupine.process()
-```
+- `WebSpeechWakeWord` (`src/voice/wakeword.ts`): continuous speech recognition, matching "BEV" in the transcript. Zero setup.
+- `OnDeviceWakeWord` (`src/voice/oww/engine.ts`): openWakeWord models in WebAssembly, fed by an AudioWorklet. Needs a model trained with `training/train_hey_bev.ipynb`.
 
-Install: `npm i @picovoice/porcupine-web @picovoice/web-voice-processor`. The code deliberately **does not fake** a detection — until this is wired, `start()` throws a clear setup message and the shortcut/tray path drives activation.
+The controller falls back to speech recognition if the on-device engine has no model or fails to start, and reports why on the Voice & Audio page. Full details: [`WAKE_WORD.md`](WAKE_WORD.md).
 
 ## VAD & follow-ups
 `listenOnce` resolves on the recognizer's silence (`onend`), and the controller races it against an 8s conversation timeout. After a reply, it loops back to `listening` without a new wake word; silence ends the conversation. "BEV, stop" aborts via `AbortSignal` and cancels TTS.

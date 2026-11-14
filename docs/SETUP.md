@@ -28,12 +28,10 @@ ollama serve        # exposes http://localhost:11434
 ```
 Then select *Ollama (local)* in Chat / Settings.
 
-## 4. Wake word (optional, on-device)
-1. Create a free account at https://console.picovoice.ai
-2. Train a custom **"BEV"** keyword → download the `.ppn` for Windows.
-3. Put the `.ppn` in `src-tauri/resources/bev.ppn` (gitignored) and paste your **access key** in Settings → Voice (stored as `picovoice_key`).
+## 4. Wake word
+Saying "BEV" works out of the box through speech recognition, and so do the **Ctrl+Alt+B** shortcut and the tray.
 
-Without Picovoice, activate BEV with the **Ctrl+Alt+B** shortcut or the tray.
+For a wake word that runs entirely on your PC, train a free "hey BEV" model in Google Colab and load it in Voice & Audio. See [`WAKE_WORD.md`](WAKE_WORD.md).
 
 ## 5. Build the installer
 ```bash

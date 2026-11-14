@@ -13,7 +13,7 @@ Built with Tauri 2 · Rust · React · TypeScript · Tailwind.
 ---
 
 > **Status: v1.0.0 foundation — working vertical slice, not yet a signed release.**
-> The core is real and compiles: live system telemetry, Windows volume control, app launching, window management, SQLite memory, OS-keyring secrets, the animated overlay + state machine, the provider-agnostic AI brain with structured tool-calling, and a working text/voice chat path. Several section UIs and the on-device Picovoice wake-word are the next phase. See [`CHECKLIST.md`](CHECKLIST.md) for the exact live / partial / unverified / future breakdown — nothing here is claimed done that wasn't built.
+> The core is real and compiles: live system telemetry, Windows volume control, app launching, window management, SQLite memory, OS-keyring secrets, the animated overlay + state machine, the provider-agnostic AI brain with structured tool-calling, and a working text/voice chat path. An on-device "hey BEV" wake word is available once you train a model (free, in Colab). See [`CHECKLIST.md`](CHECKLIST.md) for the exact live / partial / unverified / future breakdown — nothing here is claimed done that wasn't built.
 
 ## What works today
 
@@ -22,7 +22,7 @@ Built with Tauri 2 · Rust · React · TypeScript · Tailwind.
 - **Provider-agnostic AI brain** — Anthropic Claude, OpenAI-style, and local Ollama behind one interface, with **structured tool-calling**, a multi-step orchestration loop, interruption via `AbortSignal`, and action logging.
 - **Permission gating** — sensitive tools (e.g. closing an app) raise an **Approve / Cancel** modal before anything runs. API keys live in the **Windows Credential Manager**, never in SQLite, logs, or the UI.
 - **The overlay** — a transparent, always-on-top, click-through holographic orb with eight animated states (idle → activating → listening → thinking → speaking → executing → completed → error) and a **voice-reactive** waveform driven by real mic/TTS level.
-- **Voice path** — working speech-in/speech-out via the WebView2 Speech APIs out of the box (British English), with Picovoice Porcupine (on-device wake word) and Whisper/ElevenLabs as configured upgrades.
+- **Voice path** — working speech-in/speech-out via the WebView2 Speech APIs out of the box (British English), with an on-device openWakeWord "hey BEV" wake word ([`docs/WAKE_WORD.md`](docs/WAKE_WORD.md)) and Whisper/ElevenLabs as upgrades.
 - **Memory** — SQLite-backed `remember` / `recall` tools the model can call; inspectable and deletable.
 - **Tray + background** — close-to-tray, tray menu (Open / Toggle listening / Privacy mode / Quit), autostart plugin.
 
@@ -57,7 +57,7 @@ Clean seams everywhere: providers, speech engines, and tools are swappable behin
 
 - Windows 11 (x64). Developed against Ryzen 7 7700 / RX 9060 XT / 32 GB.
 - [Node 20+](https://nodejs.org), [Rust stable](https://rustup.rs), and the WebView2 runtime (ships with Win11).
-- Optional: an Anthropic/OpenAI API key **or** [Ollama](https://ollama.com) for a fully local brain; a Picovoice access key for on-device wake word.
+- Optional: an Anthropic/OpenAI API key **or** [Ollama](https://ollama.com) for a fully local brain; optionally a "hey BEV" model trained in Google Colab for the on-device wake word.
 
 ## Run from source
 
@@ -80,7 +80,7 @@ Produces `src-tauri/target/release/bundle/nsis/BEV_1.0.0_x64-setup.exe` (CI publ
 2. Pick a microphone and AI provider; paste your API key (stored in Credential Manager) or point at Ollama.
 3. Choose a voice, review mic/automation permissions, done.
 
-See [`docs/SETUP.md`](docs/SETUP.md) for keys and the Picovoice wake-word steps, and [`docs/VOICE.md`](docs/VOICE.md) for the voice pipeline.
+See [`docs/SETUP.md`](docs/SETUP.md) for keys, [`docs/WAKE_WORD.md`](docs/WAKE_WORD.md) for the on-device wake word, and [`docs/VOICE.md`](docs/VOICE.md) for the voice pipeline.
 
 ## Security
 
