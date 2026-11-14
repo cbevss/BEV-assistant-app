@@ -1,6 +1,7 @@
 import { fetch } from "@tauri-apps/plugin-http";
 import { native } from "@/lib/native";
 import {
+  AiImage,
   AiProvider,
   AiResponse,
   ChatRequest,
@@ -85,10 +86,21 @@ interface AnthropicResponse {
   >;
 }
 
+type ImageBlock = {
+  type: "image";
+  source: { type: "base64"; media_type: AiImage["mediaType"]; data: string };
+};
+
 type Block =
   | { type: "text"; text: string }
+  | ImageBlock
   | { type: "tool_use"; id: string; name: string; input: Record<string, unknown> }
-  | { type: "tool_result"; tool_use_id: string; content: string };
+  | { type: "tool_result"; tool_use_id: string; content: string | Array<{ type: "text"; text: string } | ImageBlock> };
+
+const imageBlock = (i: AiImage): ImageBlock => ({
+  type: "image",
+  source: { type: "base64", media_type: i.mediaType, data: i.data },
+});
 
 /**
  * Map neutral history to Anthropic's format: assistant tool calls become
@@ -108,7 +120,10 @@ export function toAnthropicMessages(messages: ChatRequest["messages"]) {
   for (const m of messages) {
     if (m.role === "system") continue;
     if (m.role === "tool") {
-      push("user", [{ type: "tool_result", tool_use_id: m.toolCallId ?? "", content: m.content }]);
+      const content = m.images?.length
+        ? [{ type: "text" as const, text: m.content }, ...m.images.map(imageBlock)]
+        : m.content;
+      push("user", [{ type: "tool_result", tool_use_id: m.toolCallId ?? "", content }]);
     } else if (m.role === "assistant") {
       const blocks: Block[] = [];
       if (m.content) blocks.push({ type: "text", text: m.content });
@@ -116,8 +131,10 @@ export function toAnthropicMessages(messages: ChatRequest["messages"]) {
         blocks.push({ type: "tool_use", id: c.id, name: c.name, input: c.args });
       }
       push("assistant", blocks);
-    } else if (m.content) {
-      push("user", [{ type: "text", text: m.content }]);
+    } else if (m.content || m.images?.length) {
+      const blocks: Block[] = (m.images ?? []).map(imageBlock);
+      if (m.content) blocks.push({ type: "text", text: m.content });
+      push("user", blocks);
     }
   }
   return out;

@@ -8,8 +8,10 @@ mod audio;
 mod apps;
 mod db;
 mod error;
+mod files;
 mod games;
 mod overlay;
+mod screen;
 mod secrets;
 mod sysmon;
 mod system;
@@ -45,6 +47,7 @@ pub fn run() {
             show_main(app);
         }))
         .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_http::init())
@@ -105,6 +108,7 @@ pub fn run() {
             apps::list_processes,
             games::list_games,
             games::launch_game,
+            files::open_path,
             // Window management
             windows_mgmt::focus_window,
             windows_mgmt::list_windows,
@@ -129,6 +133,8 @@ pub fn run() {
             system::lock_pc,
             system::power_action,
             system::take_screenshot,
+            screen::capture_screen,
+            screen::foreground_window,
             system::delete_temp_file,
             system::open_settings_page,
             system::list_monitors,

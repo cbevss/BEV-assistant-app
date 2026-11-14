@@ -1,4 +1,5 @@
 import { emit } from "@tauri-apps/api/event";
+import { endIntent, DISMISS_REPLY } from "./intents";
 import { AssistantState, useAssistant } from "@/state/assistant";
 import { native } from "@/lib/native";
 import { useSettings } from "@/state/settings";
@@ -26,14 +27,9 @@ function micErrorText(error: string): string {
   return `Wake word stopped: ${error}`;
 }
 
-/** "stop", "BEV stop", "cancel", "never mind", "shut up" end the conversation. */
+/** "stop", "BEV stop", "cancel", "shut up" end the conversation silently. */
 export function isStopPhrase(utterance: string): boolean {
-  const u = utterance
-    .toLowerCase()
-    .replace(/[^a-z ]/g, "")
-    .replace(/^(hey |yo )?bev /, "")
-    .trim();
-  return /^(stop|cancel|never ?mind|nevermind|shut up|be quiet|thats all|forget it)( (it|that|bev))?$/.test(u);
+  return endIntent(utterance) === "stop";
 }
 
 /**
@@ -48,6 +44,8 @@ export class VoiceController {
   wake?: WakeWordEngine;
   private stt = new WebSpeechRecognizer("en-GB");
   private tts: SpeechSynthesizer = this.makeTts();
+  /** Set by a dismissal ("that's all") so the popup closes without the "done" step. */
+  private closeQuietly = false;
   /** Notes already shown, so a fallback isn't announced on every reply. */
   private shownVoiceNotes = new Set<string>();
   private orchestrator: Orchestrator;
@@ -221,8 +219,21 @@ export class VoiceController {
 
         if (!utterance) break; // silence → end conversation
 
-        if (isStopPhrase(utterance)) {
+        const intent = endIntent(utterance);
+        if (intent === "stop") {
           this.tts.cancel();
+          break;
+        }
+        if (intent === "dismiss") {
+          // "That's all" / "I wasn't talking to you": don't wait for more,
+          // don't send it to the AI. Say goodbye, close, and start fresh next time.
+          this.tts.cancel();
+          this.setState("speaking");
+          await this.tts
+            .speak(DISMISS_REPLY, { signal: this.abort.signal, onLevel: (l) => this.setAudio(l) })
+            .catch(() => {});
+          this.orchestrator.reset();
+          this.closeQuietly = true;
           break;
         }
 
@@ -267,8 +278,13 @@ export class VoiceController {
   }
 
   private async endConversation() {
+    const quiet = this.closeQuietly;
+    this.closeQuietly = false;
     // Keep an error visible long enough to read; otherwise show a brief "done".
-    if (useAssistant.getState().state === "error") {
+    // After a dismissal the popup just goes: no "done" animation or chime.
+    if (quiet) {
+      // nothing to show
+    } else if (useAssistant.getState().state === "error") {
       await new Promise((r) => setTimeout(r, 3500));
     } else {
       this.setState("completed");

@@ -5,6 +5,7 @@ vi.mock("@/lib/native", () => ({
   native: {
     setVolume: vi.fn().mockResolvedValue(undefined),
     launchApp: vi.fn().mockResolvedValue("launched"),
+    openPath: vi.fn().mockImplementation(async (p: string) => `opened ${p}`),
     listGames: vi.fn().mockResolvedValue([
       { id: "252950", name: "Rocket League", source: "steam" },
       { id: "730", name: "Counter-Strike 2", source: "steam" },
@@ -14,7 +15,7 @@ vi.mock("@/lib/native", () => ({
   },
 }));
 
-import { tools, isSensitive, toolSpecs } from "./tools";
+import { tools, isSensitive, toolSpecs, opensProgram } from "./tools";
 
 describe("tool registry", () => {
   it("exposes specs for every tool", () => {
@@ -53,6 +54,20 @@ describe("tool registry", () => {
 
   it("says which games are installed when the name doesn't match", async () => {
     await expect(tools.launch_game.run({ name: "minecraft" })).rejects.toThrow(/No installed Steam game matches "minecraft"/);
+  });
+
+  it("opens folders and documents without approval, but asks before programs and scripts", () => {
+    expect(isSensitive("open_path", { path: "C:\\Users\\me\\Downloads" })).toBe(false);
+    expect(isSensitive("open_path", { path: "C:\\Users\\me\\notes.txt" })).toBe(false);
+    for (const p of ["C:\\Games\\game.exe", "D:\\run.BAT", "C:\\x\\Shortcut.lnk", "\"C:\\a b\\setup.msi\"", "C:\\s.ps1"]) {
+      expect(isSensitive("open_path", { path: p })).toBe(true);
+    }
+    expect(opensProgram("C:\\photos\\holiday.jpg")).toBe(false);
+  });
+
+  it("passes the path to the native opener", async () => {
+    expect(await tools.open_path.run({ path: "C:\\Users\\me\\Downloads" })).toBe("opened C:\\Users\\me\\Downloads");
+    await expect(tools.open_path.run({ path: "  " })).rejects.toThrow(/non-empty/);
   });
 
   it("flags close_app as sensitive and get_system_stats as not", () => {

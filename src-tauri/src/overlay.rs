@@ -15,8 +15,27 @@ pub fn ensure_overlay(app: &tauri::AppHandle) -> BevResult<()> {
     // Start transparent, click-through, hidden.
     w.set_ignore_cursor_events(true)
         .map_err(|e| BevError::Os(e.to_string()))?;
+    exclude_from_capture(&w);
     Ok(())
 }
+
+/// Keep the orb out of screenshots (BEV's own screen captures included), so it
+/// never hides what BEV is looking at. Windows 10 2004+; silently a no-op before.
+#[cfg(windows)]
+fn exclude_from_capture(w: &WebviewWindow) {
+    use windows::Win32::Foundation::HWND;
+    use windows::Win32::UI::WindowsAndMessaging::{SetWindowDisplayAffinity, WDA_EXCLUDEFROMCAPTURE};
+    if let Ok(h) = w.hwnd() {
+        // Tauri may use a different `windows` crate version; go via the raw handle.
+        let hwnd = HWND(h.0 as *mut _);
+        if let Err(e) = unsafe { SetWindowDisplayAffinity(hwnd, WDA_EXCLUDEFROMCAPTURE) } {
+            log::warn!("overlay capture exclusion unavailable: {e}");
+        }
+    }
+}
+
+#[cfg(not(windows))]
+fn exclude_from_capture(_w: &WebviewWindow) {}
 
 #[tauri::command]
 pub fn show_overlay(app: tauri::AppHandle) -> BevResult<()> {

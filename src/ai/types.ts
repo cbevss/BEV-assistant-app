@@ -1,8 +1,16 @@
 /** Provider-independent chat + tool-calling contract. */
 
+/** A base64 image attached to a message (e.g. a screenshot from look_at_screen). */
+export interface AiImage {
+  mediaType: "image/jpeg" | "image/png";
+  data: string;
+}
+
 export interface AiMessage {
   role: "system" | "user" | "assistant" | "tool";
   content: string;
+  /** Images on user or tool messages. Only the newest is kept in history. */
+  images?: AiImage[];
   toolCallId?: string;
   toolName?: string;
   /** On assistant messages: the tool calls the model issued in that turn. */
