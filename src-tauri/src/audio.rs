@@ -20,6 +20,7 @@ mod imp {
     use std::ffi::c_void;
     use windows::core::{Interface, IUnknown, GUID, HRESULT, PCWSTR, PWSTR};
     use windows::Win32::Devices::FunctionDiscovery::PKEY_Device_FriendlyName;
+    use windows::Win32::Foundation::RPC_E_CHANGED_MODE;
     use windows::Win32::Media::Audio::Endpoints::IAudioEndpointVolume;
     use windows::Win32::Media::Audio::{
         eCommunications, eConsole, eMultimedia, eRender, ERole, IMMDevice, IMMDeviceEnumerator,
@@ -30,20 +31,33 @@ mod imp {
         COINIT_MULTITHREADED, STGM_READ,
     };
 
-    struct ComGuard;
+    /// Makes sure COM is usable on the calling thread for the guard's lifetime.
+    ///
+    /// Tauri runs synchronous commands on the main UI thread, where the window
+    /// system has already initialised COM as single-threaded (STA). Asking for
+    /// multithreaded mode there fails with RPC_E_CHANGED_MODE, but COM is
+    /// already up, which is all these calls need. In that case the guard must
+    /// not call CoUninitialize, because it didn't add an initialisation.
+    struct ComGuard {
+        owns: bool,
+    }
     impl ComGuard {
         fn new() -> BevResult<Self> {
-            unsafe {
-                CoInitializeEx(None, COINIT_MULTITHREADED)
-                    .ok()
-                    .map_err(|e| BevError::Os(format!("CoInitializeEx: {e}")))?;
+            let hr = unsafe { CoInitializeEx(None, COINIT_MULTITHREADED) };
+            if hr == RPC_E_CHANGED_MODE {
+                return Ok(ComGuard { owns: false });
             }
-            Ok(ComGuard)
+            // S_OK and S_FALSE both add a reference that must be balanced.
+            hr.ok()
+                .map_err(|e| BevError::Os(format!("CoInitializeEx: {e}")))?;
+            Ok(ComGuard { owns: true })
         }
     }
     impl Drop for ComGuard {
         fn drop(&mut self) {
-            unsafe { CoUninitialize() };
+            if self.owns {
+                unsafe { CoUninitialize() };
+            }
         }
     }
 
