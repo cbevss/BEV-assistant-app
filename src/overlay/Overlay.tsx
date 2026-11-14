@@ -47,8 +47,9 @@ export function Overlay() {
   }, []);
 
   useEffect(() => {
-    // Expanded state wants pointer interaction; idle is fully click-through.
-    native.setOverlayClickthrough(!expanded).catch(() => {});
+    // The overlay only displays the orb; nothing in it is clickable. Keep it
+    // click-through in every state so whatever is behind it stays usable.
+    native.setOverlayClickthrough(true).catch(() => {});
   }, [expanded]);
 
   return (
