@@ -25,7 +25,15 @@ export interface Settings {
   responseLength: "short" | "normal" | "detailed";
   // Voice
   micDeviceId: string;
+  /** Which voice engine speaks: Windows (built-in), Kokoro (free, local) or ElevenLabs. */
+  ttsEngine: "windows" | "kokoro" | "elevenlabs";
+  /** Windows voice (when ttsEngine is "windows"). */
   voiceId: string;
+  kokoroVoice: string;
+  /** Run Kokoro on the graphics card (WebGPU) when available. */
+  kokoroUseGpu: boolean;
+  elevenVoiceId: string;
+  elevenVoiceName: string;
   speakRate: number;
   speakVolume: number;
   /** "speech" = WebView2 speech recognition; "on-device" = openWakeWord model. */
@@ -67,7 +75,12 @@ export const defaultSettings: Settings = {
   customPersonality: "",
   responseLength: "short",
   micDeviceId: "",
+  ttsEngine: "windows",
   voiceId: "",
+  kokoroVoice: "bm_george",
+  kokoroUseGpu: true,
+  elevenVoiceId: "",
+  elevenVoiceName: "",
   speakRate: 1.02,
   speakVolume: 1,
   wakeEngine: "speech",

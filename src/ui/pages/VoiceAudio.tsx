@@ -2,6 +2,18 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useSettings } from "@/state/settings";
 import { MicInput } from "@/voice/wakeword";
 import { WebSpeechSynthesizer } from "@/voice/webspeech";
+import { ChainSynthesizer, ELEVEN_SECRET, resetVoiceFallbacks, type TtsEngine } from "@/voice/tts";
+import {
+  KOKORO_VOICES,
+  kokoroStatus,
+  onKokoroStatus,
+  preloadKokoro,
+  kokoroGpuProblem,
+  resetKokoroGpu,
+  setKokoroGpu,
+  type KokoroStatus,
+} from "@/voice/tts/kokoro";
+import { listElevenVoices, elevenUsage, type ElevenVoice, type ElevenUsage } from "@/voice/tts/elevenlabs";
 import { native, OutputDevice } from "@/lib/native";
 import { PageHeader, Section, Field, Select, Slider, Toggle, Button, TextInput, StatusPill } from "../components/Form";
 import { useAssistant } from "@/state/assistant";
@@ -22,7 +34,6 @@ export function VoiceAudio() {
   const [mics, setMics] = useState<MediaDeviceInfo[]>([]);
   const [voices, setVoices] = useState<{ id: string; name: string }[]>([]);
   const [micErr, setMicErr] = useState<string | null>(null);
-  const [voiceErr, setVoiceErr] = useState<string | null>(null);
 
   useEffect(() => {
     const refresh = async () => {
@@ -107,43 +118,7 @@ export function VoiceAudio() {
         </Field>
       </Section>
 
-      <Section title="BEV's voice">
-        <Field label="Voice" hint="Windows neural voices appear here when installed (Settings → Time & language → Speech).">
-          <Select
-            ariaLabel="Voice"
-            value={settings.voiceId}
-            onChange={(voiceId) => update({ voiceId })}
-            options={[{ value: "", label: "Default" }, ...voices.map((v) => ({ value: v.id, label: v.name }))]}
-          />
-        </Field>
-        <Field label="Speaking speed">
-          <Slider ariaLabel="Speed" min={0.6} max={1.6} step={0.02} value={settings.speakRate} onChange={(speakRate) => update({ speakRate })} format={(v) => `${v.toFixed(2)}×`} />
-        </Field>
-        <Field label="Voice volume">
-          <Slider ariaLabel="Voice volume" min={0} max={1} step={0.05} value={settings.speakVolume} onChange={(speakVolume) => update({ speakVolume })} format={(v) => `${Math.round(v * 100)}%`} />
-        </Field>
-        {voiceErr && <p className="text-sm text-bev-danger">Voice failed: {voiceErr}</p>}
-        <div className="flex justify-end gap-2">
-          <Button variant="ghost" onClick={() => native.openSettingsPage("speech").catch(() => {})}>
-            Add voices
-          </Button>
-          <Button
-            variant="ghost"
-            onClick={() =>
-              new WebSpeechSynthesizer({
-                voiceId: settings.voiceId || undefined,
-                rate: settings.speakRate,
-                volume: settings.speakVolume,
-              })
-                .speak("Alright. Everything's running smoothly. What's the plan?")
-                .then(() => setVoiceErr(null))
-                .catch((e) => setVoiceErr(e instanceof Error ? e.message : String(e)))
-            }
-          >
-            Test voice
-          </Button>
-        </div>
-      </Section>
+      <VoiceSection voices={voices} />
     </div>
   );
 }
@@ -219,6 +194,306 @@ function OutputDeviceSection() {
         />
       </Field>
     </Section>
+  );
+}
+
+const TEST_LINE = "Alright. Everything's running smoothly. What's the plan?";
+const ELEVEN_KEYS_PAGE = "https://elevenlabs.io/app/settings/api-keys";
+
+const openLink = (url: string) =>
+  import("@tauri-apps/plugin-shell").then(({ open }) => open(url)).catch(() => {});
+
+/**
+ * BEV's voice: Windows (built-in), Kokoro (free, natural, runs on this PC) or
+ * ElevenLabs (most natural, uses credits). Whatever is chosen falls back down
+ * that list automatically, so BEV never goes silent.
+ */
+function VoiceSection({ voices }: { voices: { id: string; name: string }[] }) {
+  const { settings, update } = useSettings();
+  const voiceNote = useAssistant((s) => s.voiceNote);
+  const [testErr, setTestErr] = useState<string | null>(null);
+  const [testing, setTesting] = useState(false);
+
+  const change = async (patch: Parameters<typeof update>[0]) => {
+    await update(patch);
+    resetVoiceFallbacks(); // give a fixed key/voice a fresh chance
+    useAssistant.getState().setVoiceNote(null);
+  };
+
+  const test = async () => {
+    setTesting(true);
+    setTestErr(null);
+    useAssistant.getState().setVoiceNote(null);
+    try {
+      await new ChainSynthesizer(
+        useSettings.getState().settings,
+        () => native.getSecret(ELEVEN_SECRET),
+        (n) => useAssistant.getState().setVoiceNote(n.text)
+      ).speak(TEST_LINE);
+    } catch (e) {
+      setTestErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setTesting(false);
+    }
+  };
+
+  return (
+    <Section title="BEV's voice">
+      <Field label="Voice engine" hint="If the chosen one isn't available, BEV falls back to the next: ElevenLabs → free voice → Windows.">
+        <Select<TtsEngine>
+          ariaLabel="Voice engine"
+          value={settings.ttsEngine}
+          onChange={(ttsEngine) => {
+            change({ ttsEngine });
+            if (ttsEngine === "kokoro") {
+              setKokoroGpu(useSettings.getState().settings.kokoroUseGpu);
+              preloadKokoro().catch(() => {});
+            }
+          }}
+          options={[
+            { value: "kokoro", label: "Natural, free, on this PC (Kokoro)" },
+            { value: "elevenlabs", label: "ElevenLabs (most natural, uses credits)" },
+            { value: "windows", label: "Windows voices (built-in)" },
+          ]}
+        />
+      </Field>
+
+      {settings.ttsEngine === "kokoro" && <KokoroOptions onChange={change} />}
+      {settings.ttsEngine === "elevenlabs" && <ElevenLabsOptions onChange={change} />}
+      {settings.ttsEngine === "windows" && (
+        <Field label="Voice" hint="Windows neural voices appear here when installed (Settings → Time & language → Speech).">
+          <div className="flex gap-2">
+            <Select
+              ariaLabel="Windows voice"
+              value={settings.voiceId}
+              onChange={(voiceId) => change({ voiceId })}
+              options={[{ value: "", label: "Default" }, ...voices.map((v) => ({ value: v.id, label: v.name }))]}
+            />
+            <Button variant="ghost" onClick={() => native.openSettingsPage("speech").catch(() => {})}>
+              Add voices
+            </Button>
+          </div>
+        </Field>
+      )}
+
+      <Field label="Speaking speed" hint={settings.ttsEngine === "elevenlabs" ? "ElevenLabs supports 0.7× to 1.2×." : undefined}>
+        <Slider ariaLabel="Speed" min={0.6} max={1.6} step={0.02} value={settings.speakRate} onChange={(speakRate) => update({ speakRate })} format={(v) => `${v.toFixed(2)}×`} />
+      </Field>
+      <Field label="Voice volume">
+        <Slider ariaLabel="Voice volume" min={0} max={1} step={0.05} value={settings.speakVolume} onChange={(speakVolume) => update({ speakVolume })} format={(v) => `${Math.round(v * 100)}%`} />
+      </Field>
+      {voiceNote && <p className="text-sm text-amber-400">{voiceNote}</p>}
+      {testErr && <p className="text-sm text-bev-danger">Voice failed: {testErr}</p>}
+      <div className="flex justify-end">
+        <Button variant="ghost" onClick={test} disabled={testing}>
+          {testing ? "Speaking…" : "Test voice"}
+        </Button>
+      </div>
+    </Section>
+  );
+}
+
+function useKokoroStatus(): KokoroStatus {
+  const [st, setSt] = useState<KokoroStatus>(kokoroStatus());
+  useEffect(() => onKokoroStatus(setSt), []);
+  return st;
+}
+
+function KokoroOptions({ onChange }: { onChange: (p: Partial<ReturnType<typeof useSettings.getState>["settings"]>) => Promise<void> }) {
+  const settings = useSettings((s) => s.settings);
+  const st = useKokoroStatus();
+  const [gpuProblem, setGpuProblem] = useState(kokoroGpuProblem());
+  useEffect(() => setGpuProblem(kokoroGpuProblem()), [st]);
+
+  const statusText =
+    st.state === "ready"
+      ? st.device === "webgpu"
+        ? "Ready, running on your graphics card."
+        : "Ready, running on the processor."
+      : st.state === "downloading"
+        ? `Downloading the voice model… ${st.percent}% (one-time; ${settings.kokoroUseGpu && !gpuProblem ? "up to 310" : "88"} MB)`
+        : st.state === "error"
+          ? `Couldn't load: ${st.message}`
+          : "Not downloaded yet. It downloads once, then works offline.";
+
+  return (
+    <>
+      <Field label="Voice" hint="British and American voices. George and Emma are good places to start.">
+        <Select
+          ariaLabel="Kokoro voice"
+          value={settings.kokoroVoice}
+          onChange={(kokoroVoice) => onChange({ kokoroVoice })}
+          options={KOKORO_VOICES.map((v) => ({ value: v.id, label: v.name }))}
+        />
+      </Field>
+      <Field label="Voice model" hint={statusText}>
+        <div className="flex justify-end">
+          {(st.state === "idle" || st.state === "error") && (
+            <Button onClick={() => preloadKokoro().catch(() => {})}>Download now</Button>
+          )}
+        </div>
+      </Field>
+      <Field
+        label="Use graphics card"
+        hint={
+          gpuProblem
+            ? `Turned off automatically after a problem (${gpuProblem}). Using the processor.`
+            : "Much faster replies. Turn off if you see glitches or crashes."
+        }
+      >
+        <div className="flex items-center justify-end gap-2">
+          {gpuProblem && (
+            <Button
+              variant="ghost"
+              onClick={() => {
+                resetKokoroGpu();
+                setGpuProblem(null);
+              }}
+            >
+              Try again
+            </Button>
+          )}
+          <Toggle
+            checked={settings.kokoroUseGpu && !gpuProblem}
+            onChange={(kokoroUseGpu) => {
+              setKokoroGpu(kokoroUseGpu);
+              onChange({ kokoroUseGpu });
+            }}
+          />
+        </div>
+      </Field>
+    </>
+  );
+}
+
+function ElevenLabsOptions({ onChange }: { onChange: (p: Partial<ReturnType<typeof useSettings.getState>["settings"]>) => Promise<void> }) {
+  const settings = useSettings((s) => s.settings);
+  const [key, setKey] = useState<string | null>(null);
+  const [keyInput, setKeyInput] = useState("");
+  const [voices, setVoices] = useState<ElevenVoice[]>([]);
+  const [usage, setUsage] = useState<ElevenUsage | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const load = useCallback(async (k: string | null) => {
+    setErr(null);
+    if (!k) {
+      setVoices([]);
+      setUsage(null);
+      return;
+    }
+    try {
+      const [v, u] = await Promise.all([listElevenVoices(k), elevenUsage(k)]);
+      setVoices(v);
+      setUsage(u);
+      // First time: pick a British voice if there is one, so it speaks straight away.
+      const s = useSettings.getState().settings;
+      if (!s.elevenVoiceId && v[0]) onChange({ elevenVoiceId: v[0].id, elevenVoiceName: v[0].name });
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+    }
+  }, [onChange]);
+
+  useEffect(() => {
+    native
+      .getSecret(ELEVEN_SECRET)
+      .then((k) => {
+        setKey(k);
+        load(k);
+      })
+      .catch(() => setKey(null));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const save = async () => {
+    const k = keyInput.trim();
+    if (!k) return;
+    setBusy(true);
+    try {
+      await listElevenVoices(k); // check it works before saving
+      await native.storeSecret(ELEVEN_SECRET, k);
+      setKey(k);
+      setKeyInput("");
+      resetVoiceFallbacks();
+      await load(k);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const remove = async () => {
+    await native.deleteSecret(ELEVEN_SECRET).catch(() => {});
+    setKey(null);
+    load(null);
+  };
+
+  const fmt = (n: number) => n.toLocaleString("en-GB");
+
+  return (
+    <>
+      <Field
+        label="API key"
+        hint={key ? "Saved in Windows Credential Manager." : "Free at elevenlabs.io: Developers → API Keys. Give it Text to Speech and Voices (read) access."}
+      >
+        <div className="flex gap-2">
+          {key ? (
+            <Button variant="danger" onClick={remove}>
+              Remove key
+            </Button>
+          ) : (
+            <>
+              <TextInput type="password" placeholder="paste API key" value={keyInput} onChange={(e) => setKeyInput(e.target.value)} />
+              <Button variant="ghost" onClick={() => openLink(ELEVEN_KEYS_PAGE)}>
+                Get a key
+              </Button>
+              <Button onClick={save} disabled={busy || !keyInput.trim()}>
+                {busy ? "Checking…" : "Save"}
+              </Button>
+            </>
+          )}
+        </div>
+      </Field>
+      {key && (
+        <Field label="Voice" hint={voices.length ? "British voices are listed first." : "Loading voices…"}>
+          <div className="flex gap-2">
+            <Select
+              ariaLabel="ElevenLabs voice"
+              value={settings.elevenVoiceId}
+              onChange={(id) => onChange({ elevenVoiceId: id, elevenVoiceName: voices.find((v) => v.id === id)?.name ?? "" })}
+              options={
+                voices.length
+                  ? voices.map((v) => ({ value: v.id, label: v.description ? `${v.name} · ${v.description}` : v.name }))
+                  : [{ value: settings.elevenVoiceId, label: settings.elevenVoiceName || "—" }]
+              }
+            />
+            <Button variant="ghost" onClick={() => load(key)}>
+              Refresh
+            </Button>
+          </div>
+        </Field>
+      )}
+      {usage && (
+        <Field
+          label="Credits this month"
+          hint={`${usage.tier} plan${usage.resetsAt ? `, resets ${usage.resetsAt.toLocaleDateString("en-GB", { day: "numeric", month: "short" })}` : ""}. BEV uses the Flash model: half a credit per character. When credits run out it switches to the free voice.`}
+        >
+          <div className="flex items-center gap-3">
+            <div className="h-2 flex-1 overflow-hidden rounded bg-white/5">
+              <div
+                className={`h-full rounded ${usage.used / usage.limit > 0.9 ? "bg-bev-danger" : "bg-gradient-to-r from-bev-cyan to-bev-violet"}`}
+                style={{ width: `${Math.min(100, (usage.used / Math.max(1, usage.limit)) * 100)}%` }}
+              />
+            </div>
+            <span className="font-mono text-xs text-slate-400">
+              {fmt(usage.used)} / {fmt(usage.limit)}
+            </span>
+          </div>
+        </Field>
+      )}
+      {err && <p className="text-sm text-bev-danger">{err}</p>}
+    </>
   );
 }
 

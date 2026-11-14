@@ -29,7 +29,7 @@ export default defineConfig({
     target: "esnext",
     // Scripts loaded at runtime (the wake-word AudioWorklet) must stay real
     // files: the CSP only allows scripts from 'self', so a data: URL fails.
-    assetsInlineLimit: (file) => (file.endsWith(".js") ? false : undefined),
+    assetsInlineLimit: (file) => (/\.m?js$/.test(file) ? false : undefined),
     rollupOptions: {
       input: {
         main: r("./index.html"),

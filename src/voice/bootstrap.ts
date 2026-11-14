@@ -1,4 +1,5 @@
 import { register, unregister } from "@tauri-apps/plugin-global-shortcut";
+import { preloadKokoro, setKokoroGpu } from "./tts/kokoro";
 import { listen } from "@tauri-apps/api/event";
 import { VoiceController } from "./controller";
 import { useAssistant } from "@/state/assistant";
@@ -31,6 +32,15 @@ async function start(): Promise<VoiceController> {
 
   // Tray "Privacy mode" is a toggle.
   listen("tray://privacy-mode", () => setPrivacy(!useAssistant.getState().privacyMode));
+
+  // Warm up the free natural voice in the background (it's cached after the
+  // first download), so the first reply doesn't fall back to Windows.
+  if (useSettings.getState().settings.ttsEngine === "kokoro") {
+    setTimeout(() => {
+      setKokoroGpu(useSettings.getState().settings.kokoroUseGpu);
+      preloadKokoro().catch(() => {});
+    }, 3000);
+  }
 
   // Start listening for "BEV" automatically, so the assistant is actually
   // available on launch. Opt out in Settings, or Privacy mode kills it.

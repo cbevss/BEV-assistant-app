@@ -4,7 +4,10 @@ import { native } from "@/lib/native";
 import { useSettings } from "@/state/settings";
 import { makeProvider } from "@/ai/factory";
 import { Orchestrator } from "@/ai/orchestrator";
-import { WebSpeechRecognizer, WebSpeechSynthesizer } from "./webspeech";
+import { WebSpeechRecognizer } from "./webspeech";
+import type { SpeechSynthesizer } from "./types";
+import { ChainSynthesizer, ELEVEN_SECRET, type VoiceNote } from "./tts";
+import { notify } from "@/lib/notify";
 import { WebSpeechWakeWord } from "./wakeword";
 import type { WakeWordEngine } from "./types";
 import { loadWakeModel, fromBase64 } from "./oww/model-store";
@@ -44,7 +47,9 @@ export class VoiceController {
   /** The live wake-word engine (read by Voice & Audio for live tuning). */
   wake?: WakeWordEngine;
   private stt = new WebSpeechRecognizer("en-GB");
-  private tts = new WebSpeechSynthesizer();
+  private tts: SpeechSynthesizer = this.makeTts();
+  /** Notes already shown, so a fallback isn't announced on every reply. */
+  private shownVoiceNotes = new Set<string>();
   private orchestrator: Orchestrator;
   private abort?: AbortController;
   private active = false;
@@ -63,11 +68,19 @@ export class VoiceController {
   private applySettings() {
     const s = settings();
     this.orchestrator.setProvider(makeProvider(s));
-    this.tts = new WebSpeechSynthesizer({
-      voiceId: s.voiceId || undefined,
-      rate: s.speakRate,
-      volume: s.speakVolume,
-    });
+    this.tts = this.makeTts();
+  }
+
+  private makeTts(): SpeechSynthesizer {
+    return new ChainSynthesizer(settings(), () => native.getSecret(ELEVEN_SECRET), (n) => this.voiceNote(n));
+  }
+
+  private voiceNote(n: VoiceNote) {
+    useAssistant.getState().setVoiceNote(n.text);
+    if (n.important && !this.shownVoiceNotes.has(n.text)) {
+      this.shownVoiceNotes.add(n.text);
+      notify("BEV voice", n.text);
+    }
   }
 
   /** Begin background wake-word monitoring. Refuses while privacy mode is on. */
