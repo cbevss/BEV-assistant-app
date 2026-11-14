@@ -243,14 +243,24 @@ mkdir -p /content/bev_scripts
 # An isolated environment, so Colab's preinstalled packages can't clash and
 # no runtime restart is needed.
 pip -q install uv
-# --allow-existing: re-running this cell reuses what's already installed.
-uv venv -q --allow-existing --python 3.12 /content/bev-venv
+# Training needs Python 3.12 (PyTorch 2.4 has no 3.13 build; Colab now ships
+# 3.13). uv downloads its own 3.12, whatever Colab's settings say.
+export UV_PYTHON_DOWNLOADS=automatic
+uv python install 3.12
+VENV_PY=/content/bev-venv/bin/python
+# Reuse the environment on a re-run, but rebuild it if it isn't 3.12.
+if [ -x "$VENV_PY" ] && ! "$VENV_PY" -c 'import sys; sys.exit(sys.version_info[:2] != (3, 12))'; then
+  echo "Existing environment isn't Python 3.12; rebuilding it."
+  rm -rf /content/bev-venv
+fi
+uv venv -q --allow-existing --python 3.12 --python-preference only-managed /content/bev-venv
+"$VENV_PY" --version
 export VIRTUAL_ENV=/content/bev-venv
 
 cat > requirements.txt <<'EOF'
 {REQUIREMENTS}EOF
-uv pip install -q {TORCH}
-uv pip install -q -r requirements.txt
+uv pip install -q --python "$VENV_PY" {TORCH}
+uv pip install -q --python "$VENV_PY" -r requirements.txt
 
 # openWakeWord at a tested commit, with one fix: its --convert_to_tflite flag
 # defaults to the string "False" (truthy), so it always tried a TensorFlow
@@ -260,7 +270,7 @@ if [ ! -d openwakeword ]; then
   git -C openwakeword checkout -q {OPENWAKEWORD_COMMIT}
   sed -i 's/        if args.convert_to_tflite:/        if args.convert_to_tflite is True:/' openwakeword/openwakeword/train.py
 fi
-uv pip install -q --no-deps -e ./openwakeword
+uv pip install -q --python "$VENV_PY" --no-deps -e ./openwakeword
 mkdir -p openwakeword/openwakeword/resources/models
 for f in melspectrogram.onnx embedding_model.onnx; do
   [ -f openwakeword/openwakeword/resources/models/$f ] || \\
