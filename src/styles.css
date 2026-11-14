@@ -19,6 +19,13 @@ body {
   user-select: none;
 }
 
+/* The overlay window is transparent: no page background behind the orb.
+   (The body gradient above is for the main window only.) */
+html.overlay,
+html.overlay body {
+  background: transparent;
+}
+
 /* Form controls must stay selectable/editable: user-select:none on an input
    blocks the caret and native dropdowns in WebView2. Also keep them out of any
    window-drag region so clicks/focus reach them. */

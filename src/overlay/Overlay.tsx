@@ -18,7 +18,8 @@ const stateLabel: Record<AssistantState, string> = {
 };
 
 /**
- * The floating overlay. Renders the orb + a transcript line. It listens for
+ * The floating overlay: just the orb, translucent, on a transparent window
+ * (plus a caption for errors). It listens for
  * backend events (wake, state changes) and makes itself click-through except
  * when it needs interaction.
  */
@@ -75,21 +76,31 @@ export function Overlay() {
         ) : (
           <motion.div
             key="expanded"
-            initial={{ opacity: 0, scale: 0.85, y: 10 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.85, y: 10 }}
+            initial={{ opacity: 0, scale: 0.85 }}
+            // Translucent: the desktop shows through the orb.
+            animate={{ opacity: 0.9, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.85 }}
             transition={{ type: "spring", stiffness: 180, damping: 22 }}
-            className="flex flex-col items-center gap-3"
+            className="relative grid place-items-center"
+            title={statusText || stateLabel[state]}
           >
             <Orb state={state} level={audioLevel} accentOverride={accent} reducedMotion={reducedMotion} />
-            <motion.div
-              key={statusText || stateLabel[state]}
-              initial={{ opacity: 0, y: 6 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="glass max-w-[360px] truncate rounded-full px-4 py-1.5 text-sm font-mono tracking-wide text-slate-200"
-            >
-              {statusText || stateLabel[state]}
-            </motion.div>
+            {/* Only the symbol, except for errors: those are only ever shown
+                here, so say what went wrong (plain text, no panel). */}
+            {state === "error" && (
+              <motion.p
+                initial={{ opacity: 0, y: 4 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="absolute top-full mt-1 max-w-[380px] text-center text-sm font-semibold text-rose-100"
+                // A dark outline keeps it readable over any wallpaper or window, without a panel.
+                style={{
+                  textShadow:
+                    "0 0 2px #000, 0 0 2px #000, 0 1px 3px rgba(0,0,0,0.95), 0 0 14px rgba(0,0,0,0.75)",
+                }}
+              >
+                {statusText || stateLabel.error}
+              </motion.p>
+            )}
           </motion.div>
         )}
       </AnimatePresence>
