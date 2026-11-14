@@ -121,10 +121,13 @@ export const tools: Record<string, RegisteredTool> = {
     spec: {
       name: "launch_game",
       description:
-        "Launch an installed PC game from the user's Steam library by name, e.g. 'Rocket League', 'CS2', 'GTA 5'. Finds the game's folder and runs its own .exe. Use this, not launch_app, for any game, including requests like 'open X on Steam' or 'open X with Steam'. Pass just the game's name.",
+        "Launch an installed PC game from the user's Steam library by name, e.g. 'Rocket League', 'CS2', 'GTA 5'. Use this, not launch_app, for any game, including 'open X on/with Steam'. Always launches through Steam on the user's account: mode 'online' uses the game's first Steam launch option (e.g. Rocket League with Easy Anti-Cheat, online play); 'offline' uses its second (anti-cheat disabled, mods and limited online play). Only set mode if the user said online or offline; otherwise call without mode and BEV will ask them first.",
       parameters: {
         type: "object",
-        properties: { name: { type: "string", description: "The game's name as the user said it" } },
+        properties: {
+          name: { type: "string", description: "The game's name as the user said it" },
+          mode: { type: "string", enum: ["online", "offline"], description: "Only if the user said it" },
+        },
         required: ["name"],
       },
     },
@@ -139,7 +142,16 @@ export const tools: Record<string, RegisteredTool> = {
             : `No installed Steam game matches "${name}" (${games.length} games installed).`
         );
       }
-      return native.launchGame(game.id);
+      const mode = a.mode === "online" || a.mode === "offline" ? a.mode : null;
+      if (!mode) {
+        // Not launched yet: the user decides first.
+        return (
+          `Found ${game.name} but did NOT launch it yet. Ask the user one short question: ` +
+          `online mode (with anti-cheat) or offline mode (anti-cheat disabled)? ` +
+          `When they answer, call launch_game again with name "${game.name}" and mode "online" or "offline".`
+        );
+      }
+      return native.launchGame(game.id, mode);
     },
   },
 

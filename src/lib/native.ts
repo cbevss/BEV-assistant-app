@@ -62,7 +62,8 @@ export const native = {
   closeApp: (name: string) => invoke<string>("close_app", { name }),
   /** Installed Steam games. Rejects if Steam isn't installed. */
   listGames: () => invoke<InstalledGame[]>("list_games"),
-  launchGame: (id: string) => invoke<string>("launch_game", { id }),
+  /** Through Steam: online = the game's first launch option, offline = its second. */
+  launchGame: (id: string, mode: "online" | "offline") => invoke<string>("launch_game", { id, mode }),
   listProcesses: () => invoke<{ pid: number; name: string }[]>("list_processes"),
 
   // Windows

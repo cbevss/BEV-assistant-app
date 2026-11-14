@@ -64,7 +64,10 @@ async function runStep(step: RoutineStep, signal: AbortSignal, hooks: RunHooks):
   for (let i = 0; i < attempts; i++) {
     if (signal.aborted) return { ...base, status: "cancelled", message: "cancelled" };
     try {
-      const message = await tool.run(step.args);
+      // Routines can't stop to ask "online or offline?": games default to online.
+      const args =
+        step.tool === "launch_game" && step.args.mode !== "offline" ? { ...step.args, mode: "online" } : step.args;
+      const message = await tool.run(args);
       native.logAction(step.tool, JSON.stringify(step.args), message, true).catch(() => {});
       return { ...base, status: "ok", message };
     } catch (e) {
@@ -80,8 +83,9 @@ function describeStep(step: RoutineStep): string {
   const a = step.args;
   switch (step.tool) {
     case "launch_app":
-    case "launch_game":
       return `open ${a.name}`;
+    case "launch_game":
+      return `open ${a.name} (${a.mode === "offline" ? "offline" : "online"})`;
     case "close_app":
       return `close ${a.name}`;
     case "set_volume":

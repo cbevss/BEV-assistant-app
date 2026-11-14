@@ -1,9 +1,12 @@
 //! Installed games. Steam: finds the Steam folder, reads every library listed
 //! in `steamapps/libraryfolders.vdf` (games can live on several drives), and
-//! each `appmanifest_<appid>.acf` for the game's name and install folder.
-//! Launching runs the game's own .exe from `steamapps/common/<installdir>`
-//! (Steam-only games still hand over to Steam themselves); if no .exe can be
-//! found it falls back to `steam://rungameid/<appid>`.
+//! each `appmanifest_<appid>.acf` for the game's name.
+//! Games always launch through Steam, so they start on the logged-in Steam
+//! account, picking the launch option without Steam's chooser dialog:
+//! - online:  `steam://launch/<appid>/option0`, the first option
+//!   (e.g. "Play Rocket League", with Easy Anti-Cheat)
+//! - offline: `steam://launch/<appid>/option1`, the second option
+//!   (e.g. "Play Rocket League with Anti-Cheat Disabled")
 
 use crate::error::{BevError, BevResult};
 use serde::Serialize;
@@ -15,9 +18,6 @@ pub struct Game {
     pub id: String,
     pub name: String,
     pub source: &'static str,
-    /// `steamapps/common/<installdir>` once known; not sent to the UI.
-    #[serde(skip)]
-    pub install_dir: Option<PathBuf>,
 }
 
 /// Steam installs these alongside games; they aren't things you'd "open".
@@ -89,8 +89,7 @@ pub(crate) fn manifest_game(acf: &str) -> Option<Game> {
     if NOT_GAMES.iter().any(|n| lower.starts_with(n)) {
         return None;
     }
-    let install_dir = get("installdir").filter(|d| !d.is_empty()).map(PathBuf::from);
-    Some(Game { id, name, source: "steam", install_dir })
+    Some(Game { id, name, source: "steam" })
 }
 
 /// All games installed in the Steam folder `root` and its other libraries.
@@ -112,9 +111,7 @@ pub(crate) fn steam_games_in(root: &Path) -> Vec<Game> {
             if !(file.starts_with("appmanifest_") && file.ends_with(".acf")) {
                 continue;
             }
-            if let Some(mut g) = std::fs::read_to_string(entry.path()).ok().as_deref().and_then(manifest_game) {
-                // installdir is relative to this library's steamapps/common.
-                g.install_dir = g.install_dir.map(|d| lib.join("steamapps").join("common").join(d));
+            if let Some(g) = std::fs::read_to_string(entry.path()).ok().as_deref().and_then(manifest_game) {
                 if !games.iter().any(|x| x.id == g.id) {
                     games.push(g);
                 }
@@ -123,82 +120,6 @@ pub(crate) fn steam_games_in(root: &Path) -> Vec<Game> {
     }
     games.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
     games
-}
-
-/// Parts of an .exe name that mark it as a helper rather than the game.
-const NOT_THE_GAME: &[&str] = &[
-    "unins", "crash", "report", "redist", "vcredist", "directx", "dxsetup", "dotnet", "setup",
-    "install", "prereq", "easyanticheat", "battleye", "be_", "updater", "helper",
-    "cefprocess", "webhelper", "unitycrashhandler", "ue4prereq", "ueprereq", "touchup", "cleanup",
-    "benchmark", "editor", "server", "dedicated",
-];
-
-fn squash(s: &str) -> String {
-    s.chars().filter(|c| c.is_ascii_alphanumeric()).collect::<String>().to_lowercase()
-}
-
-/// "Counter-Strike 2" → "cs2", "Grand Theft Auto V" → "gtav": many games name
-/// their .exe after their initials.
-fn initials(name: &str) -> String {
-    name.split(|c: char| !c.is_ascii_alphanumeric())
-        .filter(|w| !w.is_empty())
-        .map(|w| if w.chars().all(|c| c.is_ascii_digit()) { w.to_string() } else { w[..1].to_lowercase() })
-        .collect()
-}
-
-/// The game's main executable inside its install folder: the .exe whose name
-/// best matches the game, skipping crash reporters, installers, anti-cheat and
-/// other helpers. With no name match, the largest remaining .exe (the game is
-/// almost always the biggest binary).
-pub(crate) fn find_main_exe(dir: &Path, game_name: &str) -> Option<PathBuf> {
-    let mut exes: Vec<(PathBuf, u64, usize)> = Vec::new(); // path, size, depth
-    let mut stack = vec![(dir.to_path_buf(), 0usize)];
-    while let Some((d, depth)) = stack.pop() {
-        let Ok(entries) = std::fs::read_dir(&d) else { continue };
-        for e in entries.flatten() {
-            let path = e.path();
-            let Ok(meta) = e.metadata() else { continue };
-            if meta.is_dir() {
-                let lower = e.file_name().to_string_lossy().to_lowercase();
-                // Redistributable installers live in these; never the game.
-                if depth < 5 && !lower.starts_with('_') && !lower.contains("redist") {
-                    stack.push((path, depth + 1));
-                }
-            } else if path.extension().is_some_and(|x| x.eq_ignore_ascii_case("exe")) {
-                exes.push((path, meta.len(), depth));
-            }
-        }
-    }
-
-    let game = squash(game_name);
-    let game_initials = initials(game_name);
-    let candidates: Vec<(PathBuf, u64, i32)> = exes
-        .into_iter()
-        .filter_map(|(p, size, depth)| {
-            let stem = squash(&p.file_stem()?.to_string_lossy());
-            if stem.is_empty() || NOT_THE_GAME.iter().any(|bad| stem.contains(bad)) {
-                return None;
-            }
-            let base = stem.trim_end_matches("win64shipping").trim_end_matches("shipping").trim_end_matches("x64");
-            let mut score = 0;
-            if !base.is_empty() && (base == game || game.contains(base) || base.contains(&game)) {
-                score += 100;
-            } else if game_initials.len() >= 2 && (base == game_initials || base.starts_with(&game_initials)) {
-                score += 80;
-            }
-            let path_lower = p.to_string_lossy().to_lowercase();
-            if path_lower.contains("win64") || path_lower.contains("x64") {
-                score += 10;
-            }
-            score -= depth as i32; // shallower is likelier the real entry point
-            Some((p, size, score))
-        })
-        .collect();
-
-    let named = candidates.iter().filter(|c| c.2 >= 50).max_by_key(|c| (c.2, c.1));
-    named
-        .or_else(|| candidates.iter().max_by_key(|c| c.1))
-        .map(|c| c.0.clone())
 }
 
 fn same_path(a: &Path, b: &Path) -> bool {
@@ -251,53 +172,36 @@ pub fn list_games() -> BevResult<Vec<Game>> {
     Ok(steam_games_in(&root))
 }
 
-/// Launch an installed Steam game by app id: run its own .exe, or ask Steam
-/// to launch it when no .exe can be found. Only ids of installed games are
-/// accepted, and only files inside that game's install folder are run.
+/// Launch an installed Steam game through Steam, by app id. `mode` "online"
+/// picks its first launch option, "offline" its second (for Rocket League:
+/// with / without Easy Anti-Cheat). Only ids of installed games are accepted.
 #[tauri::command]
-pub fn launch_game(id: String) -> BevResult<String> {
+pub fn launch_game(id: String, mode: String) -> BevResult<String> {
     if id.is_empty() || id.len() > 12 || !id.bytes().all(|b| b.is_ascii_digit()) {
         return Err(BevError::Invalid("game id must be a Steam app number".into()));
     }
+    let option = match mode.as_str() {
+        "online" => 0,
+        "offline" => 1,
+        _ => return Err(BevError::Invalid("mode must be \"online\" or \"offline\"".into())),
+    };
     let root = steam_root().ok_or_else(|| BevError::NotFound("Steam isn't installed".into()))?;
     let game = steam_games_in(&root)
         .into_iter()
         .find(|g| g.id == id)
         .ok_or_else(|| BevError::NotFound(format!("no installed Steam game with id {id}")))?;
-
-    if let Some(exe) = game.install_dir.as_deref().and_then(|d| find_main_exe(d, &game.name)) {
-        return run_exe(&exe).map(|_| {
-            format!("launched {} ({})", game.name, exe.file_name().unwrap_or_default().to_string_lossy())
-        });
-    }
-    open_steam_url(&id).map(|_| format!("asked Steam to launch {}", game.name))
+    open_steam_url(&format!("steam://launch/{id}/option{option}"))
+        .map(|_| format!("launched {} {mode} through Steam", game.name))
 }
 
-fn run_exe(exe: &Path) -> BevResult<()> {
-    #[cfg(windows)]
-    {
-        // Run from the game's folder: many games load files relative to it.
-        std::process::Command::new(exe)
-            .current_dir(exe.parent().unwrap_or(exe))
-            .spawn()
-            .map(|_| ())
-            .map_err(|e| BevError::Os(format!("couldn't start {}: {e}", exe.display())))
-    }
-    #[cfg(not(windows))]
-    {
-        let _ = exe;
-        Err(BevError::Unsupported("game launch is Windows-only".into()))
-    }
-}
-
-fn open_steam_url(id: &str) -> BevResult<()> {
-    let url = format!("steam://rungameid/{id}");
+/// Hand a steam:// URL to the Steam client. Only built from digits above.
+fn open_steam_url(url: &str) -> BevResult<()> {
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;
         const CREATE_NO_WINDOW: u32 = 0x0800_0000;
         let status = std::process::Command::new("cmd")
-            .args(["/C", "start", "", &url])
+            .args(["/C", "start", "", url])
             .creation_flags(CREATE_NO_WINDOW)
             .status()?;
         if status.success() {
@@ -371,12 +275,7 @@ mod tests {
     fn reads_a_game_manifest() {
         assert_eq!(
             manifest_game(ROCKET_ACF),
-            Some(Game {
-                id: "252950".into(),
-                name: "Rocket League".into(),
-                source: "steam",
-                install_dir: Some(PathBuf::from("rocketleague")),
-            })
+            Some(Game { id: "252950".into(), name: "Rocket League".into(), source: "steam" })
         );
     }
 
@@ -413,75 +312,16 @@ mod tests {
         .unwrap();
         std::fs::write(second.join("steamapps/not_a_manifest.txt"), "x").unwrap();
 
-        let games = steam_games_in(&main);
-        let names: Vec<&str> = games.iter().map(|g| g.name.as_str()).collect();
+        let names: Vec<String> = steam_games_in(&main).into_iter().map(|g| g.name).collect();
         assert_eq!(names, vec!["Counter-Strike 2", "Rocket League"]);
-        // installdir resolves against the library the manifest was found in.
-        assert_eq!(games[1].install_dir, Some(main.join("steamapps").join("common").join("rocketleague")));
         std::fs::remove_dir_all(&base).ok();
-    }
-
-    fn touch(path: &Path, bytes: usize) {
-        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
-        std::fs::write(path, vec![0u8; bytes]).unwrap();
-    }
-
-    fn temp(name: &str) -> PathBuf {
-        let d = std::env::temp_dir().join(format!("bev-exe-{name}-{}", std::process::id()));
-        std::fs::remove_dir_all(&d).ok();
-        d
-    }
-
-    #[test]
-    fn finds_rocket_league_exe_among_helpers() {
-        let d = temp("rl");
-        touch(&d.join("Binaries/Win64/RocketLeague.exe"), 9000);
-        touch(&d.join("Binaries/Win64/EasyAntiCheat_EOS_Setup.exe"), 20000);
-        touch(&d.join("Engine/Binaries/Win64/CrashReportClient.exe"), 30000);
-        touch(&d.join("_CommonRedist/vcredist/2019/VC_redist.x64.exe"), 40000);
-        let exe = find_main_exe(&d, "Rocket League").unwrap();
-        assert!(exe.ends_with("Binaries/Win64/RocketLeague.exe"), "{exe:?}");
-        std::fs::remove_dir_all(&d).ok();
-    }
-
-    #[test]
-    fn matches_exes_named_by_initials_or_shipping_suffix() {
-        let d = temp("cs2");
-        touch(&d.join("game/bin/win64/cs2.exe"), 500);
-        touch(&d.join("game/bin/win64/gameoverlayui.exe"), 9000);
-        assert!(find_main_exe(&d, "Counter-Strike 2").unwrap().ends_with("cs2.exe"));
-        std::fs::remove_dir_all(&d).ok();
-
-        let d = temp("ue");
-        touch(&d.join("Acme.exe"), 200); // small bootstrap
-        touch(&d.join("Acme/Binaries/Win64/AcmeGame-Win64-Shipping.exe"), 9000);
-        let exe = find_main_exe(&d, "Acme Game").unwrap();
-        assert!(exe.ends_with("AcmeGame-Win64-Shipping.exe"), "{exe:?}");
-        std::fs::remove_dir_all(&d).ok();
-    }
-
-    #[test]
-    fn falls_back_to_the_largest_exe_without_a_name_match() {
-        let d = temp("odd");
-        touch(&d.join("start.exe"), 100);
-        touch(&d.join("bin/engine64.exe"), 8000);
-        touch(&d.join("bin/unins000.exe"), 99999);
-        assert!(find_main_exe(&d, "Something Else").unwrap().ends_with("engine64.exe"));
-        std::fs::remove_dir_all(&d).ok();
-
-        // Helper filters must not catch real names ("Reach" contains "eac").
-        let d = temp("reach");
-        touch(&d.join("haloreach.exe"), 100);
-        touch(&d.join("mcclauncher.exe"), 9000);
-        assert!(find_main_exe(&d, "Halo Reach").unwrap().ends_with("haloreach.exe"));
-        assert_eq!(find_main_exe(&temp("missing"), "Nothing"), None);
-        std::fs::remove_dir_all(&d).ok();
     }
 
     #[test]
     fn launch_rejects_anything_but_digits() {
         for bad in ["", "252950 & calc", "abc", "1234567890123"] {
-            assert!(launch_game(bad.into()).is_err(), "{bad:?} should be rejected");
+            assert!(launch_game(bad.into(), "online".into()).is_err(), "{bad:?} should be rejected");
         }
+        assert!(launch_game("252950".into(), "sideways".into()).is_err(), "unknown mode should be rejected");
     }
 }
