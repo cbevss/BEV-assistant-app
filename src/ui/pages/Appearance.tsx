@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useSettings, OverlayCorner } from "@/state/settings";
 import { native } from "@/lib/native";
 import { applyAppearance } from "@/lib/appearance";
+import { previewOverlay } from "@/lib/overlayPlacement";
 import { PageHeader, Section, Field, Select, Slider, Toggle, Button } from "../components/Form";
 
 const PRESETS = ["#22d3ee", "#3b82f6", "#8b5cf6", "#34d399", "#f43f5e", "#f59e0b"];
@@ -9,6 +10,7 @@ const PRESETS = ["#22d3ee", "#3b82f6", "#8b5cf6", "#34d399", "#f43f5e", "#f59e0b
 export function Appearance() {
   const { settings, update } = useSettings();
   const [monitors, setMonitors] = useState<{ index: number; name: string; primary: boolean }[]>([]);
+  const [previewing, setPreviewing] = useState(false);
 
   useEffect(() => {
     native.listMonitors().then(setMonitors).catch(() => setMonitors([]));
@@ -77,8 +79,17 @@ export function Appearance() {
           </p>
         )}
         <div className="flex justify-end">
-          <Button variant="ghost" onClick={() => applyAppearance(settings)}>
-            Preview overlay position
+          <Button
+            variant="ghost"
+            disabled={previewing}
+            onClick={() => {
+              setPreviewing(true);
+              previewOverlay()
+                .catch(() => {})
+                .finally(() => setPreviewing(false));
+            }}
+          >
+            {previewing ? "Previewing…" : "Preview overlay"}
           </Button>
         </div>
       </Section>

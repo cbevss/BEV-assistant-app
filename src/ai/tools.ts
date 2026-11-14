@@ -32,6 +32,14 @@ const num = (v: unknown, name: string): number => {
   return n;
 };
 
+/** Accepts real booleans and the strings "true"/"false" some models send. */
+const bool = (v: unknown, name: string): boolean => {
+  if (typeof v === "boolean") return v;
+  if (v === "true") return true;
+  if (v === "false") return false;
+  throw new Error(`argument "${name}" must be true or false`);
+};
+
 export const tools: Record<string, RegisteredTool> = {
   get_system_stats: {
     spec: {
@@ -88,8 +96,9 @@ export const tools: Record<string, RegisteredTool> = {
       },
     },
     run: async (a) => {
-      await native.setMuted(Boolean(a.muted));
-      return a.muted ? "muted" : "unmuted";
+      const muted = bool(a.muted, "muted");
+      await native.setMuted(muted);
+      return muted ? "muted" : "unmuted";
     },
   },
 
@@ -238,7 +247,7 @@ Object.assign(tools, {
       parameters: { type: "object", properties: { enabled: { type: "boolean" } }, required: ["enabled"] },
     },
     run: async (a: Record<string, unknown>) => {
-      const enabled = Boolean(a.enabled);
+      const enabled = bool(a.enabled, "enabled");
       await useSettings.getState().update({ gamingQuietMode: enabled });
       return enabled ? "quiet mode on" : "quiet mode off";
     },

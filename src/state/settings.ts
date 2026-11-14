@@ -128,10 +128,13 @@ export const useSettings = create<SettingsStore>((set, get) => ({
   },
 
   reset: async () => {
-    set({ settings: defaultSettings });
+    // Resetting preferences shouldn't send the user back through first-run setup.
+    const next = { ...defaultSettings, onboarded: get().settings.onboarded };
+    set({ settings: next });
+    emit("bev://settings", next).catch(() => {});
     try {
       const s = await getStore();
-      await s.set("settings", defaultSettings);
+      await s.set("settings", next);
     } catch {
       /* ignore */
     }
