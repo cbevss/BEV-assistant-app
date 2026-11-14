@@ -1,8 +1,4 @@
-import {
-  isPermissionGranted,
-  requestPermission,
-  sendNotification,
-} from "@tauri-apps/plugin-notification";
+import { notify } from "./notify";
 import { native } from "./native";
 import { useSettings } from "@/state/settings";
 
@@ -28,13 +24,7 @@ export function startMonitor() {
     const now = Date.now();
     if (now - lastAlert[kind] < COOLDOWN_MS) return;
     lastAlert[kind] = now;
-    try {
-      let granted = await isPermissionGranted();
-      if (!granted) granted = (await requestPermission()) === "granted";
-      if (granted) sendNotification({ title, body });
-    } catch {
-      /* notifications unavailable: nothing else to do */
-    }
+    await notify(title, body);
   };
 
   const tick = async () => {

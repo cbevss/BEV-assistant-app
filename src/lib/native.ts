@@ -19,6 +19,12 @@ export interface RunningApp {
   mem_mb: number;
 }
 
+export interface InstalledGame {
+  id: string;
+  name: string;
+  source: "steam";
+}
+
 export interface OutputDevice {
   id: string;
   name: string;
@@ -54,6 +60,9 @@ export const native = {
   // Apps
   launchApp: (name: string) => invoke<string>("launch_app", { name }),
   closeApp: (name: string) => invoke<string>("close_app", { name }),
+  /** Installed Steam games. Rejects if Steam isn't installed. */
+  listGames: () => invoke<InstalledGame[]>("list_games"),
+  launchGame: (id: string) => invoke<string>("launch_game", { id }),
   listProcesses: () => invoke<{ pid: number; name: string }[]>("list_processes"),
 
   // Windows

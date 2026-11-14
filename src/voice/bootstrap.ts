@@ -1,9 +1,9 @@
 import { register, unregister } from "@tauri-apps/plugin-global-shortcut";
+import { preloadKokoro, setKokoroGpu } from "./tts/kokoro";
 import { listen } from "@tauri-apps/api/event";
 import { VoiceController } from "./controller";
 import { useAssistant } from "@/state/assistant";
 import { useSettings } from "@/state/settings";
-import { native } from "@/lib/native";
 
 let controller: VoiceController | null = null;
 let starting: Promise<VoiceController> | null = null;
@@ -20,8 +20,7 @@ export function bootstrapVoice(): Promise<VoiceController> {
 }
 
 async function start(): Promise<VoiceController> {
-  const picovoiceKey = (await native.getSecret("picovoice_key").catch(() => null)) ?? undefined;
-  const c = new VoiceController({ picovoiceKey });
+  const c = new VoiceController();
   controller = c;
 
   await applyShortcut(useSettings.getState().settings.pushToTalkShortcut);
@@ -33,6 +32,15 @@ async function start(): Promise<VoiceController> {
 
   // Tray "Privacy mode" is a toggle.
   listen("tray://privacy-mode", () => setPrivacy(!useAssistant.getState().privacyMode));
+
+  // Warm up the free natural voice in the background (it's cached after the
+  // first download), so the first reply doesn't fall back to Windows.
+  if (useSettings.getState().settings.ttsEngine === "kokoro") {
+    setTimeout(() => {
+      setKokoroGpu(useSettings.getState().settings.kokoroUseGpu);
+      preloadKokoro().catch(() => {});
+    }, 3000);
+  }
 
   // Start listening for "BEV" automatically, so the assistant is actually
   // available on launch. Opt out in Settings, or Privacy mode kills it.
@@ -78,6 +86,14 @@ export const getController = () => controller;
 export function setPrivacy(on: boolean) {
   if (on) controller?.disableListening();
   useAssistant.getState().setPrivacyMode(on);
+}
+
+/** Restart listening so a changed engine, model or mic takes effect now. */
+export async function restartListening() {
+  if (controller && useAssistant.getState().micEnabled) {
+    controller.disableListening();
+    await controller.enableListening();
+  }
 }
 
 /** Start the wake-word listener if the user wants it on launch. */

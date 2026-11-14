@@ -139,10 +139,10 @@ function WakeStep() {
       <p className="text-slate-300">Two ways to get BEV's attention:</p>
       <ul className="space-y-2 text-sm text-slate-300">
         <li>⌨ <b>Ctrl + Alt + B</b> — works right now, no setup.</li>
-        <li>🎙 <b>Say “BEV”</b> — on-device wake word. Add a free Picovoice key in Integrations and train a “BEV” keyword to enable it.</li>
+        <li>🎙 <b>Say “BEV”</b> — works straight away using speech recognition. For a fully on-device wake word, train a “hey BEV” model later in Voice &amp; Audio.</li>
       </ul>
       <p className="text-sm text-slate-500">
-        BEV only processes audio locally until you activate it. Nothing is streamed before the wake word.
+        With the on-device wake word, listening for “hey BEV” happens entirely on your PC.
       </p>
     </div>
   );

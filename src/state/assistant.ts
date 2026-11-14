@@ -28,6 +28,10 @@ interface AssistantStore {
   privacyMode: boolean;
   statusText: string;
   messages: ChatMessage[];
+  /** Which wake engine is listening, and a note if it isn't the chosen one. */
+  wake: { engine: "speech" | "on-device"; note: string | null } | null;
+  /** Latest note about the voice (e.g. a fallback), shown in Voice & Audio. */
+  voiceNote: string | null;
 
   /** Set by the UI to route sensitive-tool approvals through a modal. */
   requestApproval?: (description: string) => Promise<boolean>;
@@ -37,6 +41,8 @@ interface AssistantStore {
   setAudioLevel: (v: number) => void;
   setMic: (on: boolean) => void;
   setPrivacyMode: (on: boolean) => void;
+  setWake: (w: AssistantStore["wake"]) => void;
+  setVoiceNote: (n: string | null) => void;
   pushMessage: (m: Omit<ChatMessage, "id" | "at"> & Partial<Pick<ChatMessage, "id" | "at">>) => void;
   clearMessages: () => void;
 }
@@ -48,11 +54,15 @@ export const useAssistant = create<AssistantStore>((set) => ({
   privacyMode: false,
   statusText: "",
   messages: [],
+  wake: null,
+  voiceNote: null,
 
   setApprovalHandler: (fn) => set({ requestApproval: fn }),
   setState: (state, statusText) =>
     set((s) => ({ state, statusText: statusText ?? s.statusText })),
   setAudioLevel: (audioLevel) => set({ audioLevel }),
+  setWake: (wake) => set({ wake }),
+  setVoiceNote: (voiceNote) => set({ voiceNote }),
   setMic: (micEnabled) => set({ micEnabled }),
   setPrivacyMode: (privacyMode) =>
     // Privacy mode forces the mic off; leaving it on is the user's explicit act.

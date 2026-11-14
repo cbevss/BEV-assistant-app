@@ -80,6 +80,7 @@ function describeStep(step: RoutineStep): string {
   const a = step.args;
   switch (step.tool) {
     case "launch_app":
+    case "launch_game":
       return `open ${a.name}`;
     case "close_app":
       return `close ${a.name}`;

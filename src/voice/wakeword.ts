@@ -49,51 +49,6 @@ export class MicInput {
   }
 }
 
-/**
- * Picovoice Porcupine wake-word engine. Requires an access key and a custom
- * "BEV" keyword (.ppn) trained at console.picovoice.ai. When the SDK is
- * present and configured it runs fully on-device. Until then, `start` throws a
- * clear, actionable error so the UI can fall back or prompt for setup.
- */
-export class PorcupineWakeWord implements WakeWordEngine {
-  readonly id = "porcupine";
-  private mic = new MicInput();
-  private running = false;
-
-  constructor(
-    private cfg: { accessKey?: string; keywordPath?: string; sensitivity?: number; deviceId?: string }
-  ) {}
-
-  async start(onWake: () => void): Promise<void> {
-    if (!this.cfg.accessKey) {
-      throw new Error(
-        "Picovoice access key not set. Add it in Settings → Voice to enable on-device 'BEV' wake-word."
-      );
-    }
-    // Real integration point: dynamically import @picovoice/porcupine-web and
-    // feed MicInput frames into the worker. Kept as an explicit, typed seam so
-    // the rest of the app compiles and runs on the Web Speech fallback.
-    await this.mic.start(this.cfg.deviceId);
-    this.running = true;
-    // NOTE: wiring the Porcupine worker + its onWake callback is the remaining
-    // step here; see docs/VOICE.md. We do NOT fake a detection.
-    void onWake;
-  }
-
-  stop() {
-    this.running = false;
-    this.mic.stop();
-  }
-
-  onLevel(cb: (l: number) => void) {
-    this.mic.onLevel(cb);
-  }
-
-  get isRunning() {
-    return this.running;
-  }
-}
-
 /** Recognition errors that retrying can't fix. */
 const FATAL_RECOGNITION_ERRORS = new Set(["not-allowed", "service-not-allowed", "audio-capture"]);
 
@@ -112,7 +67,7 @@ interface SpeechRecognitionCtor {
 
 /**
  * Zero-setup wake word using the WebView2 SpeechRecognition API. Listens
- * continuously for "BEV" (and "hey/yo BEV") and fires onWake. No Picovoice key
+ * continuously for "BEV" (and "hey/yo BEV") and fires onWake. No setup or key
  * needed. The recogniser is paused while the conversation STT runs (only one
  * SpeechRecognition can be active at once) and resumed afterwards.
  */
@@ -136,7 +91,7 @@ export class WebSpeechWakeWord implements WakeWordEngine {
     const Ctor = w.SpeechRecognition ?? w.webkitSpeechRecognition;
     if (!Ctor) {
       throw new Error(
-        "Speech recognition isn't available in this runtime. Use Ctrl+Alt+B, or add a Picovoice key in Integrations."
+        "Speech recognition isn't available in this runtime. Use Ctrl+Alt+B, or switch to the on-device wake word in Voice & Audio."
       );
     }
     this.onWakeCb = onWake;

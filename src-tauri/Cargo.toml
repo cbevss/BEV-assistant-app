@@ -1,6 +1,6 @@
 [package]
 name = "bev"
-version = "1.0.5"
+version = "1.1.0"
 description = "BEV — futuristic AI voice assistant for Windows 11"
 authors = ["cbevss"]
 edition = "2021"
@@ -48,6 +48,7 @@ windows = { version = "0.58", features = [
   "Win32_System_ProcessStatus",
   "Win32_System_Shutdown",
   "Win32_System_Power",
+  "Win32_System_Registry",
 ] }
 
 [profile.release]

@@ -8,6 +8,7 @@ mod audio;
 mod apps;
 mod db;
 mod error;
+mod games;
 mod overlay;
 mod secrets;
 mod sysmon;
@@ -102,6 +103,8 @@ pub fn run() {
             apps::launch_app,
             apps::close_app,
             apps::list_processes,
+            games::list_games,
+            games::launch_game,
             // Window management
             windows_mgmt::focus_window,
             windows_mgmt::list_windows,

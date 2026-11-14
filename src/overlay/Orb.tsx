@@ -89,12 +89,14 @@ function OrbInner({ state, level, accentOverride, reducedMotion }: OrbProps) {
         style={{
           width: 120,
           height: 120,
-          background: `radial-gradient(circle at 35% 30%, ${accent}dd, ${accent}44 55%, #05070d 100%)`,
-          boxShadow: `0 0 40px ${accent}66, inset 0 0 30px ${accent}55`,
+          // Fades out to transparent (not to near-black), so the core reads as
+          // glass over the desktop instead of a dark disc.
+          background: `radial-gradient(circle at 35% 30%, ${accent}e6, ${accent}66 55%, ${accent}1f 100%)`,
+          boxShadow: `0 0 40px ${accent}55, inset 0 0 30px ${accent}55`,
         }}
         animate={{
           scale: pulse,
-          boxShadow: `0 0 ${30 + level * 50}px ${accent}88, inset 0 0 30px ${accent}55`,
+          boxShadow: `0 0 ${30 + level * 50}px ${accent}77, inset 0 0 30px ${accent}55`,
         }}
         transition={{ type: "spring", stiffness: 200, damping: 20 }}
       >
