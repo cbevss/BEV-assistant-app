@@ -25,9 +25,24 @@ pub struct AppState {
     pub db: std::sync::Mutex<rusqlite::Connection>,
 }
 
+/// Bring the main window to the front, restoring it if hidden or minimised.
+pub(crate) fn show_main(app: &tauri::AppHandle) {
+    if let Some(w) = app.get_webview_window("main") {
+        let _ = w.unminimize();
+        let _ = w.show();
+        let _ = w.set_focus();
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        // Must be registered first: a second launch (Start menu, shortcut, or
+        // autostart racing a manual start) focuses this instance and exits,
+        // instead of running a duplicate tray icon, hotkey and microphone.
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            show_main(app);
+        }))
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_shell::init())
@@ -62,6 +77,14 @@ pub fn run() {
 
             tray::build(app.handle())?;
             overlay::ensure_overlay(app.handle()).ok();
+
+            // The main window starts hidden (tauri.conf.json). Autostart passes
+            // --minimized so BEV signs in quietly to the tray; any other launch
+            // shows the window.
+            let minimized = std::env::args().any(|a| a == "--minimized");
+            if !minimized {
+                show_main(app.handle());
+            }
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![

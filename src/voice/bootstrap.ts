@@ -31,20 +31,12 @@ async function start(): Promise<VoiceController> {
     else c.enableListening();
   });
 
-  // Tray "Privacy mode" is a toggle: on kills the mic instantly; off just
-  // lifts the block (the user re-enables listening deliberately).
-  listen("tray://privacy-mode", () => {
-    const on = !useAssistant.getState().privacyMode;
-    if (on) c.disableListening();
-    useAssistant.getState().setPrivacyMode(on);
-  });
+  // Tray "Privacy mode" is a toggle.
+  listen("tray://privacy-mode", () => setPrivacy(!useAssistant.getState().privacyMode));
 
   // Start listening for "BEV" automatically, so the assistant is actually
   // available on launch. Opt out in Settings, or Privacy mode kills it.
-  const s = useSettings.getState().settings;
-  if (s.onboarded && s.listenOnStartup && !useAssistant.getState().privacyMode) {
-    c.enableListening().catch(() => {});
-  }
+  maybeStartListening();
 
   return c;
 }
@@ -76,3 +68,22 @@ export async function teardownVoice() {
 }
 
 export const getController = () => controller;
+
+/**
+ * The single switch for privacy mode, used by the tray, the Security page and
+ * the sidebar. Turning it on stops the wake-word listener and microphone
+ * immediately (flipping the flag alone leaves the mic running). Turning it off
+ * only lifts the block; the user re-enables listening deliberately.
+ */
+export function setPrivacy(on: boolean) {
+  if (on) controller?.disableListening();
+  useAssistant.getState().setPrivacyMode(on);
+}
+
+/** Start the wake-word listener if the user wants it on launch. */
+export function maybeStartListening() {
+  const s = useSettings.getState().settings;
+  if (controller && s.onboarded && s.listenOnStartup && !useAssistant.getState().privacyMode) {
+    controller.enableListening().catch(() => {});
+  }
+}

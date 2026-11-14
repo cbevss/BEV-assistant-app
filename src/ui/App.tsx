@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { Routes, Route, NavLink, Navigate } from "react-router-dom";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { listen } from "@tauri-apps/api/event";
 import { useAssistant } from "@/state/assistant";
 import { useSettings } from "@/state/settings";
 import { useRoutines } from "@/routines/store";
@@ -19,8 +18,15 @@ import { Settings } from "./pages/Settings";
 import { Onboarding } from "./pages/Onboarding";
 import { ApprovalModal } from "./components/ApprovalModal";
 import { TitleBar } from "./components/TitleBar";
-import { bootstrapVoice, getController } from "@/voice/bootstrap";
+import { bootstrapVoice, getController, maybeStartListening, setPrivacy } from "@/voice/bootstrap";
+import { startMonitor } from "@/lib/monitor";
 import { check } from "@tauri-apps/plugin-updater";
+
+interface PendingApproval {
+  id: string;
+  description: string;
+  resolve: (ok: boolean) => void;
+}
 
 const nav = [
   { to: "/dashboard", label: "Dashboard", icon: "◎" },
@@ -37,10 +43,16 @@ const nav = [
 export function App() {
   const { micEnabled, privacyMode, state } = useAssistant();
   const { loaded, settings } = useSettings();
-  const [pendingApproval, setPendingApproval] = useState<{
-    description: string;
-    resolve: (ok: boolean) => void;
-  } | null>(null);
+  // Approvals can arrive from voice, chat, routines and the scheduler at once,
+  // so they queue: the modal shows the oldest, and every caller gets an answer.
+  const [approvals, setApprovals] = useState<PendingApproval[]>([]);
+  const pendingApproval = approvals[0] ?? null;
+  const answerApproval = (ok: boolean) => {
+    const current = approvals[0];
+    if (!current) return;
+    current.resolve(ok);
+    setApprovals((q) => q.filter((a) => a.id !== current.id));
+  };
 
   useEffect(() => {
     // Load persisted state, then wire the assistant once settings are ready.
@@ -53,10 +65,22 @@ export function App() {
       startScheduler();
 
       // Register the approval handler the orchestrator calls for sensitive tools.
+      // BEV is often hidden in the tray when a voice request needs approval;
+      // bring the window up so the prompt isn't waiting where nobody can see it.
       useAssistant.getState().setApprovalHandler(
         (description) =>
-          new Promise<boolean>((resolve) => setPendingApproval({ description, resolve }))
+          new Promise<boolean>((resolve) => {
+            setApprovals((q) => [...q, { id: crypto.randomUUID(), description, resolve }]);
+            const w = getCurrentWindow();
+            w.unminimize()
+              .then(() => w.show())
+              .then(() => w.setFocus())
+              .catch(() => {});
+          })
       );
+
+      // CPU/RAM alerts, when switched on in Settings.
+      startMonitor();
 
       // Wire the full voice vertical slice (shortcut + tray + controller).
       bootstrapVoice().catch(() => {});
@@ -68,12 +92,6 @@ export function App() {
         .catch(() => {});
     })();
 
-    const un = listen("tray://privacy-mode", () => {
-      useAssistant.getState().setPrivacyMode(true);
-    });
-    return () => {
-      un.then((f) => f());
-    };
   }, []);
 
   // Hold the UI until settings load, then gate on first-run onboarding.
@@ -81,7 +99,16 @@ export function App() {
     return <div className="grid h-screen w-screen place-items-center text-slate-500">Loading BEV…</div>;
   }
   if (!settings.onboarded) {
-    return <Onboarding onDone={() => useSettings.getState().update({ onboarded: true })} />;
+    return (
+      <Onboarding
+        onDone={async () => {
+          await useSettings.getState().update({ onboarded: true });
+          // Voice was bootstrapped before setup finished, so start it now
+          // rather than leaving BEV deaf until the next launch.
+          maybeStartListening();
+        }}
+      />
+    );
   }
 
   return (
@@ -123,7 +150,7 @@ export function App() {
             const c = getController();
             if (!c) return;
             if (privacyMode) {
-              useAssistant.getState().setPrivacyMode(false);
+              setPrivacy(false);
               c.enableListening();
             } else if (micEnabled) c.disableListening();
             else c.enableListening();
@@ -161,15 +188,10 @@ export function App() {
 
       {pendingApproval && (
         <ApprovalModal
+          key={pendingApproval.id}
           description={pendingApproval.description}
-          onApprove={() => {
-            pendingApproval.resolve(true);
-            setPendingApproval(null);
-          }}
-          onCancel={() => {
-            pendingApproval.resolve(false);
-            setPendingApproval(null);
-          }}
+          onApprove={() => answerApproval(true)}
+          onCancel={() => answerApproval(false)}
         />
       )}
     </div>

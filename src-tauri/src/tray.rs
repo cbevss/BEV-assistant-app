@@ -6,7 +6,7 @@ use crate::error::BevResult;
 use tauri::{
     menu::{Menu, MenuItem, PredefinedMenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-    Emitter, Manager,
+    Emitter,
 };
 
 pub fn build(app: &tauri::AppHandle) -> BevResult<()> {
@@ -23,14 +23,7 @@ pub fn build(app: &tauri::AppHandle) -> BevResult<()> {
         .menu(&menu)
         .show_menu_on_left_click(false)
         .on_menu_event(|app, event| match event.id.as_ref() {
-            "open" => {
-                if let Some(w) = app.get_webview_window("main") {
-                    // A minimised (not hidden) window needs restoring too.
-                    let _ = w.unminimize();
-                    let _ = w.show();
-                    let _ = w.set_focus();
-                }
-            }
+            "open" => crate::show_main(app),
             "toggle_listen" => {
                 let _ = app.emit("tray://toggle-listen", ());
             }
@@ -47,13 +40,7 @@ pub fn build(app: &tauri::AppHandle) -> BevResult<()> {
                 ..
             } = event
             {
-                let app = tray.app_handle();
-                if let Some(w) = app.get_webview_window("main") {
-                    // A minimised (not hidden) window needs restoring too.
-                    let _ = w.unminimize();
-                    let _ = w.show();
-                    let _ = w.set_focus();
-                }
+                crate::show_main(tray.app_handle());
             }
         })
         .build(app)?;

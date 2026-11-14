@@ -94,6 +94,9 @@ export class PorcupineWakeWord implements WakeWordEngine {
   }
 }
 
+/** Recognition errors that retrying can't fix. */
+const FATAL_RECOGNITION_ERRORS = new Set(["not-allowed", "service-not-allowed", "audio-capture"]);
+
 interface SpeechRecognitionCtor {
   new (): {
     lang: string;
@@ -120,6 +123,8 @@ export class WebSpeechWakeWord implements WakeWordEngine {
   private running = false;
   private paused = false;
   private onWakeCb?: () => void;
+  /** Called when listening stops for good (mic blocked or missing). */
+  onFatal?: (error: string) => void;
 
   constructor(private cfg: { deviceId?: string } = {}) {}
 
@@ -142,7 +147,7 @@ export class WebSpeechWakeWord implements WakeWordEngine {
   }
 
   private listen(Ctor: SpeechRecognitionCtor) {
-    if (!this.running || this.paused) return;
+    if (!this.running || this.paused || this.rec) return;
     const rec = new Ctor();
     rec.lang = "en-GB";
     rec.continuous = true;
@@ -161,20 +166,30 @@ export class WebSpeechWakeWord implements WakeWordEngine {
       }
     };
     rec.onerror = (ev) => {
-      // no-speech / network blips are normal; keep going. 'aborted' = our pause.
-      if (this.running && !this.paused && ev.error !== "aborted") {
-        setTimeout(() => this.listen(Ctor), 500);
+      // no-speech / network blips are normal and onend restarts after them.
+      // Permission or device errors won't fix themselves: stop instead of
+      // retrying four times a second forever, and tell the user.
+      if (FATAL_RECOGNITION_ERRORS.has(ev.error)) {
+        this.running = false;
+        this.onFatal?.(ev.error);
       }
     };
     rec.onend = () => {
-      // SpeechRecognition stops itself periodically — restart while active.
+      // The recogniser stops itself periodically and always fires onend, also
+      // after an error. Restart from here only, and only for the current
+      // instance: restarting from onerror as well started a second recogniser
+      // on every error, so duplicates piled up and fired the wake twice.
+      if (this.rec !== rec) return;
+      this.rec = null;
       if (this.running && !this.paused) setTimeout(() => this.listen(Ctor), 250);
     };
 
     try {
       rec.start();
     } catch {
-      /* already started — ignore */
+      // start() threw, so no onend will follow: clear it and try again shortly.
+      this.rec = null;
+      if (this.running && !this.paused) setTimeout(() => this.listen(Ctor), 1000);
     }
   }
 

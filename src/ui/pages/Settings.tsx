@@ -4,6 +4,7 @@ import { getVersion } from "@tauri-apps/api/app";
 import { useSettings, Personality } from "@/state/settings";
 import { PageHeader, Section, Field, Select, Slider, Toggle, TextArea, Button } from "../components/Form";
 import { ConfirmDialog } from "../components/ConfirmDialog";
+import { applyAppearance } from "@/lib/appearance";
 
 export function Settings() {
   const { settings, update, reset } = useSettings();
@@ -120,6 +121,7 @@ export function Settings() {
           onCancel={() => setConfirmReset(false)}
           onConfirm={async () => {
             await reset();
+            applyAppearance(useSettings.getState().settings);
             setConfirmReset(false);
           }}
         />

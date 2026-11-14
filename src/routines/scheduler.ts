@@ -11,6 +11,10 @@ import { useAssistant } from "@/state/assistant";
 import type { Routine } from "./types";
 
 let timer: ReturnType<typeof setInterval> | null = null;
+/** Start of the last minute already checked; minutes after it are still due. */
+let checkedThrough: number | null = null;
+/** How far back a late tick may catch up, so waking from sleep doesn't replay hours. */
+const MAX_CATCH_UP_MIN = 5;
 /** routineId → "YYYY-M-D-HH:MM" it last fired, so a routine fires once per minute. */
 const firedAt = new Map<string, string>();
 let notifyGranted = false;
@@ -76,14 +80,32 @@ async function fire(routine: Routine, now: Date) {
   }
 }
 
-async function tick() {
-  if (isRoutineRunning()) return; // never overlap routine runs
-  const now = new Date();
-  const due = useRoutines.getState().routines.filter((r) => isDue(r, now));
-  for (const r of due) {
-    // Run sequentially; stop if one is still going.
-    // eslint-disable-next-line no-await-in-loop
-    await fire(r, now).catch(() => {});
+let ticking = false;
+
+/**
+ * Check every whole minute between the last check and now. A plain 60s
+ * interval drifts across minute boundaries and WebView2 throttles timers while
+ * the window is hidden in the tray, so it could jump from 07:59 to 08:01 and
+ * never see 08:00. While a routine is running the minutes stay queued instead
+ * of being dropped.
+ */
+export async function tick() {
+  if (ticking || isRoutineRunning()) return;
+  ticking = true;
+  try {
+    const nowMin = Math.floor(Date.now() / 60_000) * 60_000;
+    const from = Math.max(checkedThrough ?? nowMin - 60_000, nowMin - MAX_CATCH_UP_MIN * 60_000);
+    for (let t = from + 60_000; t <= nowMin; t += 60_000) {
+      const minute = new Date(t);
+      const due = useRoutines.getState().routines.filter((r) => isDue(r, minute));
+      for (const r of due) {
+        // eslint-disable-next-line no-await-in-loop
+        await fire(r, minute).catch(() => {});
+      }
+      checkedThrough = t;
+    }
+  } finally {
+    ticking = false;
   }
 }
 
@@ -96,13 +118,10 @@ export async function startScheduler() {
   } catch {
     notifyGranted = false;
   }
-  // Align the first tick to the next minute boundary, then run every minute.
-  const now = new Date();
-  const msToNextMinute = (60 - now.getSeconds()) * 1000 - now.getMilliseconds();
-  setTimeout(() => {
-    tick().catch(() => {});
-    timer = setInterval(() => tick().catch(() => {}), 60_000);
-  }, msToNextMinute);
+  // Tick often; tick() itself works out which minutes are due exactly once.
+  checkedThrough = Math.floor(Date.now() / 60_000) * 60_000 - 60_000;
+  timer = setInterval(() => tick().catch(() => {}), 15_000);
+  tick().catch(() => {});
 }
 
 export function stopScheduler() {

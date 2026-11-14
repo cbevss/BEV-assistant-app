@@ -28,8 +28,10 @@ export class OpenAiProvider implements AiProvider {
       headers: { "content-type": "application/json", authorization: `Bearer ${key}` },
       body: JSON.stringify({
         model: this.model,
-        temperature: req.temperature ?? 0.4,
-        max_tokens: req.maxTokens ?? 1024,
+        // max_completion_tokens works on every chat model; newer ones reject
+        // max_tokens. Temperature only when asked, as reasoning models refuse it.
+        max_completion_tokens: req.maxTokens ?? 1024,
+        ...(req.temperature !== undefined ? { temperature: req.temperature } : {}),
         messages: toOpenAiMessages(req),
         tools: req.tools.map((t) => ({
           type: "function",

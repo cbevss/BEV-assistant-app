@@ -1,5 +1,6 @@
 import { native } from "@/lib/native";
 import type { Settings } from "@/state/settings";
+import { OVERLAY_BASE } from "./overlayPlacement";
 
 /**
  * Apply visual settings. Accent becomes a CSS variable the UI reads; overlay
@@ -13,5 +14,5 @@ export function applyAppearance(s: Settings) {
   } catch {
     /* no DOM (shouldn't happen in the webview) */
   }
-  native.placeOverlay(s.overlayCorner, 420 * s.overlayScale).catch(() => {});
+  native.placeOverlay(s.overlayCorner, OVERLAY_BASE * s.overlayScale).catch(() => {});
 }

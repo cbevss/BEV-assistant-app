@@ -82,7 +82,7 @@ export function VoiceAudio() {
             onChange={(e) => update({ pushToTalkShortcut: e.target.value })}
           />
         </Field>
-        <Field label="Interface sounds">
+        <Field label="Interface sounds" hint="A short chime when BEV wakes up and when it finishes.">
           <Toggle label="Interface sounds" checked={settings.interfaceSounds} onChange={(interfaceSounds) => update({ interfaceSounds })} />
         </Field>
       </Section>

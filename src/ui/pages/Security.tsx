@@ -2,13 +2,14 @@ import { useCallback, useEffect, useState } from "react";
 import { native, ActionLogRow } from "@/lib/native";
 import { useSettings } from "@/state/settings";
 import { useAssistant } from "@/state/assistant";
+import { setPrivacy } from "@/voice/bootstrap";
 import { tools, isSensitive } from "@/ai/tools";
 import { PageHeader, Section, Toggle, Button, StatusPill } from "../components/Form";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 
 export function Security() {
   const { settings, update } = useSettings();
-  const { privacyMode, setPrivacyMode } = useAssistant();
+  const { privacyMode } = useAssistant();
   const [log, setLog] = useState<ActionLogRow[]>([]);
   const [confirmClear, setConfirmClear] = useState(false);
 
@@ -39,7 +40,7 @@ export function Security() {
               Instantly stops all wake-word and microphone processing until you turn it back on.
             </div>
           </div>
-          <Toggle label="Privacy mode" checked={privacyMode} onChange={(v) => setPrivacyMode(v)} />
+          <Toggle label="Privacy mode" checked={privacyMode} onChange={setPrivacy} />
         </div>
       </Section>
 
