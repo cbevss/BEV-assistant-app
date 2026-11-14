@@ -14,6 +14,9 @@ export default defineConfig({
     alias: { "@": r("./src") },
   },
   clearScreen: false,
+  // The ONNX runtime finds its .wasm via an explicit URL; pre-bundling it in
+  // dev would only break that.
+  optimizeDeps: { exclude: ["onnxruntime-web"] },
   server: {
     port: 1420,
     strictPort: true,
@@ -24,6 +27,9 @@ export default defineConfig({
   // Two entry points: the main app window and the lightweight overlay.
   build: {
     target: "esnext",
+    // Scripts loaded at runtime (the wake-word AudioWorklet) must stay real
+    // files: the CSP only allows scripts from 'self', so a data: URL fails.
+    assetsInlineLimit: (file) => (file.endsWith(".js") ? false : undefined),
     rollupOptions: {
       input: {
         main: r("./index.html"),
