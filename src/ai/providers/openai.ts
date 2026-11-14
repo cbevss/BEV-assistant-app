@@ -1,6 +1,6 @@
 import { fetch } from "@tauri-apps/plugin-http";
 import { native } from "@/lib/native";
-import { AiProvider, AiResponse, ChatRequest, ProviderError, ToolCall } from "../types";
+import { AiImage, AiProvider, AiResponse, ChatRequest, ProviderError, ToolCall } from "../types";
 
 /**
  * OpenAI Chat Completions provider with function calling. Key is read from the
@@ -63,10 +63,31 @@ export class OpenAiProvider implements AiProvider {
 /** Neutral history → OpenAI messages; assistant tool calls carry their args. */
 export function toOpenAiMessages(req: ChatRequest): unknown[] {
   const out: unknown[] = [{ role: "system", content: req.system }];
+  const imagePart = (i: AiImage) => ({
+    type: "image_url",
+    image_url: { url: `data:${i.mediaType};base64,${i.data}`, detail: "high" },
+  });
+  // Tool messages can only hold text, so images from tool results follow the
+  // whole run of results as one user message (results must stay contiguous).
+  let pending: AiImage[] = [];
+  const flush = () => {
+    if (!pending.length) return;
+    out.push({
+      role: "user",
+      content: [{ type: "text", text: "Image(s) returned by the tool call above:" }, ...pending.map(imagePart)],
+    });
+    pending = [];
+  };
   for (const m of req.messages) {
     if (m.role === "system") continue;
     if (m.role === "tool") {
       out.push({ role: "tool", tool_call_id: m.toolCallId, content: m.content });
+      if (m.images?.length) pending.push(...m.images);
+      continue;
+    }
+    flush();
+    if (m.role === "user" && m.images?.length) {
+      out.push({ role: "user", content: [{ type: "text", text: m.content }, ...m.images.map(imagePart)] });
     } else if (m.role === "assistant" && m.toolCalls?.length) {
       out.push({
         role: "assistant",
@@ -81,6 +102,7 @@ export function toOpenAiMessages(req: ChatRequest): unknown[] {
       out.push({ role: m.role, content: m.content });
     }
   }
+  flush();
   return out;
 }
 

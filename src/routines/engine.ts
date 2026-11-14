@@ -1,4 +1,4 @@
-import { tools, isSensitive } from "@/ai/tools";
+import { tools, isSensitive, toolText } from "@/ai/tools";
 import { native } from "@/lib/native";
 import { toolAllowed, autoApproveOn } from "@/state/settings";
 import type { Routine, RoutineStep, RunReport, StepResult, StepCondition } from "./types";
@@ -10,7 +10,14 @@ export interface RunHooks {
 }
 
 /** Tools a routine may never call, to prevent recursion / self-modification. */
-export const ROUTINE_FORBIDDEN = new Set(["create_routine", "delete_routine", "run_routine", "list_routines"]);
+export const ROUTINE_FORBIDDEN = new Set([
+  "create_routine",
+  "delete_routine",
+  "run_routine",
+  "list_routines",
+  // A screenshot is only useful to the AI; a routine has no one to look at it.
+  "look_at_screen",
+]);
 
 let current: AbortController | null = null;
 
@@ -67,7 +74,7 @@ async function runStep(step: RoutineStep, signal: AbortSignal, hooks: RunHooks):
       // Routines can't stop to ask "online or offline?": games default to online.
       const args =
         step.tool === "launch_game" && step.args.mode !== "offline" ? { ...step.args, mode: "online" } : step.args;
-      const message = await tool.run(args);
+      const message = toolText(await tool.run(args));
       native.logAction(step.tool, JSON.stringify(step.args), message, true).catch(() => {});
       return { ...base, status: "ok", message };
     } catch (e) {

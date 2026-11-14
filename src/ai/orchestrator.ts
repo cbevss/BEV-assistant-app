@@ -1,7 +1,7 @@
 import { native } from "@/lib/native";
 import { useSettings, toolAllowed, autoApproveOn } from "@/state/settings";
-import { AiMessage, AiProvider, ProviderError, ToolCall } from "./types";
-import { tools, toolSpecs, isSensitive } from "./tools";
+import { AiImage, AiMessage, AiProvider, ProviderError, ToolCall } from "./types";
+import { tools, toolSpecs, isSensitive, ToolOutput } from "./tools";
 import { buildSystemPrompt } from "./persona";
 
 export interface OrchestratorHooks {
@@ -12,11 +12,42 @@ export interface OrchestratorHooks {
   requestApproval: (call: ToolCall, description: string) => Promise<boolean>;
 }
 
-/** Builds the system prompt from current settings + approved memories. */
+/** Builds the system prompt from current settings, approved memories and what's on screen. */
 async function currentSystemPrompt(): Promise<string> {
   const s = useSettings.getState().settings;
-  const memories = await native.memoryList().catch(() => []);
-  return buildSystemPrompt(s, memories);
+  const [memories, fg] = await Promise.all([
+    native.memoryList().catch(() => []),
+    // Screen awareness is governed by the look_at_screen permission.
+    toolAllowed("look_at_screen") ? native.foregroundWindow().catch(() => null) : Promise.resolve(null),
+  ]);
+  return buildSystemPrompt(s, memories, foregroundLabel(fg));
+}
+
+/** "Discord — #general (Discord.exe)", or "" for BEV itself / nothing useful. */
+export function foregroundLabel(fg: { title: string; process: string } | null): string {
+  if (!fg) return "";
+  const proc = fg.process.toLowerCase();
+  if (proc === "bev.exe" || (proc === "explorer.exe" && !fg.title)) return "";
+  const title = fg.title.replace(/\s+/g, " ").trim().slice(0, 160);
+  if (!title && !fg.process) return "";
+  return fg.process ? (title ? `${title} (${fg.process})` : fg.process) : title;
+}
+
+/**
+ * Screenshots are large: keep only the newest one in history. Older ones are
+ * replaced with a note so the model knows it had seen the screen earlier.
+ */
+export function keepLatestImage(history: AiMessage[]): void {
+  let seen = false;
+  for (let i = history.length - 1; i >= 0; i--) {
+    const m = history[i];
+    if (!m.images?.length) continue;
+    if (!seen) {
+      seen = true;
+      continue;
+    }
+    history[i] = { ...m, images: undefined, content: `${m.content} [earlier screenshot removed]` };
+  }
 }
 
 /** Drop history beyond this many messages to bound token use / latency. */
@@ -83,7 +114,9 @@ export class Orchestrator {
           toolCallId: call.id,
           toolName: call.name,
           content: result.text,
+          images: result.images,
         });
+        if (result.images) keepLatestImage(this.history);
         this.hooks.onToolResult(call.name, result.ok, result.text);
         native.logAction(call.name, JSON.stringify(call.args), result.text, result.ok).catch(() => {});
       }
@@ -117,7 +150,7 @@ export class Orchestrator {
   private async runTool(
     call: ToolCall,
     signal?: AbortSignal
-  ): Promise<{ ok: boolean; text: string }> {
+  ): Promise<{ ok: boolean; text: string; images?: AiImage[] }> {
     const tool = tools[call.name];
     if (!tool) return { ok: false, text: `unknown tool: ${call.name}` };
     if (!toolAllowed(call.name)) {
@@ -132,8 +165,9 @@ export class Orchestrator {
     }
 
     try {
-      const text = await withTimeout(tool.run(call.args), 15_000, signal);
-      return { ok: true, text };
+      const out: string | ToolOutput = await withTimeout(tool.run(call.args), 15_000, signal);
+      if (typeof out === "string") return { ok: true, text: out };
+      return { ok: true, text: out.text, images: out.images.length ? out.images : undefined };
     } catch (e) {
       return { ok: false, text: `error: ${e instanceof Error ? e.message : String(e)}` };
     }

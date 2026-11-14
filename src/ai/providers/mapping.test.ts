@@ -61,3 +61,53 @@ describe("openai mapping", () => {
     expect(out[4]).toMatchObject({ role: "tool", tool_call_id: "t2" });
   });
 });
+
+import { toOllamaMessages } from "./ollama";
+
+describe("screenshots", () => {
+  const img = { mediaType: "image/jpeg" as const, data: "QUJD" };
+  const shot: AiMessage[] = [
+    { role: "user", content: "what's this error?" },
+    {
+      role: "assistant",
+      content: "",
+      toolCalls: [
+        { id: "s1", name: "look_at_screen", args: {} },
+        { id: "s2", name: "get_system_stats", args: {} },
+      ],
+    },
+    { role: "tool", toolCallId: "s1", toolName: "look_at_screen", content: "Screenshot attached", images: [img] },
+    { role: "tool", toolCallId: "s2", toolName: "get_system_stats", content: "{}" },
+  ];
+
+  it("anthropic puts the image inside the tool_result", () => {
+    const out = toAnthropicMessages(shot);
+    const res = out[2].content[0] as { type: string; content: Array<{ type: string; source?: { data: string } }> };
+    expect(res.type).toBe("tool_result");
+    expect(res.content.map((b) => b.type)).toEqual(["text", "image"]);
+    expect(res.content[1].source?.data).toBe("QUJD");
+  });
+
+  it("openai keeps tool results contiguous and sends the image after them", () => {
+    const out = toOpenAiMessages({ system: "s", messages: shot, tools: [] }) as Array<{
+      role: string;
+      content: unknown;
+    }>;
+    expect(out.map((m) => m.role)).toEqual(["system", "user", "assistant", "tool", "tool", "user"]);
+    const parts = out[5].content as Array<{ type: string; image_url?: { url: string } }>;
+    expect(parts[1].image_url?.url).toBe("data:image/jpeg;base64,QUJD");
+  });
+
+  it("ollama sends images after the results, or a note when the model can't see", () => {
+    const withImg = toOllamaMessages({ system: "s", messages: shot, tools: [] }, true) as Array<{
+      role: string;
+      images?: string[];
+      content: string;
+    }>;
+    expect(withImg.map((m) => m.role)).toEqual(["system", "user", "assistant", "tool", "tool", "user"]);
+    expect(withImg[5].images).toEqual(["QUJD"]);
+    const without = toOllamaMessages({ system: "s", messages: shot, tools: [] }, false) as typeof withImg;
+    expect(without[5].images).toBeUndefined();
+    expect(without[5].content).toMatch(/vision model/);
+  });
+});

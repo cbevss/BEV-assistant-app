@@ -102,11 +102,27 @@ export const native = {
   lockPc: () => invoke<void>("lock_pc"),
   powerAction: (action: "sleep" | "restart" | "shutdown" | "cancel", delaySecs?: number) =>
     invoke<string>("power_action", { action, delaySecs }),
+  captureScreen: (target?: "current" | "primary" | "all") =>
+    invoke<ScreenCapture>("capture_screen", { target }),
+  foregroundWindow: () => invoke<ForegroundWindow | null>("foreground_window"),
   takeScreenshot: (monitor?: number) => invoke<string>("take_screenshot", { monitor }),
   deleteTempFile: (path: string) => invoke<void>("delete_temp_file", { path }),
   openSettingsPage: (page: string) => invoke<string>("open_settings_page", { page }),
   listMonitors: () => invoke<MonitorInfo[]>("list_monitors"),
 };
+
+export interface ScreenCapture {
+  /** Base64 JPEG. */
+  data: string;
+  width: number;
+  height: number;
+  label: string;
+}
+
+export interface ForegroundWindow {
+  title: string;
+  process: string;
+}
 
 export interface ActionLogRow {
   id: number;

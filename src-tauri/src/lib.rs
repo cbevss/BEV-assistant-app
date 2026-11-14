@@ -11,6 +11,7 @@ mod error;
 mod files;
 mod games;
 mod overlay;
+mod screen;
 mod secrets;
 mod sysmon;
 mod system;
@@ -132,6 +133,8 @@ pub fn run() {
             system::lock_pc,
             system::power_action,
             system::take_screenshot,
+            screen::capture_screen,
+            screen::foreground_window,
             system::delete_temp_file,
             system::open_settings_page,
             system::list_monitors,
