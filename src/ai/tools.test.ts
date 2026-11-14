@@ -5,6 +5,11 @@ vi.mock("@/lib/native", () => ({
   native: {
     setVolume: vi.fn().mockResolvedValue(undefined),
     launchApp: vi.fn().mockResolvedValue("launched"),
+    listGames: vi.fn().mockResolvedValue([
+      { id: "252950", name: "Rocket League", source: "steam" },
+      { id: "730", name: "Counter-Strike 2", source: "steam" },
+    ]),
+    launchGame: vi.fn().mockImplementation(async (id: string) => `launched app ${id}`),
     memoryUpsert: vi.fn().mockResolvedValue(undefined),
   },
 }));
@@ -30,6 +35,15 @@ describe("tool registry", () => {
 
   it("rejects empty app name", async () => {
     await expect(tools.launch_app.run({ name: "   " })).rejects.toThrow(/non-empty/);
+  });
+
+  it("launches a Steam game from a loose spoken name", async () => {
+    expect(await tools.launch_game.run({ name: "rocket league with steam" })).toBe("launched app 252950");
+    expect(await tools.launch_game.run({ name: "cs2" })).toBe("launched app 730");
+  });
+
+  it("says which games are installed when the name doesn't match", async () => {
+    await expect(tools.launch_game.run({ name: "minecraft" })).rejects.toThrow(/No installed Steam game matches "minecraft"/);
   });
 
   it("flags close_app as sensitive and get_system_stats as not", () => {

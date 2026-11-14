@@ -1,4 +1,5 @@
 import { native } from "@/lib/native";
+import { matchGame } from "@/lib/games";
 import { looksSensitive } from "@/lib/sensitive";
 import { useSettings } from "@/state/settings";
 import { useAssistant } from "@/state/assistant";
@@ -106,7 +107,7 @@ export const tools: Record<string, RegisteredTool> = {
     spec: {
       name: "launch_app",
       description:
-        "Open an installed application or Windows setting by friendly name, e.g. 'Spotify', 'Discord', 'Chrome', 'Notepad', 'Settings'.",
+        "Open an installed application or Windows setting by friendly name, e.g. 'Spotify', 'Discord', 'Chrome', 'Notepad', 'Settings'. Not for games: use launch_game for those.",
       parameters: {
         type: "object",
         properties: { name: { type: "string" } },
@@ -114,6 +115,32 @@ export const tools: Record<string, RegisteredTool> = {
       },
     },
     run: async (a) => native.launchApp(str(a.name, "name")),
+  },
+
+  launch_game: {
+    spec: {
+      name: "launch_game",
+      description:
+        "Launch an installed PC game from the user's Steam library by name, e.g. 'Rocket League', 'CS2', 'GTA 5'. Finds the game's folder and runs its own .exe. Use this, not launch_app, for any game, including requests like 'open X on Steam' or 'open X with Steam'. Pass just the game's name.",
+      parameters: {
+        type: "object",
+        properties: { name: { type: "string", description: "The game's name as the user said it" } },
+        required: ["name"],
+      },
+    },
+    run: async (a) => {
+      const name = str(a.name, "name");
+      const games = await native.listGames();
+      const { game, suggestions } = matchGame(name, games);
+      if (!game) {
+        throw new Error(
+          suggestions.length
+            ? `No installed Steam game matches "${name}". Closest installed: ${suggestions.join(", ")}.`
+            : `No installed Steam game matches "${name}" (${games.length} games installed).`
+        );
+      }
+      return native.launchGame(game.id);
+    },
   },
 
   close_app: {
@@ -334,7 +361,7 @@ Object.assign(tools, {
     spec: {
       name: "create_routine",
       description:
-        "Create and save a new routine from spoken instructions. steps is an ordered list of { tool, args } using existing tools (launch_app, close_app, set_volume, set_muted, set_quiet_mode, power_action, get_system_stats, open_settings_page, open_website, get_datetime). Example: name='gaming mode', triggers=['gaming mode'], steps=[{tool:'launch_app',args:{name:'Discord'}},{tool:'set_volume',args:{percent:40}}].",
+        "Create and save a new routine from spoken instructions. steps is an ordered list of { tool, args } using existing tools (launch_app, launch_game, close_app, set_volume, set_muted, set_quiet_mode, power_action, get_system_stats, open_settings_page, open_website, get_datetime). Example: name='gaming mode', triggers=['gaming mode'], steps=[{tool:'launch_app',args:{name:'Discord'}},{tool:'set_volume',args:{percent:40}}].",
       parameters: {
         type: "object",
         properties: {

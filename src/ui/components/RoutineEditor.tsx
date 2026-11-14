@@ -5,6 +5,7 @@ import { TextInput, Select, Button, Toggle } from "./Form";
 
 const TOOL_OPTIONS = [
   { value: "launch_app", label: "Open app" },
+  { value: "launch_game", label: "Open Steam game" },
   { value: "close_app", label: "Close app" },
   { value: "set_volume", label: "Set volume" },
   { value: "set_muted", label: "Mute / unmute" },
@@ -169,6 +170,7 @@ export function RoutineEditor({
 function defaultArgs(tool: string): Record<string, unknown> {
   switch (tool) {
     case "launch_app":
+    case "launch_game":
     case "close_app":
       return { name: "" };
     case "set_volume":
@@ -213,6 +215,13 @@ function ArgEditor({ step, onArgs, onDelay }: { step: RoutineStep; onArgs: (p: R
       return (
         <>
           <TextInput placeholder="App name, e.g. Discord" value={String(a.name ?? "")} onChange={(e) => onArgs({ name: e.target.value })} />
+          {delay}
+        </>
+      );
+    case "launch_game":
+      return (
+        <>
+          <TextInput placeholder="Game name, e.g. Rocket League" value={String(a.name ?? "")} onChange={(e) => onArgs({ name: e.target.value })} />
           {delay}
         </>
       );

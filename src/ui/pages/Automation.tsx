@@ -168,6 +168,7 @@ function StepDot({ status, running }: { status?: string; running?: boolean }) {
 export function stepLabel(tool: string, args: Record<string, unknown>): string {
   switch (tool) {
     case "launch_app":
+    case "launch_game":
       return `Open ${args.name}`;
     case "close_app":
       return `Close ${args.name}`;
