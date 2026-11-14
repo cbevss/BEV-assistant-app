@@ -9,6 +9,7 @@ import { emit, listen } from "@tauri-apps/api/event";
  */
 export type ProviderId = "anthropic" | "openai" | "ollama";
 export type Personality = "professional" | "casual" | "minimal" | "technical" | "custom";
+export type WakeEngine = "speech" | "on-device";
 export type OverlayCorner = "top-right" | "top-left" | "bottom-right" | "bottom-left" | "center";
 
 export interface Settings {
@@ -27,6 +28,8 @@ export interface Settings {
   voiceId: string;
   speakRate: number;
   speakVolume: number;
+  /** "speech" = WebView2 speech recognition; "on-device" = openWakeWord model. */
+  wakeEngine: WakeEngine;
   wakeSensitivity: number; // 0..1
   conversationTimeoutMs: number;
   pushToTalkShortcut: string;
@@ -67,6 +70,7 @@ export const defaultSettings: Settings = {
   voiceId: "",
   speakRate: 1.02,
   speakVolume: 1,
+  wakeEngine: "speech",
   wakeSensitivity: 0.6,
   conversationTimeoutMs: 8000,
   pushToTalkShortcut: "CommandOrControl+Alt+B",

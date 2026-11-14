@@ -39,8 +39,6 @@ export function Integrations() {
         host={settings.ollamaHost}
         onHost={(ollamaHost) => update({ ollamaHost })}
       />
-
-      <PicovoiceCard />
     </div>
   );
 }
@@ -159,39 +157,6 @@ function ProviderCard({
           {busy ? "Testing…" : "Test connection"}
         </Button>
       </div>
-    </Section>
-  );
-}
-
-function PicovoiceCard() {
-  const [has, setHas] = useState<boolean | null>(null);
-  const [val, setVal] = useState("");
-  useEffect(() => {
-    native.getSecret("picovoice_key").then((v) => setHas(!!v)).catch(() => setHas(false));
-  }, []);
-  return (
-    <Section
-      title="Picovoice (on-device wake word)"
-      aside={<StatusPill ok={has} label={has ? "key saved" : has === false ? "not configured" : "…"} />}
-    >
-      <Field
-        label="Access key"
-        hint="Free at console.picovoice.ai. On-device wake word is coming in a future update; until then BEV uses the built-in speech wake word, so saving a key changes nothing yet."
-      >
-        <div className="flex gap-2">
-          <TextInput type="password" autoComplete="off" value={val} onChange={(e) => setVal(e.target.value)} placeholder="paste access key" />
-          <Button
-            disabled={!val.trim()}
-            onClick={async () => {
-              await native.storeSecret("picovoice_key", val.trim());
-              setVal("");
-              setHas(true);
-            }}
-          >
-            Save
-          </Button>
-        </div>
-      </Field>
     </Section>
   );
 }

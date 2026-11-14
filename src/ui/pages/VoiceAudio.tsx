@@ -3,7 +3,19 @@ import { useSettings } from "@/state/settings";
 import { MicInput } from "@/voice/wakeword";
 import { WebSpeechSynthesizer } from "@/voice/webspeech";
 import { native, OutputDevice } from "@/lib/native";
-import { PageHeader, Section, Field, Select, Slider, Toggle, Button, TextInput } from "../components/Form";
+import { PageHeader, Section, Field, Select, Slider, Toggle, Button, TextInput, StatusPill } from "../components/Form";
+import { useAssistant } from "@/state/assistant";
+import { restartListening, getController } from "@/voice/bootstrap";
+import { thresholdFor } from "@/voice/oww/pipeline";
+import {
+  loadWakeModel,
+  saveWakeModel,
+  clearWakeModel,
+  toBase64,
+  fromBase64,
+  StoredWakeModel,
+} from "@/voice/oww/model-store";
+import type { OnDeviceWakeWord } from "@/voice/oww/engine";
 
 export function VoiceAudio() {
   const { settings, update } = useSettings();
@@ -53,15 +65,23 @@ export function VoiceAudio() {
 
       <OutputDeviceSection />
 
-      <Section title="Wake word & conversation">
-        <Field label="Wake-word sensitivity" hint="Higher catches quieter speech but risks false triggers from speakers.">
+      <WakeWordSection />
+
+      <Section title="Conversation">
+        <Field
+          label="Wake-word sensitivity"
+          hint="Higher catches quieter or less clear wake words, but risks false triggers from speakers. Applies to the on-device wake word."
+        >
           <Slider
             ariaLabel="Wake sensitivity"
             min={0.1}
             max={1}
             step={0.05}
             value={settings.wakeSensitivity}
-            onChange={(wakeSensitivity) => update({ wakeSensitivity })}
+            onChange={(wakeSensitivity) => {
+              update({ wakeSensitivity });
+              getOnDevice()?.setThreshold(thresholdFor(wakeSensitivity));
+            }}
             format={(v) => `${Math.round(v * 100)}%`}
           />
         </Field>
@@ -199,6 +219,206 @@ function OutputDeviceSection() {
         />
       </Field>
     </Section>
+  );
+}
+
+/** The live on-device engine, if that's what is listening (for live threshold changes). */
+function getOnDevice(): OnDeviceWakeWord | null {
+  const w = getController()?.wake;
+  return w?.id === "openwakeword" ? (w as OnDeviceWakeWord) : null;
+}
+
+const TRAINING_GUIDE = "https://github.com/cbevss/BEV-assistant-app/blob/main/docs/WAKE_WORD.md";
+
+/**
+ * Wake word engine choice. "On-device" runs the user's trained openWakeWord
+ * model locally; audio never leaves the PC. Speech recognition stays the
+ * default, and the fallback whenever on-device isn't set up or fails.
+ */
+function WakeWordSection() {
+  const { settings, update } = useSettings();
+  const wake = useAssistant((s) => s.wake);
+  const micEnabled = useAssistant((s) => s.micEnabled);
+  const [model, setModel] = useState<StoredWakeModel | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    loadWakeModel().then(setModel);
+  }, []);
+
+  const chooseEngine = async (wakeEngine: "speech" | "on-device") => {
+    await update({ wakeEngine });
+    await restartListening();
+  };
+
+  const loadFile = async (file: File) => {
+    setBusy(true);
+    setMsg(null);
+    try {
+      if (!file.name.toLowerCase().endsWith(".onnx")) {
+        throw new Error("Pick the .onnx file from the training notebook (not the .tflite).");
+      }
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      // Open it once to be sure it's a valid openWakeWord model before saving.
+      const { openRunner } = await import("@/voice/oww/engine");
+      const runner = await openRunner(bytes);
+      await runner.release();
+      const stored = { name: file.name, base64: toBase64(bytes), addedAt: Date.now() };
+      await saveWakeModel(stored);
+      setModel(stored);
+      setMsg({ ok: true, text: `Loaded ${file.name}.` });
+      if (settings.wakeEngine === "on-device") await restartListening();
+    } catch (e) {
+      setMsg({ ok: false, text: e instanceof Error ? e.message : String(e) });
+    } finally {
+      setBusy(false);
+      if (fileRef.current) fileRef.current.value = "";
+    }
+  };
+
+  const remove = async () => {
+    await clearWakeModel();
+    setModel(null);
+    setMsg(null);
+    if (settings.wakeEngine === "on-device") await restartListening();
+  };
+
+  const live =
+    !micEnabled || !wake
+      ? { ok: null, label: "not listening" }
+      : wake.engine === "on-device"
+        ? { ok: true, label: "listening on-device" }
+        : { ok: settings.wakeEngine === "speech" ? true : false, label: "listening via speech recognition" };
+
+  return (
+    <Section title="Wake word" aside={<StatusPill ok={live.ok} label={live.label} />}>
+      <Field
+        label="Engine"
+        hint="Speech recognition works with no setup. On-device runs your own “hey BEV” model on this PC, so audio never leaves it."
+      >
+        <Select
+          ariaLabel="Wake word engine"
+          value={settings.wakeEngine}
+          onChange={chooseEngine}
+          options={[
+            { value: "speech", label: "Speech recognition (default)" },
+            { value: "on-device", label: "On-device (openWakeWord)" },
+          ]}
+        />
+      </Field>
+      {wake?.note && <p className="text-sm text-amber-400">{wake.note}</p>}
+
+      {settings.wakeEngine === "on-device" && (
+        <>
+          <Field
+            label="Wake word model"
+            hint={
+              model
+                ? `${model.name}, added ${new Date(model.addedAt).toLocaleDateString("en-GB")}.`
+                : "No model loaded yet. Train one with the guide, then load the .onnx file here."
+            }
+          >
+            <div className="flex justify-end gap-2">
+              <input
+                ref={fileRef}
+                type="file"
+                accept=".onnx"
+                className="hidden"
+                onChange={(e) => e.target.files?.[0] && loadFile(e.target.files[0])}
+              />
+              <Button variant="ghost" onClick={() =>
+                  import("@tauri-apps/plugin-shell")
+                    .then(({ open }) => open(TRAINING_GUIDE))
+                    .catch(() => {})
+                }>
+                Training guide
+              </Button>
+              {model && (
+                <Button variant="danger" onClick={remove} disabled={busy}>
+                  Remove
+                </Button>
+              )}
+              <Button onClick={() => fileRef.current?.click()} disabled={busy}>
+                {busy ? "Checking…" : model ? "Replace" : "Load model"}
+              </Button>
+            </div>
+          </Field>
+          {msg && <p className={`text-sm ${msg.ok ? "text-bev-ok" : "text-bev-danger"}`}>{msg.text}</p>}
+          {model && <WakeTest model={model} deviceId={settings.micDeviceId} sensitivity={settings.wakeSensitivity} />}
+        </>
+      )}
+    </Section>
+  );
+}
+
+/**
+ * Live score meter for the loaded model, so the user can see how strongly
+ * "hey BEV" registers and tune sensitivity. Runs its own engine instance.
+ */
+function WakeTest({ model, deviceId, sensitivity }: { model: StoredWakeModel; deviceId: string; sensitivity: number }) {
+  const [on, setOn] = useState(false);
+  const [score, setScore] = useState(0);
+  const [hits, setHits] = useState(0);
+  const [err, setErr] = useState<string | null>(null);
+  const threshold = thresholdFor(sensitivity);
+  const engine = useRef<OnDeviceWakeWord | null>(null);
+
+  useEffect(() => {
+    engine.current?.setThreshold(threshold);
+  }, [threshold]);
+
+  useEffect(() => {
+    if (!on) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const { OnDeviceWakeWord } = await import("@/voice/oww/engine");
+        const e = new OnDeviceWakeWord({ model: fromBase64(model.base64), deviceId: deviceId || undefined, threshold });
+        engine.current = e;
+        e.onScore((s) => !cancelled && setScore(s));
+        e.onFatal = (m) => setErr(m);
+        await e.start(() => {
+          setHits((h) => h + 1);
+          // Keep testing after a detection.
+          setTimeout(() => e.resumeListening(), 300);
+        });
+        if (cancelled) e.stop();
+        setErr(null);
+      } catch (e) {
+        setErr(e instanceof Error ? e.message : String(e));
+        setOn(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+      engine.current?.stop();
+      engine.current = null;
+      setScore(0);
+    };
+    // threshold changes are applied live above; don't restart for them
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [on, model, deviceId]);
+
+  return (
+    <Field
+      label="Test wake word"
+      hint={err ?? `Say “hey BEV”. Detections: ${hits}. Trigger point ${Math.round(threshold * 100)}%.`}
+    >
+      <div className="flex items-center gap-3">
+        <div className="relative h-2 flex-1 overflow-hidden rounded bg-white/5">
+          <div
+            className={`h-full rounded transition-[width] duration-75 ${score >= threshold ? "bg-bev-ok" : "bg-gradient-to-r from-bev-cyan to-bev-violet"}`}
+            style={{ width: `${Math.round(score * 100)}%` }}
+          />
+          <div className="absolute top-0 h-full w-0.5 bg-white/60" style={{ left: `${threshold * 100}%` }} />
+        </div>
+        <Button variant="ghost" onClick={() => setOn((v) => !v)}>
+          {on ? "Stop" : "Test"}
+        </Button>
+      </div>
+    </Field>
   );
 }
 

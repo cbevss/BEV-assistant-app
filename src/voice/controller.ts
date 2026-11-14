@@ -6,15 +6,22 @@ import { makeProvider } from "@/ai/factory";
 import { Orchestrator } from "@/ai/orchestrator";
 import { WebSpeechRecognizer, WebSpeechSynthesizer } from "./webspeech";
 import { WebSpeechWakeWord } from "./wakeword";
+import type { WakeWordEngine } from "./types";
+import { loadWakeModel, fromBase64 } from "./oww/model-store";
+import { thresholdFor } from "./oww/pipeline";
 import { useRoutines, matchRoutine } from "@/routines/store";
 import { runRoutine, summariseRun } from "@/routines/engine";
 import { playChime } from "./sounds";
 
-export interface ControllerConfig {
-  picovoiceKey?: string;
-}
 
 const settings = () => useSettings.getState().settings;
+
+function micErrorText(error: string): string {
+  if (error === "audio-capture") return "No microphone found. Check the input device in Voice & Audio.";
+  if (error === "not-allowed" || error === "service-not-allowed")
+    return "Microphone access is blocked. Allow it in Windows Settings → Privacy → Microphone.";
+  return `Wake word stopped: ${error}`;
+}
 
 /** "stop", "BEV stop", "cancel", "never mind", "shut up" end the conversation. */
 export function isStopPhrase(utterance: string): boolean {
@@ -34,14 +41,15 @@ export function isStopPhrase(utterance: string): boolean {
  * speaking (TTS) → listening (follow-up window) → idle.
  */
 export class VoiceController {
-  private wake?: WebSpeechWakeWord;
+  /** The live wake-word engine (read by Voice & Audio for live tuning). */
+  wake?: WakeWordEngine;
   private stt = new WebSpeechRecognizer("en-GB");
   private tts = new WebSpeechSynthesizer();
   private orchestrator: Orchestrator;
   private abort?: AbortController;
   private active = false;
 
-  constructor(readonly cfg: ControllerConfig) {
+  constructor() {
     this.orchestrator = new Orchestrator(makeProvider(settings()), {
       onState: (s) => this.setState(s),
       onAssistantText: (t) => this.pushAssistant(t),
@@ -69,37 +77,81 @@ export class VoiceController {
       return;
     }
     this.wake?.stop();
-    // The WebView2 speech recogniser listens for "BEV" with zero setup.
-    // PorcupineWakeWord (on-device, needs a Picovoice key) is not wired up yet:
-    // its start() never reports a detection, so selecting it whenever a key was
-    // saved left BEV deaf. Keep using the working engine until it is finished
-    // (see docs/VOICE.md); cfg.picovoiceKey is kept for that.
-    this.wake = new WebSpeechWakeWord({ deviceId: settings().micDeviceId || undefined });
-    this.wake.onFatal = (error) => {
+    const { engine, note } = await this.makeWakeEngine();
+    this.wake = engine;
+    useAssistant.getState().setMic(true);
+    try {
+      await this.startEngine(engine);
+      this.reportWake(note);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      if (engine.id !== "openwakeword") return this.listeningFailed(msg);
+      // Don't leave BEV deaf because the model or audio setup failed: drop
+      // back to the speech wake word and say why.
+      engine.stop();
+      this.wake = this.speechEngine();
+      try {
+        await this.startEngine(this.wake);
+        this.reportWake(`On-device wake word failed (${msg}). Using speech recognition instead.`);
+      } catch (e2) {
+        this.listeningFailed(e2 instanceof Error ? e2.message : String(e2));
+      }
+    }
+  }
+
+  private async startEngine(w: WakeWordEngine) {
+    w.onFatal = (error) => {
       useAssistant.getState().setMic(false);
-      useAssistant
-        .getState()
-        .setState(
-          "error",
-          error === "audio-capture"
-            ? "No microphone found. Check the input device in Voice & Audio."
-            : "Microphone access is blocked. Allow it in Windows Settings → Privacy → Microphone."
-        );
+      useAssistant.getState().setWake(null);
+      useAssistant.getState().setState("error", micErrorText(error));
     };
-    this.wake.onLevel((l) => {
+    w.onLevel((l) => {
       if (useAssistant.getState().state === "listening") this.setAudio(l);
     });
-    useAssistant.getState().setMic(true);
-    await this.wake.start(() => this.onWake()).catch((e) => {
-      // Surface the setup requirement rather than silently doing nothing.
-      useAssistant.getState().setState("error", String(e instanceof Error ? e.message : e));
-      useAssistant.getState().setMic(false);
-    });
+    await w.start(() => this.onWake());
+  }
+
+  private reportWake(note: string | null) {
+    useAssistant.getState().setWake({ engine: this.wake?.id === "openwakeword" ? "on-device" : "speech", note });
+  }
+
+  private listeningFailed(msg: string) {
+    useAssistant.getState().setState("error", msg);
+    useAssistant.getState().setMic(false);
+    useAssistant.getState().setWake(null);
+  }
+
+  private speechEngine(): WakeWordEngine {
+    return new WebSpeechWakeWord({ deviceId: settings().micDeviceId || undefined });
+  }
+
+  /** The engine chosen in Voice & Audio, or speech if on-device isn't set up. */
+  private async makeWakeEngine(): Promise<{ engine: WakeWordEngine; note: string | null }> {
+    const s = settings();
+    if (s.wakeEngine !== "on-device") return { engine: this.speechEngine(), note: null };
+    const model = await loadWakeModel();
+    if (!model) {
+      return {
+        engine: this.speechEngine(),
+        note: "On-device wake word is selected but no model is loaded. Using speech recognition instead.",
+      };
+    }
+    // Loaded lazily: the ONNX runtime is only fetched when this engine is used.
+    const { OnDeviceWakeWord } = await import("./oww/engine");
+    return {
+      engine: new OnDeviceWakeWord({
+        model: fromBase64(model.base64),
+        deviceId: s.micDeviceId || undefined,
+        threshold: thresholdFor(s.wakeSensitivity),
+      }),
+      note: null,
+    };
   }
 
   disableListening() {
     this.wake?.stop();
     useAssistant.getState().setMic(false);
+    useAssistant.getState().setWake(null);
     this.setState("idle");
   }
 
