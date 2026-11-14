@@ -1,6 +1,6 @@
 //! Overlay window control: show/hide, click-through toggling, repositioning.
-//! The overlay is always-on-top and skips the taskbar; click-through is on by
-//! default so it never steals input until the UI asks for interaction.
+//! The overlay is always-on-top and skips the taskbar. It is always
+//! click-through: it only displays the orb, so clicks go to whatever is behind.
 
 use crate::error::{BevError, BevResult};
 use tauri::{Manager, WebviewWindow};
@@ -23,6 +23,9 @@ pub fn show_overlay(app: tauri::AppHandle) -> BevResult<()> {
     let w = overlay_win(&app)?;
     w.show().map_err(|e| BevError::Os(e.to_string()))?;
     w.set_always_on_top(true)
+        .map_err(|e| BevError::Os(e.to_string()))?;
+    // Re-apply on every show, so the popup never blocks clicks behind it.
+    w.set_ignore_cursor_events(true)
         .map_err(|e| BevError::Os(e.to_string()))?;
     Ok(())
 }
