@@ -171,6 +171,10 @@ export function stepLabel(tool: string, args: Record<string, unknown>): string {
       return `Open ${args.name}`;
     case "launch_game":
       return `Open ${args.name} (${args.mode === "offline" ? "offline" : "online"})`;
+    case "open_path": {
+      const p = String(args.path ?? "");
+      return `Open ${p.split(/[\\/]/).filter(Boolean).pop() ?? p}`;
+    }
     case "close_app":
       return `Close ${args.name}`;
     case "set_volume":

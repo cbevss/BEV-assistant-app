@@ -20,7 +20,13 @@ import { ToolSpec } from "./types";
 export interface RegisteredTool {
   spec: ToolSpec;
   run: (args: Record<string, unknown>) => Promise<string>;
+  /** Approval needed for these particular arguments (on top of spec.sensitive). */
+  sensitiveFor?: (args: Record<string, unknown>) => boolean;
 }
+
+/** Files that run something when opened: programs, scripts, installers, shortcuts. */
+const RUNS_CODE = /\.(exe|com|bat|cmd|ps1|psm1|vbs|vbe|js|jse|wsf|wsh|msi|msp|msc|scr|lnk|url|reg|hta|cpl|jar|pif|appref-ms|application|gadget|scf|inf)$/i;
+export const opensProgram = (path: string) => RUNS_CODE.test(path.trim().replace(/["']+$/, ""));
 
 const str = (v: unknown, name: string): string => {
   if (typeof v !== "string" || v.trim() === "")
@@ -153,6 +159,21 @@ export const tools: Record<string, RegisteredTool> = {
       }
       return native.launchGame(game.id, mode);
     },
+  },
+
+  open_path: {
+    spec: {
+      name: "open_path",
+      description:
+        "Open a file or folder on this PC by its full path, like double-clicking it: folders open in File Explorer, files in their default app. Example: 'C:\\Users\\me\\Downloads' or '%USERPROFILE%\\Documents\\notes.txt'. Opening a program or script asks the user first.",
+      parameters: {
+        type: "object",
+        properties: { path: { type: "string", description: "Full path; %USERPROFILE% style variables are allowed" } },
+        required: ["path"],
+      },
+    },
+    sensitiveFor: (a) => typeof a.path === "string" && opensProgram(a.path),
+    run: async (a) => native.openPath(str(a.path, "path")),
   },
 
   close_app: {
@@ -373,7 +394,7 @@ Object.assign(tools, {
     spec: {
       name: "create_routine",
       description:
-        "Create and save a new routine from spoken instructions. steps is an ordered list of { tool, args } using existing tools (launch_app, launch_game, close_app, set_volume, set_muted, set_quiet_mode, power_action, get_system_stats, open_settings_page, open_website, get_datetime). Example: name='gaming mode', triggers=['gaming mode'], steps=[{tool:'launch_app',args:{name:'Discord'}},{tool:'set_volume',args:{percent:40}}].",
+        "Create and save a new routine from spoken instructions. steps is an ordered list of { tool, args } using existing tools (launch_app, launch_game, open_path, close_app, set_volume, set_muted, set_quiet_mode, power_action, get_system_stats, open_settings_page, open_website, get_datetime). Example: name='gaming mode', triggers=['gaming mode'], steps=[{tool:'launch_app',args:{name:'Discord'}},{tool:'set_volume',args:{percent:40}}].",
       parameters: {
         type: "object",
         properties: {
@@ -423,4 +444,7 @@ Object.assign(tools, {
 } satisfies Record<string, RegisteredTool>);
 
 export const toolSpecs = (): ToolSpec[] => Object.values(tools).map((t) => t.spec);
-export const isSensitive = (name: string): boolean => !!tools[name]?.spec.sensitive;
+export const isSensitive = (name: string, args?: Record<string, unknown>): boolean => {
+  const t = tools[name];
+  return !!t?.spec.sensitive || (!!args && !!t?.sensitiveFor?.(args));
+};

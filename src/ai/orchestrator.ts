@@ -125,7 +125,7 @@ export class Orchestrator {
     }
 
     // Auto-approve: when the setting is on, the user's request is the approval.
-    if (isSensitive(call.name) && !autoApproveOn()) {
+    if (isSensitive(call.name, call.args) && !autoApproveOn()) {
       const desc = describeCall(call);
       const approved = await this.hooks.requestApproval(call, desc);
       if (!approved) return { ok: false, text: "user declined this action" };

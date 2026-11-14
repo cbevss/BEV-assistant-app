@@ -2,10 +2,12 @@ import { useState } from "react";
 import { motion } from "framer-motion";
 import type { Routine, RoutineStep } from "@/routines/types";
 import { TextInput, Select, Button, Toggle } from "./Form";
+import { opensProgram } from "@/ai/tools";
 
 const TOOL_OPTIONS = [
   { value: "launch_app", label: "Open app" },
   { value: "launch_game", label: "Open Steam game" },
+  { value: "open_path", label: "Open file or folder" },
   { value: "close_app", label: "Close app" },
   { value: "set_volume", label: "Set volume" },
   { value: "set_muted", label: "Mute / unmute" },
@@ -16,6 +18,13 @@ const TOOL_OPTIONS = [
   { value: "get_datetime", label: "Get time & date" },
   { value: "power_action", label: "Power (sleep/restart/shutdown)" },
 ];
+
+/** Native file/folder picker. */
+async function browse(folder: boolean): Promise<string | null> {
+  const { open } = await import("@tauri-apps/plugin-dialog");
+  const picked = await open({ directory: folder, multiple: false, title: folder ? "Choose a folder" : "Choose a file" });
+  return typeof picked === "string" ? picked : null;
+}
 
 const newStep = (): RoutineStep => ({ id: crypto.randomUUID(), tool: "launch_app", args: { name: "" } });
 
@@ -174,6 +183,8 @@ function defaultArgs(tool: string): Record<string, unknown> {
       return { name: "" };
     case "launch_game":
       return { name: "", mode: "online" };
+    case "open_path":
+      return { path: "" };
     case "set_volume":
       return { percent: 40 };
     case "set_muted":
@@ -234,6 +245,28 @@ function ArgEditor({ step, onArgs, onDelay }: { step: RoutineStep; onArgs: (p: R
               ]}
             />
           </div>
+          {delay}
+        </>
+      );
+    case "open_path":
+      return (
+        <>
+          <div className="flex gap-2">
+            <TextInput
+              placeholder="e.g. C:\Users\you\Downloads or a file"
+              value={String(a.path ?? "")}
+              onChange={(e) => onArgs({ path: e.target.value })}
+            />
+            <Button variant="ghost" onClick={() => browse(false).then((p) => p && onArgs({ path: p }))}>
+              File…
+            </Button>
+            <Button variant="ghost" onClick={() => browse(true).then((p) => p && onArgs({ path: p }))}>
+              Folder…
+            </Button>
+          </div>
+          {opensProgram(String(a.path ?? "")) && (
+            <p className="mt-1 text-xs text-amber-400">This runs a program, so BEV will ask before opening it (unless auto-approve is on).</p>
+          )}
           {delay}
         </>
       );
