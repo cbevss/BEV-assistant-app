@@ -9,7 +9,7 @@ vi.mock("@/lib/native", () => ({
       { id: "252950", name: "Rocket League", source: "steam" },
       { id: "730", name: "Counter-Strike 2", source: "steam" },
     ]),
-    launchGame: vi.fn().mockImplementation(async (id: string) => `launched app ${id}`),
+    launchGame: vi.fn().mockImplementation(async (id: string, mode: string) => `launched app ${id} ${mode}`),
     memoryUpsert: vi.fn().mockResolvedValue(undefined),
   },
 }));
@@ -37,9 +37,18 @@ describe("tool registry", () => {
     await expect(tools.launch_app.run({ name: "   " })).rejects.toThrow(/non-empty/);
   });
 
-  it("launches a Steam game from a loose spoken name", async () => {
-    expect(await tools.launch_game.run({ name: "rocket league with steam" })).toBe("launched app 252950");
-    expect(await tools.launch_game.run({ name: "cs2" })).toBe("launched app 730");
+  it("launches a Steam game from a loose spoken name, in the mode asked for", async () => {
+    expect(await tools.launch_game.run({ name: "rocket league with steam", mode: "online" })).toBe("launched app 252950 online");
+    expect(await tools.launch_game.run({ name: "cs2", mode: "offline" })).toBe("launched app 730 offline");
+  });
+
+  it("asks online or offline before launching when the user didn't say", async () => {
+    const { native } = await import("@/lib/native");
+    (native.launchGame as ReturnType<typeof vi.fn>).mockClear();
+    const out = await tools.launch_game.run({ name: "rocket league" });
+    expect(out).toMatch(/did NOT launch.*online mode.*offline mode/s);
+    expect(out).toContain('name "Rocket League"');
+    expect(native.launchGame).not.toHaveBeenCalled();
   });
 
   it("says which games are installed when the name doesn't match", async () => {

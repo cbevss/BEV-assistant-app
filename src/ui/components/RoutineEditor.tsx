@@ -170,9 +170,10 @@ export function RoutineEditor({
 function defaultArgs(tool: string): Record<string, unknown> {
   switch (tool) {
     case "launch_app":
-    case "launch_game":
     case "close_app":
       return { name: "" };
+    case "launch_game":
+      return { name: "", mode: "online" };
     case "set_volume":
       return { percent: 40 };
     case "set_muted":
@@ -221,7 +222,18 @@ function ArgEditor({ step, onArgs, onDelay }: { step: RoutineStep; onArgs: (p: R
     case "launch_game":
       return (
         <>
-          <TextInput placeholder="Game name, e.g. Rocket League" value={String(a.name ?? "")} onChange={(e) => onArgs({ name: e.target.value })} />
+          <div className="flex gap-2">
+            <TextInput placeholder="Game name, e.g. Rocket League" value={String(a.name ?? "")} onChange={(e) => onArgs({ ...a, name: e.target.value })} />
+            <Select
+              ariaLabel="Online or offline"
+              value={a.mode === "offline" ? "offline" : "online"}
+              onChange={(mode) => onArgs({ ...a, mode })}
+              options={[
+                { value: "online", label: "Online (Steam)" },
+                { value: "offline", label: "Offline" },
+              ]}
+            />
+          </div>
           {delay}
         </>
       );
