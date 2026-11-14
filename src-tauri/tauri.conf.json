@@ -23,7 +23,7 @@
         "decorations": false,
         "transparent": false,
         "center": true,
-        "visible": true,
+        "visible": false,
         "url": "index.html"
       },
       {

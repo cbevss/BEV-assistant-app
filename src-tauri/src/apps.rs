@@ -33,8 +33,11 @@ pub fn launch_app(name: String) -> BevResult<String> {
     if name.trim().is_empty() {
         return Err(BevError::Invalid("app name is empty".into()));
     }
-    // Reject anything that looks like an attempt to smuggle a command line.
-    if name.contains('&') || name.contains('|') || name.contains('>') || name.contains('\n') {
+    // The name ends up on a `cmd /C start` line, so reject every character cmd
+    // treats specially (chaining, redirection, escapes, variable expansion,
+    // quoting) rather than trying to escape them.
+    const CMD_SPECIAL: &[char] = &['&', '|', '<', '>', '^', '%', '"', '!', '(', ')', '\n', '\r'];
+    if name.contains(CMD_SPECIAL) {
         return Err(BevError::Invalid("illegal characters in app name".into()));
     }
     let target = resolve_target(&name);
