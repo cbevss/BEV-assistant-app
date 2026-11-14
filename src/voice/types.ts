@@ -8,6 +8,11 @@ export interface WakeWordEngine {
   stop(): void;
   /** Live input level 0..1 for the overlay visualiser. */
   onLevel(cb: (level: number) => void): void;
+  /** Stop reacting while a conversation uses the mic, and pick up afterwards. */
+  pauseListening(): void;
+  resumeListening(): void;
+  /** Called when listening stops for good (mic blocked, missing, model failed). */
+  onFatal?: (error: string) => void;
 }
 
 export interface SpeechRecognizer {

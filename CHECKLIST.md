@@ -55,7 +55,7 @@ Honest state of every feature. **Live** = built + logic verifiable. **Partial** 
 | Web Speech TTS (calm/masculine default) | Unverified |
 | Conversation loop + follow-up window | Unverified (logic complete) |
 | "BEV, stop" interrupt + barge-in | Unverified (logic complete) |
-| **Picovoice "BEV" on-device wake word** | Partial — engine + mic wired; Porcupine worker + custom `.ppn` is the remaining seam (`docs/VOICE.md`). Needs a Picovoice access key. **FILL:** key from console.picovoice.ai |
+| **On-device "hey BEV" wake word (openWakeWord)** | Engine verified in Chrome against reference audio and the Python reference scores; needs a model trained with `training/train_hey_bev.ipynb` (`docs/WAKE_WORD.md`). Unverified on a real PC/WebView2. |
 | Whisper STT / ElevenLabs TTS upgrade | Future |
 
 ## Phase 4 — Intelligence
@@ -103,7 +103,7 @@ Honest state of every feature. **Live** = built + logic verifiable. **Partial** 
 ## Acceptance tests (section 20) — how to verify
 All require a real build on your PC; none could be executed in this environment.
 
-1. **Wake word** — manual, after adding Picovoice key + `.ppn`. Fallback: trigger via shortcut.
+1. **Wake word** — say "BEV" (speech recognition), or load a trained model and say "hey BEV" (on-device). Fallback: trigger via shortcut.
 2. **Conversation** — set API key, open Chat, ask a question → spoken reply via TTS.
 3. **PC control** — "set my volume to 30%" → check Windows volume mixer.
 4. **App launch** — "open Notepad" → Notepad opens.
@@ -118,7 +118,7 @@ All require a real build on your PC; none could be executed in this environment.
 
 ## Immediate next files (ordered)
 1. `src-tauri/icons/*` + `logo.png` (required before `tauri:build`).
-2. Picovoice worker wiring in `src/voice/wakeword.ts`.
+2. ~~Wake-word engine wiring~~ done: openWakeWord on-device engine (`src/voice/oww`).
 3. Settings/Integrations UI: provider + key entry (calls `native.storeSecret`).
 4. Voice & Audio page: device enumeration (`navigator.mediaDevices`), voice list, sensitivity.
 5. Memory page UI over `native.memoryList/Delete`.
