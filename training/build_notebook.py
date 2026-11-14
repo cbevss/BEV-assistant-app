@@ -243,7 +243,8 @@ mkdir -p /content/bev_scripts
 # An isolated environment, so Colab's preinstalled packages can't clash and
 # no runtime restart is needed.
 pip -q install uv
-uv venv -q --python 3.12 /content/bev-venv
+# --allow-existing: re-running this cell reuses what's already installed.
+uv venv -q --allow-existing --python 3.12 /content/bev-venv
 export VIRTUAL_ENV=/content/bev-venv
 
 cat > requirements.txt <<'EOF'
