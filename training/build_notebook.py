@@ -44,26 +44,34 @@ setuptools<81
 """
 
 DOWNLOAD_DATA = r'''"""Downloads the training data openWakeWord needs. Safe to re-run: finished
-parts are skipped. Everything goes under /content/data."""
+parts are skipped. Everything goes under /content/data. Every part is tried
+before reporting, so one run shows every problem at once."""
 import os
+import subprocess
 import sys
 import tarfile
+from math import gcd
 from pathlib import Path
 
 import datasets
 import numpy as np
 import scipy.io.wavfile
-from huggingface_hub import hf_hub_download
+from huggingface_hub import hf_hub_download, list_repo_files
+from scipy.signal import resample_poly
 from tqdm import tqdm
 
-ROOT = Path("/content/data")
-ROOT.mkdir(exist_ok=True)
+ROOT = Path(os.environ.get("BEV_DATA", "/content/data"))
+ROOT.mkdir(parents=True, exist_ok=True)
+problems = []  # required parts that failed
 
 
-def save16k(path, array):
+def save16k(path, array, rate=16000):
     array = np.asarray(array, dtype=np.float32)
     if array.ndim > 1:  # reverb and mixing code expects mono
-        array = array.mean(axis=0)
+        array = array.mean(axis=-1) if array.shape[-1] <= 8 else array.mean(axis=0)
+    if rate != 16000:
+        g = gcd(16000, rate)
+        array = resample_poly(array, 16000 // g, rate // g)
     scipy.io.wavfile.write(path, 16000, (np.clip(array, -1, 1) * 32767).astype(np.int16))
 
 
@@ -73,58 +81,102 @@ def done(path, minimum=1):
 
 # 1. Room impulse responses (makes the synthetic voices sound like real rooms). Required.
 rirs = ROOT / "mit_rirs"
-if not done(rirs, 200):
-    rirs.mkdir(exist_ok=True)
-    ds = datasets.load_dataset("davidscripka/MIT_environmental_impulse_responses", split="train", streaming=True)
-    ds = ds.cast_column("audio", datasets.Audio(sampling_rate=16000))
-    for row in tqdm(ds, desc="Room impulse responses"):
-        save16k(rirs / row["audio"]["path"].split("/")[-1], row["audio"]["array"])
-print("Room impulse responses:", len(os.listdir(rirs)))
+try:
+    if not done(rirs, 200):
+        rirs.mkdir(exist_ok=True)
+        ds = datasets.load_dataset("davidscripka/MIT_environmental_impulse_responses", split="train", streaming=True)
+        ds = ds.cast_column("audio", datasets.Audio(sampling_rate=16000))
+        for row in tqdm(ds, desc="Room impulse responses"):
+            save16k(rirs / Path(row["audio"]["path"]).name, row["audio"]["array"])
+    print("Room impulse responses:", len(os.listdir(rirs)))
+except Exception as e:
+    problems.append(f"Room impulse responses: {e}")
 
-# 2. Background noise and music to mix under the voices. At least one source must work.
+# 2. Background sounds to mix under the voices.
 background_dirs = []
 
+# 2a. ESC-50: 2,000 real-world sound clips (rain, traffic, dogs, typing…), from GitHub.
+esc = ROOT / "esc50_16k"
+try:
+    if not done(esc, 1900):
+        src = ROOT / "esc50_src"
+        if not (src / "audio").exists():
+            print("Downloading ESC-50 sound clips from GitHub…")
+            subprocess.run(["git", "clone", "-q", "--depth", "1", "https://github.com/karolpiczak/ESC-50", str(src)], check=True)
+        esc.mkdir(exist_ok=True)
+        for f in tqdm(sorted((src / "audio").glob("*.wav")), desc="ESC-50 sounds"):
+            rate, x = scipy.io.wavfile.read(f)
+            save16k(esc / f.name, x.astype(np.float32) / 32768, rate)
+    background_dirs.append(str(esc))
+    print("ESC-50 sounds:", len(os.listdir(esc)))
+except Exception as e:
+    print("ESC-50 download failed, continuing without it:", e)
+
+# 2b. AudioSet (optional extra variety). Its file layout has changed before, so
+#     look up what's there now instead of assuming a filename.
 audioset = ROOT / "audioset_16k"
 try:
     if not done(audioset, 100):
+        files = sorted(
+            f for f in list_repo_files("agkphysics/AudioSet", repo_type="dataset")
+            if "bal_train" in f and f.endswith((".tar", ".parquet"))
+        )
+        if not files:
+            raise RuntimeError("no balanced-train files in the repository any more")
+        name = files[0]
+        print("AudioSet: downloading", name)
+        path = hf_hub_download("agkphysics/AudioSet", name, repo_type="dataset", local_dir=ROOT / "audioset_raw")
         audioset.mkdir(exist_ok=True)
-        tar_path = hf_hub_download("agkphysics/AudioSet", "data/bal_train09.tar", repo_type="dataset", local_dir=ROOT / "audioset_raw")
-        with tarfile.open(tar_path) as t:
-            t.extractall(ROOT / "audioset_raw")
-        flacs = [str(p) for p in (ROOT / "audioset_raw").glob("**/*.flac")]
-        ds = datasets.Dataset.from_dict({"audio": flacs}).cast_column("audio", datasets.Audio(sampling_rate=16000))
-        for row in tqdm(ds, desc="AudioSet"):
-            save16k(audioset / Path(row["audio"]["path"]).with_suffix(".wav").name, row["audio"]["array"])
+        if name.endswith(".tar"):
+            with tarfile.open(path) as t:
+                t.extractall(ROOT / "audioset_raw")
+            clips = [str(p) for p in (ROOT / "audioset_raw").glob("**/*.flac")]
+            ds = datasets.Dataset.from_dict({"audio": clips})
+        else:
+            ds = datasets.Dataset.from_parquet(path)
+            col = next(c for c, f in ds.features.items() if isinstance(f, datasets.Audio) or c == "audio")
+            if col != "audio":
+                ds = ds.rename_column(col, "audio")
+        ds = ds.cast_column("audio", datasets.Audio(sampling_rate=16000))
+        for i, row in enumerate(tqdm(ds, desc="AudioSet")):
+            save16k(audioset / f"audioset_{i:05d}.wav", row["audio"]["array"])
     background_dirs.append(str(audioset))
+    print("AudioSet clips:", len(os.listdir(audioset)))
 except Exception as e:
-    print("AudioSet download failed, continuing without it:", e)
+    print("AudioSet skipped (optional):", e)
 
-fma = ROOT / "fma"
-try:
-    if not done(fma, 100):
-        fma.mkdir(exist_ok=True)
-        ds = datasets.load_dataset("rudraml/fma", name="small", split="train", streaming=True, trust_remote_code=True)
-        ds = iter(ds.cast_column("audio", datasets.Audio(sampling_rate=16000)))
-        for _ in tqdm(range(120), desc="Free Music Archive (1 hour)"):  # 120 x 30 s clips
-            row = next(ds)
-            save16k(fma / Path(row["audio"]["path"]).with_suffix(".wav").name, row["audio"]["array"])
-    background_dirs.append(str(fma))
-except Exception as e:
-    print("FMA download failed, continuing without it:", e)
+# 2c. Steady noise (white, pink, brown), generated here so there's always some.
+noise = ROOT / "noise_16k"
+if not done(noise, 30):
+    noise.mkdir(exist_ok=True)
+    rng = np.random.default_rng(0)
+    for i in range(30):
+        white = rng.normal(size=16000 * 30)
+        spectrum = np.fft.rfft(white)
+        f = np.arange(len(spectrum)) + 1
+        shaped = np.fft.irfft(spectrum / f ** (0.5 * (i % 3)), n=len(white))  # 0 white, 1 pink, 2 brown
+        save16k(noise / f"noise_{i:02d}.wav", shaped / np.abs(shaped).max() * 0.5)
+background_dirs.append(str(noise))
 
-if not background_dirs:
-    sys.exit("No background audio could be downloaded. Check the errors above, then re-run this cell.")
+if len(background_dirs) == 1:
+    print("Only generated noise is available as background. Training still works, "
+          "but the model may be less robust to real-world sounds.")
 (ROOT / "background_dirs.txt").write_text("\n".join(background_dirs))
 print("Background audio:", background_dirs)
 
 # 3. Pre-computed features: ~2,000 hours of ordinary audio that must NOT trigger
 #    the wake word, plus ~11 hours used to measure false triggers. Required.
 for name in ["openwakeword_features_ACAV100M_2000_hrs_16bit.npy", "validation_set_features.npy"]:
-    if not (ROOT / name).exists():
-        print(f"Downloading {name} (large, a few minutes)…")
-        hf_hub_download("davidscripka/openwakeword_features", name, repo_type="dataset", local_dir=ROOT)
-    print(name, f"{(ROOT / name).stat().st_size / 1e9:.1f} GB")
+    try:
+        if not (ROOT / name).exists():
+            print(f"Downloading {name} (large, a few minutes)…")
+            hf_hub_download("davidscripka/openwakeword_features", name, repo_type="dataset", local_dir=ROOT)
+        print(name, f"{(ROOT / name).stat().st_size / 1e9:.1f} GB")
+    except Exception as e:
+        problems.append(f"{name}: {e}")
 
+if problems:
+    sys.exit("\nThese required downloads failed:\n- " + "\n- ".join(problems))
 print("\nAll training data ready.")
 '''
 
@@ -300,15 +352,25 @@ fi
     ),
     code(
         """
-#@title 4. Download training data (about 10 minutes) { display-mode: "form" }
+#@title 4. Download training data (about 10–15 minutes) { display-mode: "form" }
 !MPLBACKEND=Agg /content/bev-venv/bin/python -W ignore /content/bev_scripts/download_data.py
+if globals().get("_exit_code", 0):
+    raise RuntimeError("This step failed. The reason is in the messages above.")
 """,
         title=True,
     ),
     code(
         """
 #@title 5. Write the training config { display-mode: "form" }
-import json
+import json, os
+needed = ["/content/data/background_dirs.txt", "/content/data/mit_rirs",
+          "/content/data/openwakeword_features_ACAV100M_2000_hrs_16bit.npy",
+          "/content/data/validation_set_features.npy"]
+missing = [p for p in needed if not os.path.exists(p)]
+if missing:
+    raise RuntimeError("Step 4 didn't finish downloading: " + ", ".join(missing) +
+                       ". Re-run step 4 and check its messages.")
+background = open("/content/data/background_dirs.txt").read().split()
 config = {
     "model_name": MODEL_NAME,
     "target_phrase": [WAKE_PHRASE.strip().lower()],
@@ -320,8 +382,8 @@ config = {
     "piper_sample_generator_path": "/content/piper-sample-generator",
     "output_dir": "/content/output",
     "rir_paths": ["/content/data/mit_rirs"],
-    "background_paths": open("/content/data/background_dirs.txt").read().split(),
-    "background_paths_duplication_rate": [1] * len(open("/content/data/background_dirs.txt").read().split()),
+    "background_paths": background,
+    "background_paths_duplication_rate": [1] * len(background),
     "false_positive_validation_data_path": "/content/data/validation_set_features.npy",
     "augmentation_rounds": 1,
     "feature_data_files": {"ACAV100M_sample": "/content/data/openwakeword_features_ACAV100M_2000_hrs_16bit.npy"},
@@ -345,6 +407,8 @@ print(json.dumps({k: config[k] for k in ("target_phrase", "custom_negative_phras
 #@title 6. Generate voices saying the phrase (and sound-alikes) { display-mode: "form" }
 # Re-run this cell if it stops part-way: it continues where it left off.
 !cd /content && MPLBACKEND=Agg /content/bev-venv/bin/python -W ignore openwakeword/openwakeword/train.py --training_config /content/bev_wakeword.yaml --generate_clips
+if globals().get("_exit_code", 0):
+    raise RuntimeError("This step failed. The reason is in the messages above.")
 """,
         title=True,
     ),
@@ -352,6 +416,8 @@ print(json.dumps({k: config[k] for k in ("target_phrase", "custom_negative_phras
         """
 #@title 7. Add room echo and background noise { display-mode: "form" }
 !cd /content && MPLBACKEND=Agg /content/bev-venv/bin/python -W ignore openwakeword/openwakeword/train.py --training_config /content/bev_wakeword.yaml --augment_clips
+if globals().get("_exit_code", 0):
+    raise RuntimeError("This step failed. The reason is in the messages above.")
 """,
         title=True,
     ),
@@ -359,6 +425,8 @@ print(json.dumps({k: config[k] for k in ("target_phrase", "custom_negative_phras
         """
 #@title 8. Train the model (about 20 minutes) { display-mode: "form" }
 !cd /content && MPLBACKEND=Agg /content/bev-venv/bin/python -W ignore openwakeword/openwakeword/train.py --training_config /content/bev_wakeword.yaml --train_model
+if globals().get("_exit_code", 0):
+    raise RuntimeError("This step failed. The reason is in the messages above.")
 import os
 path = f"/content/output/{MODEL_NAME}.onnx"
 assert os.path.exists(path), "Training didn't produce a model. Check the output above for the error."
@@ -373,6 +441,8 @@ print("Model saved:", path)
         """
 #@title 9. Check how well it works { display-mode: "form" }
 !MPLBACKEND=Agg /content/bev-venv/bin/python -W ignore /content/bev_scripts/check_model.py /content/bev_wakeword.yaml
+if globals().get("_exit_code", 0):
+    raise RuntimeError("This step failed. The reason is in the messages above.")
 """,
         title=True,
     ),
