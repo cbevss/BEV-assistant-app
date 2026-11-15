@@ -21,7 +21,21 @@ Without this secret the release build fails to sign and auto-update won't work.
 Keep `src-tauri/bev-update.key` safe — losing it means future updates can't be
 signed and installed apps won't accept them.
 
-## Publish v1.0.0 (two options)
+## Releasing an update (automatic)
+
+Releases happen on their own: **bump the version and merge to `main`**.
+1. In the PR, set the same new version in `package.json`, `src-tauri/tauri.conf.json`
+   and `src-tauri/Cargo.toml` (and `Cargo.lock` / `package-lock.json`).
+2. Merge it. CI sees a version on `main` with no `v<version>` tag, builds and
+   signs it, creates the tag on that merge commit and publishes the release.
+   Running apps then update to it.
+
+There's no tag to push. If you do push one by hand, it must match the version in
+the code or the build fails, so a tag can't publish old code under a new number
+(which is how v1.1.4 and v1.1.5 ended up holding the 1.1.3 code). Merges that
+don't change the version don't release anything.
+
+## First publish of v1.0.0 (historical)
 
 ### Option A — let GitHub Actions build + release (recommended)
 Pushes the code and tags it; CI builds the installer on a clean Windows runner
