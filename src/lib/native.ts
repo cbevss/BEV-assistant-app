@@ -75,6 +75,7 @@ export const native = {
   // Overlay
   showOverlay: () => invoke<void>("show_overlay"),
   hideOverlay: () => invoke<void>("hide_overlay"),
+  fullscreenState: () => invoke<"none" | "borderless" | "exclusive">("fullscreen_state"),
   setOverlayClickthrough: (ignore: boolean) =>
     invoke<void>("set_overlay_clickthrough", { ignore }),
   setOverlayPosition: (x: number, y: number) =>

@@ -9,20 +9,36 @@ type ModelSource = string | Uint8Array;
  */
 export async function createOrtRunner(
   ort: typeof Ort,
-  models: { melspectrogram: ModelSource; embedding: ModelSource; wakeword: ModelSource }
-): Promise<OwwRunner & { release(): Promise<void> }> {
+  models: {
+    melspectrogram: ModelSource;
+    embedding: ModelSource;
+    /** One model per wake phrase ("hey BEV", "yo BEV"…); any of them can wake BEV. */
+    wakeword: ModelSource | ModelSource[];
+  }
+): Promise<OwwRunner & { release(): Promise<void>; wakewordCount: number }> {
   const opts: Ort.InferenceSession.SessionOptions = { executionProviders: ["wasm"] };
   const open = (src: ModelSource) =>
     typeof src === "string"
       ? ort.InferenceSession.create(src, opts)
       : ort.InferenceSession.create(src, opts);
-  const [mel, emb, wake] = await Promise.all([
+  const wakeSources = Array.isArray(models.wakeword) ? models.wakeword : [models.wakeword];
+  if (wakeSources.length === 0) throw new Error("No wake-word model to load.");
+  const [mel, emb, ...wakes] = await Promise.all([
     open(models.melspectrogram),
     open(models.embedding),
-    open(models.wakeword),
+    ...wakeSources.map(open),
   ]);
 
-  const featureFrames = wakewordFrames(wake);
+  let frames: number[];
+  try {
+    frames = wakes.map(wakewordFrames);
+  } catch (e) {
+    await Promise.all([mel, emb, ...wakes].map((x) => x.release().catch(() => {})));
+    throw e;
+  }
+  // The pipeline keeps enough feature rows for the longest model; shorter
+  // models read just their most recent rows.
+  const featureFrames = Math.max(...frames);
 
   const run = async (s: Ort.InferenceSession, data: Float32Array, dims: number[]) => {
     const out = await s.run({ [s.inputNames[0]]: new ort.Tensor("float32", data, dims) });
@@ -33,9 +49,20 @@ export async function createOrtRunner(
     featureFrames,
     melspectrogram: (audio) => run(mel, audio, [1, audio.length]),
     embedding: (m) => run(emb, m, [1, 76, 32, 1]),
-    wakeword: (f) => run(wake, f, [1, featureFrames, 96]),
+    wakewordCount: wakes.length,
+    // Highest score across the phrase models: whichever phrase was said wins.
+    wakeword: async (f) => {
+      let best = 0;
+      for (let i = 0; i < wakes.length; i++) {
+        const n = frames[i];
+        const input = n === featureFrames ? f : f.subarray((featureFrames - n) * 96);
+        const out = await run(wakes[i], input, [1, n, 96]);
+        if (out[0] > best) best = out[0];
+      }
+      return new Float32Array([best]);
+    },
     release: async () => {
-      await Promise.all([mel.release(), emb.release(), wake.release()]);
+      await Promise.all([mel, emb, ...wakes].map((x) => x.release()));
     },
   };
 }

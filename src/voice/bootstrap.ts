@@ -7,7 +7,8 @@ import { useSettings } from "@/state/settings";
 
 let controller: VoiceController | null = null;
 let starting: Promise<VoiceController> | null = null;
-let registeredShortcut: string | null = null;
+type ShortcutKind = "pushToTalk" | "mute";
+const registered: Record<ShortcutKind, string | null> = { pushToTalk: null, mute: null };
 
 /**
  * Wires the voice vertical slice: creates the VoiceController, binds the
@@ -23,7 +24,9 @@ async function start(): Promise<VoiceController> {
   const c = new VoiceController();
   controller = c;
 
-  await applyShortcut(useSettings.getState().settings.pushToTalkShortcut);
+  const st = useSettings.getState().settings;
+  await bindShortcut("pushToTalk", st.pushToTalkShortcut);
+  await bindShortcut("mute", st.muteShortcut);
 
   listen("tray://toggle-listen", () => {
     if (useAssistant.getState().micEnabled) c.disableListening();
@@ -49,27 +52,43 @@ async function start(): Promise<VoiceController> {
   return c;
 }
 
-/** (Re)bind the push-to-talk shortcut. Returns an error string on failure. */
-export async function applyShortcut(accelerator: string): Promise<string | null> {
-  if (registeredShortcut) {
-    await unregister(registeredShortcut).catch(() => {});
-    registeredShortcut = null;
+/**
+ * (Re)bind a global hotkey: push-to-talk or mic mute. Takes effect at once.
+ * Returns an error string if Windows wouldn't register it (e.g. in use).
+ */
+export async function bindShortcut(kind: ShortcutKind, accelerator: string): Promise<string | null> {
+  const old = registered[kind];
+  if (old) {
+    await unregister(old).catch(() => {});
+    registered[kind] = null;
   }
   if (!accelerator.trim()) return null;
+  const other = registered[kind === "mute" ? "pushToTalk" : "mute"];
+  if (other && other.toLowerCase() === accelerator.toLowerCase()) {
+    return "That's already the other BEV shortcut.";
+  }
   try {
     await register(accelerator, (e) => {
-      if (e.state === "Pressed") controller?.onWake();
+      if (e.state !== "Pressed") return;
+      if (kind === "mute") controller?.toggleMute();
+      else controller?.onWake();
     });
-    registeredShortcut = accelerator;
+    registered[kind] = accelerator;
     return null;
   } catch (e) {
-    return `Shortcut "${accelerator}" could not be registered (it may be in use): ${String(e)}`;
+    return `Couldn't use ${accelerator}: another app may already have it. (${String(e)})`;
   }
 }
 
+/** Kept for older callers: rebinds push-to-talk. */
+export const applyShortcut = (accelerator: string) => bindShortcut("pushToTalk", accelerator);
+
 export async function teardownVoice() {
-  if (registeredShortcut) await unregister(registeredShortcut).catch(() => {});
-  registeredShortcut = null;
+  for (const k of ["pushToTalk", "mute"] as const) {
+    const a = registered[k];
+    if (a) await unregister(a).catch(() => {});
+    registered[k] = null;
+  }
   controller?.disableListening();
   controller = null;
   starting = null;

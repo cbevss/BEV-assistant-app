@@ -253,21 +253,33 @@ It works by generating thousands of synthetic voices saying "hey BEV" (and sound
     code(
         """
 #@title 1. Settings (the defaults are fine) { display-mode: "form" }
+#@markdown Wake phrase. For one model that answers to several, separate them with commas, e.g. `hey bev, yo bev`. (Or train one model per phrase and add each in BEV.) Two or more syllables work best: "bev" on its own triggers by accident more often.
 WAKE_PHRASE = "hey bev"  #@param {type:"string"}
 #@markdown More samples and steps → a better model, but a longer run.
 N_SAMPLES = 8000  #@param {type:"integer"}
 N_SAMPLES_VAL = 1500  #@param {type:"integer"}
 STEPS = 30000  #@param {type:"integer"}
-#@markdown Phrases that sound close and must NOT wake BEV (comma separated):
-SOUND_ALIKES = "hey ben, hey beth, hey bed, hey kev, hey dev, hey deb, hey babe, hey bear, heavy, hey there"  #@param {type:"string"}
+#@markdown Extra phrases that must NOT wake BEV (comma separated). Sound-alikes of each wake phrase ("hey ben", "yo kev"…) are added automatically.
+SOUND_ALIKES = "heavy, hey there, every, bed, ben"  #@param {type:"string"}
 
-MODEL_NAME = WAKE_PHRASE.strip().lower().replace(" ", "_")
+import re as _re
+PHRASES = [p.strip().lower() for p in WAKE_PHRASE.split(",") if p.strip()]
+assert PHRASES, "Type a wake phrase in WAKE_PHRASE"
+_SWAPS = ["ben", "beth", "bed", "kev", "dev", "deb", "babe", "bear"]
+_alikes = [p.strip().lower() for p in SOUND_ALIKES.split(",") if p.strip()]
+for _p in PHRASES:
+    if _re.search(r"\bbev\b", _p):
+        _alikes += [_re.sub(r"\bbev\b", w, _p) for w in _SWAPS]
+NEGATIVES = [a for a in dict.fromkeys(_alikes) if a not in PHRASES]
+# BEV shows the file name as the phrase list: hey_bev_or_yo_bev → "hey BEV or yo BEV".
+MODEL_NAME = "_or_".join(_re.sub(r"[^a-z0-9]+", "_", p).strip("_") for p in PHRASES)
 
 # Colab sets MPLBACKEND to its own inline backend, which the training
 # environment's matplotlib rejects (it crashes on import). Use a plain one.
 import os
 os.environ["MPLBACKEND"] = "Agg"
-print("Will train:", repr(WAKE_PHRASE), "→", MODEL_NAME + ".onnx")
+print("Will train:", PHRASES, "→", MODEL_NAME + ".onnx")
+print("Must not trigger on:", ", ".join(NEGATIVES))
 """,
         title=True,
     ),
@@ -373,8 +385,8 @@ if missing:
 background = open("/content/data/background_dirs.txt").read().split()
 config = {
     "model_name": MODEL_NAME,
-    "target_phrase": [WAKE_PHRASE.strip().lower()],
-    "custom_negative_phrases": [p.strip().lower() for p in SOUND_ALIKES.split(",") if p.strip()],
+    "target_phrase": PHRASES,
+    "custom_negative_phrases": NEGATIVES,
     "n_samples": N_SAMPLES,
     "n_samples_val": N_SAMPLES_VAL,
     "tts_batch_size": 50,

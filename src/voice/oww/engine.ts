@@ -14,14 +14,14 @@ ort.env.wasm.wasmPaths = { wasm: wasmUrl };
 ort.env.wasm.numThreads = 1;
 ort.env.wasm.proxy = false;
 
-/** Load and check a wake-word model; throws a readable error if it's unusable. */
-export async function openRunner(model: Uint8Array) {
-  return createOrtRunner(ort, { melspectrogram: melUrl, embedding: embUrl, wakeword: model });
+/** Load and check wake-word model(s); throws a readable error if one is unusable. */
+export async function openRunner(models: Uint8Array | Uint8Array[]) {
+  return createOrtRunner(ort, { melspectrogram: melUrl, embedding: embUrl, wakeword: models });
 }
 
 /**
  * On-device wake word (openWakeWord). Audio never leaves the PC: the mic is
- * read by an AudioWorklet, features and the user's trained "hey BEV" model
+ * read by an AudioWorklet, features and the user's trained wake phrase models ("hey BEV", "yo BEV"…)
  * run in WebAssembly, and only a detection is reported.
  */
 export class OnDeviceWakeWord implements WakeWordEngine {
@@ -41,13 +41,13 @@ export class OnDeviceWakeWord implements WakeWordEngine {
   onFatal?: (error: string) => void;
 
   constructor(
-    private cfg: { model: Uint8Array; deviceId?: string; threshold: number }
+    private cfg: { models: Uint8Array[]; deviceId?: string; threshold: number }
   ) {
     this.detector = new WakeDetector(cfg.threshold);
   }
 
   async start(onWake: () => void): Promise<void> {
-    this.runner = await openRunner(this.cfg.model);
+    this.runner = await openRunner(this.cfg.models);
     this.pipeline = new OwwPipeline(this.runner);
 
     this.stream = await navigator.mediaDevices.getUserMedia({

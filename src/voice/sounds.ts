@@ -21,8 +21,12 @@ function tone(freq: number, startAt: number, duration: number, gain = 0.08) {
   osc.stop(startAt + duration + 0.02);
 }
 
-export function playChime(kind: "wake" | "done") {
-  if (!useSettings.getState().settings.interfaceSounds) return;
+/**
+ * `always` plays even with interface sounds off: used for mute / unmute, where
+ * the sound is the only sign the hotkey worked.
+ */
+export function playChime(kind: "wake" | "done" | "mute" | "unmute", always = false) {
+  if (!always && !useSettings.getState().settings.interfaceSounds) return;
   try {
     ctx ??= new AudioContext();
     if (ctx.state === "suspended") ctx.resume().catch(() => {});
@@ -30,6 +34,13 @@ export function playChime(kind: "wake" | "done") {
     if (kind === "wake") {
       tone(660, t, 0.12);
       tone(880, t + 0.09, 0.16);
+    } else if (kind === "mute") {
+      tone(520, t, 0.1);
+      tone(330, t + 0.09, 0.18);
+    } else if (kind === "unmute") {
+      tone(440, t, 0.1);
+      tone(660, t + 0.09, 0.1);
+      tone(880, t + 0.17, 0.14);
     } else {
       tone(880, t, 0.1);
       tone(660, t + 0.08, 0.14);

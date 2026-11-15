@@ -24,11 +24,14 @@ function readWav(p: string): Int16Array {
 }
 
 /** Same padding and chunking as the reference predict_clip(padding=1). */
-async function scoreClip(clip: string): Promise<(number | null)[]> {
+async function scoreClip(
+  clip: string,
+  wakeword: Uint8Array | Uint8Array[] = bytes("./__fixtures__/alexa_v0.1.onnx")
+): Promise<(number | null)[]> {
   const runner = await createOrtRunner(ort, {
     melspectrogram: bytes("./models/melspectrogram.onnx"),
     embedding: bytes("./models/embedding_model.onnx"),
-    wakeword: bytes("./__fixtures__/alexa_v0.1.onnx"),
+    wakeword,
   });
   const pipe = new OwwPipeline(runner);
   const audio = readWav(clip);
@@ -68,6 +71,28 @@ describe("openWakeWord pipeline matches the Python reference", () => {
     const neg = (await scoreClip("./__fixtures__/hey_jane.wav")).filter((s): s is number => s !== null);
     expect(Math.max(...pos)).toBeGreaterThan(0.9);
     expect(Math.max(...neg)).toBeLessThan(0.1);
+  }, 60_000);
+});
+
+describe("several wake phrases at once", () => {
+  it("scores the highest of the loaded models", async () => {
+    const alexa = bytes("./__fixtures__/alexa_v0.1.onnx");
+    const single = await scoreClip("./__fixtures__/alexa_test.wav");
+    const multi = await scoreClip("./__fixtures__/alexa_test.wav", [alexa, alexa]);
+    expect(multi).toHaveLength(single.length);
+    for (let i = 15; i < single.length; i++) {
+      expect(Math.abs((multi[i] as number) - (single[i] as number))).toBeLessThan(1e-6);
+    }
+  }, 60_000);
+
+  it("rejects the set if any model is invalid", async () => {
+    await expect(
+      createOrtRunner(ort, {
+        melspectrogram: bytes("./models/melspectrogram.onnx"),
+        embedding: bytes("./models/embedding_model.onnx"),
+        wakeword: [bytes("./__fixtures__/alexa_v0.1.onnx"), bytes("./models/embedding_model.onnx")],
+      })
+    ).rejects.toThrow(/openWakeWord model/);
   }, 60_000);
 });
 
