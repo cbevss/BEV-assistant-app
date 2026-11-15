@@ -85,6 +85,21 @@ export function Settings() {
         <Field label="Gaming quiet mode" hint="Minimal replies while you game. BEV can also toggle this by voice.">
           <Toggle label="Quiet mode" checked={settings.gamingQuietMode} onChange={(gamingQuietMode) => update({ gamingQuietMode })} />
         </Field>
+        <Field
+          label="Popup during fullscreen games"
+          hint="The orb never takes focus from your game. Automatic shows it over borderless and windowed games, and hides it over exclusive fullscreen, where anything drawn on top can knock a game out of fullscreen. BEV still listens and talks either way."
+        >
+          <Select
+            ariaLabel="Popup during fullscreen games"
+            value={settings.gamePopup}
+            onChange={(gamePopup) => update({ gamePopup: gamePopup as typeof settings.gamePopup })}
+            options={[
+              { value: "auto", label: "Automatic (recommended)" },
+              { value: "hide", label: "Hide it, voice only" },
+              { value: "show", label: "Always show it" },
+            ]}
+          />
+        </Field>
       </Section>
 
       <Section title="Proactive monitoring">

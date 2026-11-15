@@ -4,12 +4,14 @@ BEV can listen for its wake word in two ways (Voice & Audio → Wake word → En
 
 | Engine | Setup | Where the listening happens |
 |---|---|---|
-| **Speech recognition** (default) | None | The WebView2 speech service. Responds to "BEV", "hey BEV", "yo BEV" |
-| **On-device (openWakeWord)** | Train a model once (about an hour, free) | Entirely on your PC. Responds to each phrase you train ("hey BEV", "yo BEV"…) |
+| **On-device (openWakeWord)** (default) | None: "hey BEV" is built in | Entirely on your PC. Responds to "hey BEV", plus any phrase you train ("yo BEV"…) |
+| **Speech recognition** | None | The WebView2 speech service. Responds to "BEV", "hey BEV", "yo BEV", "OK BEV" |
+
+BEV ships with a trained "hey BEV" model, so on-device works out of the box. Training is only needed for extra phrases. **Revert to default** (Voice & Audio → Wake word) puts back the built-in setup at any time.
 
 If on-device is selected but no model is loaded, or the model fails to start, BEV falls back to speech recognition and says so on the Voice & Audio page, so the wake word never just goes dead.
 
-## Train your model
+## Train your own phrase
 
 1. Open the notebook in Google Colab:
    **[train_hey_bev.ipynb](https://colab.research.google.com/github/cbevss/BEV-assistant-app/blob/main/training/train_hey_bev.ipynb)**

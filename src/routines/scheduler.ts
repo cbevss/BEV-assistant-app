@@ -150,8 +150,8 @@ function emitState(state: string, status: string) {
 }
 
 async function native_showOverlay() {
-  const { native } = await import("@/lib/native");
-  await native.showOverlay().catch(() => {});
+  const { showOverlayUnlessGaming } = await import("@/lib/overlayGate");
+  await showOverlayUnlessGaming();
 }
 async function native_hideOverlay() {
   const { native } = await import("@/lib/native");

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import clsx from "clsx";
 import { useSettings } from "@/state/settings";
 import { MicInput } from "@/voice/wakeword";
 import { WebSpeechSynthesizer } from "@/voice/webspeech";
@@ -17,15 +18,15 @@ import { listElevenVoices, elevenUsage, type ElevenVoice, type ElevenUsage } fro
 import { native, OutputDevice } from "@/lib/native";
 import { PageHeader, Section, Field, Select, Slider, Toggle, Button, TextInput, StatusPill } from "../components/Form";
 import { useAssistant } from "@/state/assistant";
-import { restartListening, getController } from "@/voice/bootstrap";
+import { restartListening, getController, bindShortcut } from "@/voice/bootstrap";
+import { HotkeyInput } from "../components/HotkeyInput";
+import { activeWakeModels, customWakeModels, revertWakeModels, BUILT_IN_PHRASE } from "@/voice/oww/wake-models";
 import { thresholdFor } from "@/voice/oww/pipeline";
 import {
-  loadWakeModels,
   addWakeModel,
   removeWakeModel,
   phraseFromFile,
   toBase64,
-  fromBase64,
   StoredWakeModel,
 } from "@/voice/oww/model-store";
 import type { OnDeviceWakeWord } from "@/voice/oww/engine";
@@ -108,10 +109,29 @@ export function VoiceAudio() {
             format={(v) => `${(v / 1000).toFixed(1)}s`}
           />
         </Field>
-        <Field label="Push-to-talk shortcut" hint="Applied on next launch. Tauri accelerator format.">
-          <TextInput
+        <Field label="Push-to-talk shortcut" hint="Starts a conversation without saying the wake word. Click, then press the keys.">
+          <HotkeyInput
+            ariaLabel="Push-to-talk shortcut"
             value={settings.pushToTalkShortcut}
-            onChange={(e) => update({ pushToTalkShortcut: e.target.value })}
+            onChange={async (pushToTalkShortcut) => {
+              const err = await bindShortcut("pushToTalk", pushToTalkShortcut);
+              if (!err) await update({ pushToTalkShortcut });
+              return err;
+            }}
+          />
+        </Field>
+        <Field
+          label="Mute mic shortcut"
+          hint="Turns BEV's microphone off and on from anywhere, even in a game. A low tone means muted, a rising one means listening again."
+        >
+          <HotkeyInput
+            ariaLabel="Mute mic shortcut"
+            value={settings.muteShortcut}
+            onChange={async (muteShortcut) => {
+              const err = await bindShortcut("mute", muteShortcut);
+              if (!err) await update({ muteShortcut });
+              return err;
+            }}
           />
         </Field>
         <Field label="Interface sounds" hint="A short chime when BEV wakes up and when it finishes.">
@@ -507,9 +527,9 @@ function getOnDevice(): OnDeviceWakeWord | null {
 const TRAINING_GUIDE = "https://github.com/cbevss/BEV-assistant-app/blob/main/docs/WAKE_WORD.md";
 
 /**
- * Wake word engine choice. "On-device" runs the user's trained openWakeWord
- * model locally; audio never leaves the PC. Speech recognition stays the
- * default, and the fallback whenever on-device isn't set up or fails.
+ * Wake word engine choice. On-device (the default) runs the built-in "hey BEV"
+ * model plus any phrases the user trained, locally; audio never leaves the PC.
+ * Speech recognition is the fallback whenever on-device can't start.
  */
 function WakeWordSection() {
   const { settings, update } = useSettings();
@@ -518,11 +538,15 @@ function WakeWordSection() {
   const [models, setModels] = useState<StoredWakeModel[]>([]);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [confirmRevert, setConfirmRevert] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    loadWakeModels().then(setModels);
+    customWakeModels().then(setModels);
   }, []);
+
+  const isDefault = settings.wakeEngine === "on-device" && settings.builtInWakeModel && models.length === 0;
+  const nothingLoaded = !settings.builtInWakeModel && models.length === 0;
 
   const chooseEngine = async (wakeEngine: "speech" | "on-device") => {
     await update({ wakeEngine });
@@ -543,10 +567,16 @@ function WakeWordSection() {
       await runner.release();
       const stored = { name: file.name, base64: toBase64(bytes), addedAt: Date.now() };
       const replaced = models.some((m) => m.name === file.name);
-      setModels(await addWakeModel(stored));
+      await addWakeModel(stored);
+      const list = await customWakeModels();
+      setModels(list);
+      const phrase = phraseFromFile(file.name);
+      const isBuiltInCopy = !list.some((m) => m.name === file.name);
       setMsg({
         ok: true,
-        text: `${replaced ? "Updated" : "Added"} “${phraseFromFile(file.name)}”.${phraseFromFile(file.name).toLowerCase() === "bev" ? " A one-word wake phrase triggers by accident more often; lower the sensitivity if it does." : ""}`,
+        text: isBuiltInCopy
+          ? `That's the same as the built-in “${BUILT_IN_PHRASE}”, so nothing new was added.`
+          : `${replaced ? "Updated" : "Added"} “${phrase}”.${phrase.toLowerCase() === "bev" ? " A one-word wake phrase triggers by accident more often; lower the sensitivity if it does." : ""}`,
       });
       if (settings.wakeEngine === "on-device") await restartListening();
     } catch (e) {
@@ -563,6 +593,22 @@ function WakeWordSection() {
     if (settings.wakeEngine === "on-device") await restartListening();
   };
 
+  const setBuiltIn = async (builtInWakeModel: boolean) => {
+    await update({ builtInWakeModel });
+    setMsg(null);
+    if (settings.wakeEngine === "on-device") await restartListening();
+  };
+
+  const revert = async () => {
+    if (models.length && !confirmRevert) return setConfirmRevert(true);
+    setConfirmRevert(false);
+    await revertWakeModels();
+    setModels([]);
+    await update({ wakeEngine: "on-device", builtInWakeModel: true });
+    await restartListening();
+    setMsg({ ok: true, text: `Back to the default: on-device, “${BUILT_IN_PHRASE}”.` });
+  };
+
   const live =
     !micEnabled || !wake
       ? { ok: null, label: "not listening" }
@@ -574,15 +620,15 @@ function WakeWordSection() {
     <Section title="Wake word" aside={<StatusPill ok={live.ok} label={live.label} />}>
       <Field
         label="Engine"
-        hint="Speech recognition works with no setup and answers to “BEV”, “hey BEV”, “yo BEV” and “OK BEV”. On-device runs your own trained phrases on this PC, so audio never leaves it."
+        hint="On-device runs on this PC, so audio never leaves it, and comes with “hey BEV” built in. Speech recognition answers to “BEV”, “hey BEV”, “yo BEV” and “OK BEV”."
       >
         <Select
           ariaLabel="Wake word engine"
           value={settings.wakeEngine}
           onChange={chooseEngine}
           options={[
-            { value: "speech", label: "Speech recognition (default)" },
-            { value: "on-device", label: "On-device (openWakeWord)" },
+            { value: "on-device", label: "On-device (default)" },
+            { value: "speech", label: "Speech recognition" },
           ]}
         />
       </Field>
@@ -593,9 +639,9 @@ function WakeWordSection() {
           <Field
             label="Wake phrases"
             hint={
-              models.length
-                ? `BEV wakes when it hears any of these. Add one .onnx model per phrase, e.g. “hey BEV” and “yo BEV”.`
-                : "No model loaded yet. Train one with the guide, then add the .onnx file here."
+              nothingLoaded
+                ? "No phrases loaded, so BEV is using speech recognition. Turn the built-in one back on or add your own."
+                : "BEV wakes on any of these. To add one, train it with the guide and add the .onnx file."
             }
           >
             <div className="flex justify-end gap-2">
@@ -614,46 +660,88 @@ function WakeWordSection() {
                 Training guide
               </Button>
               <Button onClick={() => fileRef.current?.click()} disabled={busy}>
-                {busy ? "Checking…" : models.length ? "Add phrase" : "Load model"}
+                {busy ? "Checking…" : "Add phrase"}
               </Button>
             </div>
           </Field>
-          {models.length > 0 && (
-            <ul className="divide-y divide-white/5 rounded-lg border border-white/5">
-              {models.map((m) => (
-                <li key={m.name} className="flex items-center justify-between gap-3 px-3 py-2">
-                  <div className="min-w-0">
-                    <div className="text-sm text-slate-200">“{phraseFromFile(m.name)}”</div>
-                    <div className="truncate text-xs text-slate-500">
-                      {m.name}, added {new Date(m.addedAt).toLocaleDateString("en-GB")}
-                    </div>
+          <ul className="divide-y divide-white/5 rounded-lg border border-white/5">
+            <li className="flex items-center justify-between gap-3 px-3 py-2">
+              <div className="min-w-0">
+                <div className={clsx("text-sm", settings.builtInWakeModel ? "text-slate-200" : "text-slate-500 line-through")}>
+                  “{BUILT_IN_PHRASE}”
+                </div>
+                <div className="text-xs text-slate-500">Built in</div>
+              </div>
+              <Button
+                variant={settings.builtInWakeModel ? "danger" : "ghost"}
+                onClick={() => setBuiltIn(!settings.builtInWakeModel)}
+                disabled={busy}
+              >
+                {settings.builtInWakeModel ? "Turn off" : "Turn on"}
+              </Button>
+            </li>
+            {models.map((m) => (
+              <li key={m.name} className="flex items-center justify-between gap-3 px-3 py-2">
+                <div className="min-w-0">
+                  <div className="text-sm text-slate-200">“{phraseFromFile(m.name)}”</div>
+                  <div className="truncate text-xs text-slate-500">
+                    {m.name}, added {new Date(m.addedAt).toLocaleDateString("en-GB")}
                   </div>
-                  <Button variant="danger" onClick={() => remove(m.name)} disabled={busy}>
-                    Remove
-                  </Button>
-                </li>
-              ))}
-            </ul>
-          )}
-          {msg && <p className={`text-sm ${msg.ok ? "text-bev-ok" : "text-bev-danger"}`}>{msg.text}</p>}
-          {models.length > 0 && (
-            <WakeTest models={models} deviceId={settings.micDeviceId} sensitivity={settings.wakeSensitivity} />
+                </div>
+                <Button variant="danger" onClick={() => remove(m.name)} disabled={busy}>
+                  Remove
+                </Button>
+              </li>
+            ))}
+          </ul>
+          {!nothingLoaded && (
+            <WakeTest
+              builtIn={settings.builtInWakeModel}
+              models={models}
+              deviceId={settings.micDeviceId}
+              sensitivity={settings.wakeSensitivity}
+            />
           )}
         </>
+      )}
+
+      {msg && <p className={`text-sm ${msg.ok ? "text-bev-ok" : "text-bev-danger"}`}>{msg.text}</p>}
+      {!isDefault && (
+        <Field
+          label="Revert to default"
+          hint={
+            confirmRevert
+              ? `This removes your own phrases (${models.map((m) => `“${phraseFromFile(m.name)}”`).join(", ")}). Your .onnx files stay where you saved them.`
+              : `On-device with the built-in “${BUILT_IN_PHRASE}”, as BEV ships.`
+          }
+        >
+          <div className="flex justify-end gap-2">
+            {confirmRevert && (
+              <Button variant="ghost" onClick={() => setConfirmRevert(false)}>
+                Cancel
+              </Button>
+            )}
+            <Button variant={confirmRevert ? "danger" : "ghost"} onClick={revert}>
+              {confirmRevert ? "Yes, revert" : "Revert to default"}
+            </Button>
+          </div>
+        </Field>
       )}
     </Section>
   );
 }
 
 /**
- * Live score meter for the loaded model, so the user can see how strongly
- * "hey BEV" registers and tune sensitivity. Runs its own engine instance.
+ * Live score meter for the loaded phrases, so the user can see how strongly
+ * the wake word registers and tune sensitivity. Runs its own engine instance.
  */
 function WakeTest({
+  builtIn,
   models,
   deviceId,
   sensitivity,
 }: {
+  builtIn: boolean;
   models: StoredWakeModel[];
   deviceId: string;
   sensitivity: number;
@@ -664,6 +752,7 @@ function WakeTest({
   const [err, setErr] = useState<string | null>(null);
   const threshold = thresholdFor(sensitivity);
   const engine = useRef<OnDeviceWakeWord | null>(null);
+  const phrases = [...(builtIn ? [BUILT_IN_PHRASE] : []), ...models.map((m) => phraseFromFile(m.name))];
 
   useEffect(() => {
     engine.current?.setThreshold(threshold);
@@ -674,12 +763,12 @@ function WakeTest({
     let cancelled = false;
     (async () => {
       try {
-        const { OnDeviceWakeWord } = await import("@/voice/oww/engine");
-        const e = new OnDeviceWakeWord({
-          models: models.map((m) => fromBase64(m.base64)),
-          deviceId: deviceId || undefined,
-          threshold,
-        });
+        const [{ OnDeviceWakeWord }, bytes] = await Promise.all([
+          import("@/voice/oww/engine"),
+          activeWakeModels(builtIn),
+        ]);
+        if (cancelled) return;
+        const e = new OnDeviceWakeWord({ models: bytes, deviceId: deviceId || undefined, threshold });
         engine.current = e;
         e.onScore((s) => !cancelled && setScore(s));
         e.onFatal = (m) => setErr(m);
@@ -703,14 +792,14 @@ function WakeTest({
     };
     // threshold changes are applied live above; don't restart for them
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [on, models, deviceId]);
+  }, [on, builtIn, models, deviceId]);
 
   return (
     <Field
       label="Test wake word"
       hint={
         err ??
-        `Say ${models.map((m) => `“${phraseFromFile(m.name)}”`).join(" or ")}. Detections: ${hits}. Trigger point ${Math.round(threshold * 100)}%.`
+        `Say ${phrases.map((p) => `“${p}”`).join(" or ")}. Detections: ${hits}. Trigger point ${Math.round(threshold * 100)}%.`
       }
     >
       <div className="flex items-center gap-3">

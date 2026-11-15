@@ -115,6 +115,7 @@ pub fn run() {
             // Overlay control
             overlay::show_overlay,
             overlay::hide_overlay,
+            overlay::fullscreen_state,
             overlay::set_overlay_clickthrough,
             overlay::set_overlay_position,
             overlay::place_overlay,

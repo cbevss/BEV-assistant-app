@@ -10,6 +10,7 @@ import { emit, listen } from "@tauri-apps/api/event";
 export type ProviderId = "anthropic" | "openai" | "ollama";
 export type Personality = "professional" | "casual" | "minimal" | "technical" | "custom";
 export type WakeEngine = "speech" | "on-device";
+export type GamePopup = "auto" | "show" | "hide";
 export type OverlayCorner = "top-right" | "top-left" | "bottom-right" | "bottom-left" | "center";
 
 export interface Settings {
@@ -41,7 +42,18 @@ export interface Settings {
   wakeSensitivity: number; // 0..1
   conversationTimeoutMs: number;
   pushToTalkShortcut: string;
+  /** Global hotkey that mutes / unmutes BEV's microphone ("" = none). */
+  muteShortcut: string;
   interfaceSounds: boolean;
+  /** Use the "hey BEV" model that ships with BEV (on-device engine). */
+  builtInWakeModel: boolean;
+  /**
+   * The orb while a fullscreen game or app is in front. auto = show it over
+   * borderless/windowed fullscreen (it never takes focus), hide it over
+   * exclusive fullscreen where any window on top can knock the game out of
+   * fullscreen. BEV still listens and talks either way.
+   */
+  gamePopup: GamePopup;
   // Appearance
   accent: string;
   overlayCorner: OverlayCorner;
@@ -83,11 +95,14 @@ export const defaultSettings: Settings = {
   elevenVoiceName: "",
   speakRate: 1.02,
   speakVolume: 1,
-  wakeEngine: "speech",
+  wakeEngine: "on-device",
   wakeSensitivity: 0.6,
   conversationTimeoutMs: 8000,
   pushToTalkShortcut: "CommandOrControl+Alt+B",
+  muteShortcut: "",
   interfaceSounds: true,
+  builtInWakeModel: true,
+  gamePopup: "auto",
   accent: "#22d3ee",
   overlayCorner: "top-right",
   overlayScale: 1,
@@ -124,7 +139,11 @@ export const useSettings = create<SettingsStore>((set, get) => ({
       const s = await getStore();
       const saved = (await s.get<Partial<Settings>>("settings")) ?? {};
       // Merge onto defaults so new keys added in updates get sane values.
-      set({ settings: { ...defaultSettings, ...saved }, loaded: true });
+      const merged = { ...defaultSettings, ...saved };
+      // 1.1.5 ships a built-in "hey BEV" model: move existing installs that
+      // were on speech recognition (the old default) onto it, once.
+      if (Object.keys(saved).length && !("builtInWakeModel" in saved)) merged.wakeEngine = "on-device";
+      set({ settings: merged, loaded: true });
     } catch {
       // Store unavailable (e.g. browser preview) — run on defaults, flagged loaded.
       set({ loaded: true });
