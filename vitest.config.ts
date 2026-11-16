@@ -5,5 +5,5 @@ export default defineConfig({
   resolve: {
     alias: { "@": fileURLToPath(new URL("./src", import.meta.url)) },
   },
-  test: { environment: "node", globals: true },
+  test: { environment: "node", globals: true, exclude: ["**/node_modules/**", "cloud/**"] },
 });

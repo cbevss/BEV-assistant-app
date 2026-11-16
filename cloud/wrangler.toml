@@ -1,0 +1,22 @@
+# BEV Cloud: the always-on half of BEV. Telegram, task tracking, urgent calls.
+# Deployed by .github/workflows/cloud.yml, which fills in the D1 database id.
+name = "bev-cloud"
+main = "src/index.ts"
+compatibility_date = "2026-11-01"
+compatibility_flags = ["nodejs_compat"]
+
+# Check due tasks every minute.
+[triggers]
+crons = ["* * * * *"]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "bev-cloud"
+database_id = "__D1_DATABASE_ID__"
+
+# Workers AI: free speech-to-text for Telegram voice notes.
+[ai]
+binding = "AI"
+
+[vars]
+TIMEZONE = "Europe/London"

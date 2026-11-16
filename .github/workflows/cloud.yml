@@ -1,0 +1,144 @@
+name: BEV Cloud
+
+# Tests BEV Cloud on every change; deploys it to Cloudflare from main once the
+# secrets in docs/BEV_CLOUD.md are set. Without them the deploy is skipped.
+on:
+  push:
+    branches: [main]
+    paths: ["cloud/**", ".github/workflows/cloud.yml"]
+  pull_request:
+    paths: ["cloud/**", ".github/workflows/cloud.yml"]
+  workflow_dispatch:
+
+concurrency:
+  group: bev-cloud-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: cloud
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: cloud/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+
+  deploy:
+    needs: test
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: cloud
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check setup
+        id: cfg
+        run: |
+          if [ -z "$CLOUDFLARE_API_TOKEN" ] || [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::BEV Cloud isn't set up yet (no Cloudflare secrets), so nothing was deployed. See docs/BEV_CLOUD.md."
+          fi
+
+      - uses: actions/setup-node@v4
+        if: steps.cfg.outputs.skip != 'true'
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: cloud/package-lock.json
+      - if: steps.cfg.outputs.skip != 'true'
+        run: npm ci
+
+      - name: Database
+        if: steps.cfg.outputs.skip != 'true'
+        run: |
+          set -euo pipefail
+          find_db() {
+            npx wrangler d1 list --json | node -e 'const l=JSON.parse(require("fs").readFileSync(0,"utf8"));const d=l.find(x=>x.name==="bev-cloud");if(d)console.log(d.uuid)'
+          }
+          id=$(find_db)
+          if [ -z "$id" ]; then
+            npx wrangler d1 create bev-cloud > /dev/null
+            id=$(find_db)
+          fi
+          [ -n "$id" ] || { echo "::error::Couldn't find or create the bev-cloud D1 database."; exit 1; }
+          sed -i "s/__D1_DATABASE_ID__/$id/" wrangler.toml
+          npx wrangler d1 execute bev-cloud --remote --file schema.sql --yes
+
+      - name: Deploy
+        id: deploy
+        if: steps.cfg.outputs.skip != 'true'
+        run: |
+          set -euo pipefail
+          npx wrangler deploy | tee deploy.log
+          url=$(grep -oE 'https://[a-z0-9.-]+\.workers\.dev' deploy.log | head -1)
+          [ -n "$url" ] || { echo "::error::Deployed, but no workers.dev address was printed. Claim a workers.dev subdomain in the Cloudflare dashboard (Workers & Pages), then re-run."; exit 1; }
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+
+      - name: Secrets
+        if: steps.cfg.outputs.skip != 'true'
+        env:
+          ADMIN_KEY: ${{ secrets.BEV_ADMIN_KEY }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          AI_PROVIDER: ${{ secrets.AI_PROVIDER }}
+          AI_API_KEY: ${{ secrets.AI_API_KEY }}
+          AI_MODEL: ${{ secrets.AI_MODEL }}
+          ELEVENLABS_API_KEY: ${{ secrets.ELEVENLABS_API_KEY }}
+          ELEVENLABS_VOICE_ID: ${{ secrets.ELEVENLABS_VOICE_ID }}
+          TWILIO_ACCOUNT_SID: ${{ secrets.TWILIO_ACCOUNT_SID }}
+          TWILIO_AUTH_TOKEN: ${{ secrets.TWILIO_AUTH_TOKEN }}
+          TWILIO_PHONE_NUMBER: ${{ secrets.TWILIO_PHONE_NUMBER }}
+          MY_PHONE_NUMBER: ${{ secrets.MY_PHONE_NUMBER }}
+          CALL_AGENT_LLM: ${{ secrets.CALL_AGENT_LLM }}
+        run: |
+          set -euo pipefail
+          # Piped straight in: secrets never touch disk or the log.
+          node -e '
+            const names = ["ADMIN_KEY","TELEGRAM_BOT_TOKEN","AI_PROVIDER","AI_API_KEY","AI_MODEL","ELEVENLABS_API_KEY","ELEVENLABS_VOICE_ID","TWILIO_ACCOUNT_SID","TWILIO_AUTH_TOKEN","TWILIO_PHONE_NUMBER","MY_PHONE_NUMBER","CALL_AGENT_LLM"];
+            const missing = ["ADMIN_KEY","TELEGRAM_BOT_TOKEN","AI_API_KEY"].filter((n) => !process.env[n]);
+            if (missing.length) { console.error("Missing required secrets: " + missing.map((n) => n === "ADMIN_KEY" ? "BEV_ADMIN_KEY" : n).join(", ")); process.exit(1); }
+            if (process.env.ADMIN_KEY.length < 24) { console.error("BEV_ADMIN_KEY must be at least 24 characters."); process.exit(1); }
+            const out = {};
+            for (const n of names) if (process.env[n]) out[n] = process.env[n];
+            process.stdout.write(JSON.stringify(out));
+          ' | npx wrangler secret bulk
+
+      - name: Connect Telegram and phone
+        if: steps.cfg.outputs.skip != 'true'
+        env:
+          ADMIN_KEY: ${{ secrets.BEV_ADMIN_KEY }}
+          URL: ${{ steps.deploy.outputs.url }}
+        run: |
+          set -euo pipefail
+          # New deployments can take a few seconds to answer.
+          out=""
+          for i in 1 2 3 4 5 6; do
+            if out=$(curl -fsS -X POST "$URL/admin/setup" -H "Authorization: Bearer $ADMIN_KEY"); then break; fi
+            out=""
+            sleep 10
+          done
+          [ -n "$out" ] || { echo "::error::BEV Cloud deployed but didn't answer setup. Re-run this workflow in a minute."; exit 1; }
+          echo "$out"
+          {
+            echo "### BEV Cloud is live"
+            echo ""
+            echo "Address: $URL"
+            echo ""
+            echo '```'
+            echo "$out"
+            echo '```'
+            echo ""
+            echo "Next: BEV → Integrations → BEV Cloud. Paste the address and your admin key, then press Connect."
+          } >> "$GITHUB_STEP_SUMMARY"

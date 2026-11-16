@@ -42,6 +42,8 @@ export interface Settings {
   wakeSensitivity: number; // 0..1
   conversationTimeoutMs: number;
   pushToTalkShortcut: string;
+  /** BEV Cloud (Telegram, task tracking, calls) address; "" = not connected. Key is in the keyring. */
+  bevCloudUrl: string;
   /** Global hotkey that mutes / unmutes BEV's microphone ("" = none). */
   muteShortcut: string;
   interfaceSounds: boolean;
@@ -100,6 +102,7 @@ export const defaultSettings: Settings = {
   conversationTimeoutMs: 8000,
   pushToTalkShortcut: "CommandOrControl+Alt+B",
   muteShortcut: "",
+  bevCloudUrl: "",
   interfaceSounds: true,
   builtInWakeModel: true,
   gamePopup: "auto",
