@@ -1,4 +1,4 @@
-import { tools, isSensitive, toolText } from "@/ai/tools";
+import { getTool, isSensitive, toolText } from "@/ai/tools";
 import { native } from "@/lib/native";
 import { toolAllowed, autoApproveOn } from "@/state/settings";
 import type { Routine, RoutineStep, RunReport, StepResult, StepCondition } from "./types";
@@ -64,7 +64,7 @@ async function conditionMet(cond: StepCondition | undefined): Promise<boolean> {
 
 async function runStep(step: RoutineStep, signal: AbortSignal, hooks: RunHooks): Promise<StepResult> {
   const base = { stepId: step.id, tool: step.tool };
-  const tool = tools[step.tool];
+  const tool = getTool(step.tool);
   if (!tool) return { ...base, status: "failed", message: `unknown tool "${step.tool}"` };
   if (ROUTINE_FORBIDDEN.has(step.tool))
     return { ...base, status: "failed", message: `"${step.tool}" can't be used inside a routine` };

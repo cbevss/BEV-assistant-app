@@ -49,7 +49,7 @@ asks for and the plan the work follows.
 - Application discovery/index (Start apps, Store packages, shortcuts, App Paths), resolution and verified execution.
 - Diagnostics for services, devices and drivers (performance, network, event-log stability and mic checks exist since 1.1.11).
 - Browser control beyond "open URL"; web research pipeline on the desktop.
-- Integrations (Gmail, Calendar, GitHub, Spotify, Discord, Home Assistant, MCP).
+- Discord integration (others since 1.1.15).
 
 ### Security posture
 - Good: keys in Credential Manager; no arbitrary shell from the AI; `open_path` uses explorer with a single argument; screen/web text labelled as data in the prompt; approvals for power/close/programs.
@@ -73,8 +73,20 @@ Order follows the spec's rule: build the underlying systems first, then connect 
 | E. Second brain | Conversation history, semantic memory (local embeddings), duplicates/contradictions, knowledge vault with sources | **Done in 1.1.12** |
 | F. Advanced AI | Plan → act → verify loop, background tasks with progress/cancel, model routing per workload | **Done in 1.1.13** |
 | G. Interface | Design-system tokens doc, HUD with real data, state visuals | **Done in 1.1.14** |
-| H. Integrations | Connector framework + MCP; Gmail/Calendar/GitHub/Spotify/Home Assistant | Later |
+| H. Integrations | Connector framework + MCP; Gmail/Calendar/GitHub/Spotify/Home Assistant | **Done in 1.1.15** |
 | I. Proactive | Desktop background monitoring (crashes, device loss, resource spikes), briefings (cloud side exists) | Later |
+
+## What 1.1.15 changed (Phase H)
+
+- **Framework**: connector tools are added to the registry at call time from Integrations settings (`allTools` / `getTool`), so revoking, approvals, routines and the Security list all cover them. HTTP goes through `integration_fetch` in Rust. It allows only the fixed public API hosts plus origins the user saved in settings; the AI can't add hosts, and credentials in URLs are refused. Tokens live in the OS keyring.
+- **OAuth** (Spotify, Google): PKCE with a one-shot 127.0.0.1 listener, the system browser, state check, and refresh. Spotify uses a fixed port (43117) because its dashboard needs the exact redirect URI.
+- **Home Assistant**: find entities, control them (state read back afterwards), history. Locks, alarms and opening garage covers always need approval.
+- **GitHub**: notifications, issues/PRs, PR checks; creating an issue needs approval.
+- **Spotify**: now playing, controls, play by search or the user's playlists.
+- **Gmail and Calendar**: search, read, drafts only (never sends), list and add events (no guests).
+- **MCP**: stdio servers run as child processes started from user settings only, plus Streamable HTTP with session ids and SSE replies. Tools appear as `mcp_<server>_<tool>`. All output is untrusted; actions need approval unless the server is trusted or the tool is read-only.
+- Setup guide: `docs/INTEGRATIONS.md`.
+- **Not verified here**: no live calls to any of these services were possible from this environment. Payload shapes follow the public API docs; the pure helpers (matching, service mapping, MIME, SSE parsing, PKCE against the RFC 7636 vector) are unit-tested.
 
 ## What 1.1.14 changed (Phase G)
 
