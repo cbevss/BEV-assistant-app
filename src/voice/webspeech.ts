@@ -56,6 +56,8 @@ const MAX_UTTERANCE_MS = 30_000;
 
 export class WebSpeechRecognizer implements SpeechRecognizer {
   readonly id = "webspeech";
+  /** Recogniser confidence for the last utterance (0..1; 0 = not reported). */
+  lastConfidence = 0;
   constructor(
     private lang = "en-GB",
     private endOfSpeechMs = END_OF_SPEECH_MS
@@ -77,6 +79,7 @@ export class WebSpeechRecognizer implements SpeechRecognizer {
       rec.lang = this.lang;
       rec.continuous = true;
       rec.interimResults = true;
+      this.lastConfidence = 0;
       let finalText = "";
       let interim = "";
       let quiet: ReturnType<typeof setTimeout> | undefined;
@@ -112,11 +115,20 @@ export class WebSpeechRecognizer implements SpeechRecognizer {
         // or earlier phrases get repeated.
         let f = "";
         let i2 = "";
+        let confSum = 0;
+        let confN = 0;
         for (let i = 0; i < e.results.length; i++) {
           const r = e.results[i];
-          if (r.isFinal) f += r[0].transcript;
-          else i2 += r[0].transcript;
+          if (r.isFinal) {
+            f += r[0].transcript;
+            const c = (r[0] as { confidence?: number }).confidence;
+            if (typeof c === "number" && c > 0) {
+              confSum += c;
+              confN++;
+            }
+          } else i2 += r[0].transcript;
         }
+        this.lastConfidence = confN ? confSum / confN : 0;
         finalText = f;
         interim = i2;
         opts.onPartial?.(join(finalText, interim));

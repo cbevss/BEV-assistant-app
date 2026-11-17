@@ -113,6 +113,9 @@ pub fn run() {
             audio::list_output_devices,
             audio::set_output_device,
             // Application control
+            audio::list_input_devices,
+            audio::set_default_input_device,
+            audio::set_input_device_level,
             appengine::apps_open,
             appengine::apps_close,
             appengine::apps_search,

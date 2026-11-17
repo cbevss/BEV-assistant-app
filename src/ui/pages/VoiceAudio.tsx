@@ -20,6 +20,7 @@ import { PageHeader, Section, Field, Select, Slider, Toggle, Button, TextInput, 
 import { useAssistant } from "@/state/assistant";
 import { restartListening, getController, bindShortcut } from "@/voice/bootstrap";
 import { HotkeyInput } from "../components/HotkeyInput";
+import { MicDiagnostics, Calibration, RecognitionSettings } from "../components/VoiceSetup";
 import { activeWakeModels, customWakeModels, revertWakeModels, BUILT_IN_PHRASE } from "@/voice/oww/wake-models";
 import { thresholdFor } from "@/voice/oww/pipeline";
 import {
@@ -62,11 +63,14 @@ export function VoiceAudio() {
 
       <Section title="Microphone">
         {micErr && <p className="text-sm text-bev-danger">Microphone unavailable: {micErr}</p>}
-        <Field label="Input device" hint="BEV reconnects automatically if the device is unplugged and returns.">
+        <Field label="Input device" hint="Switches straight away. If it's unplugged BEV uses the Windows default, and switches back when it returns.">
           <Select
             ariaLabel="Microphone"
             value={settings.micDeviceId}
-            onChange={(micDeviceId) => update({ micDeviceId })}
+            onChange={async (micDeviceId) => {
+              await update({ micDeviceId });
+              await restartListening();
+            }}
             options={[
               { value: "", label: "System default" },
               ...mics.map((m, i) => ({ value: m.deviceId, label: m.label || `Microphone ${i + 1}` })),
@@ -74,7 +78,11 @@ export function VoiceAudio() {
           />
         </Field>
         <MicTest deviceId={settings.micDeviceId} />
+        <MicDiagnostics />
       </Section>
+
+      <Calibration />
+      <RecognitionSettings />
 
       <OutputDeviceSection />
 

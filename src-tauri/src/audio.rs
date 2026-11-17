@@ -14,6 +14,19 @@ pub struct OutputDevice {
     pub is_default: bool,
 }
 
+/// One active recording endpoint, with the state Windows reports for it.
+#[derive(Debug, Serialize)]
+pub struct InputDevice {
+    pub id: String,
+    pub name: String,
+    /// The microphone Windows (and its speech recognition) records from.
+    pub is_default: bool,
+    /// Muted in Windows' sound settings.
+    pub muted: Option<bool>,
+    /// Windows input level, 0..1.
+    pub volume: Option<f32>,
+}
+
 #[cfg(windows)]
 mod imp {
     use super::*;
@@ -23,7 +36,7 @@ mod imp {
     use windows::Win32::Foundation::RPC_E_CHANGED_MODE;
     use windows::Win32::Media::Audio::Endpoints::IAudioEndpointVolume;
     use windows::Win32::Media::Audio::{
-        eCommunications, eConsole, eMultimedia, eRender, ERole, IMMDevice, IMMDeviceEnumerator,
+        eCapture, eCommunications, eConsole, eMultimedia, eRender, EDataFlow, ERole, IMMDevice, IMMDeviceEnumerator,
         MMDeviceEnumerator, DEVICE_STATE_ACTIVE,
     };
     use windows::Win32::System::Com::{
@@ -147,24 +160,30 @@ mod imp {
         unsafe extern "system" fn(this: *mut c_void, device_id: PCWSTR, role: ERole) -> HRESULT;
 
     pub fn set_output(id: &str) -> BevResult<()> {
-        let _g = ComGuard::new()?;
+        set_default(eRender, id)
+    }
 
-        // Only accept an id that is a currently active playback endpoint.
+    /// Active endpoint with this id in this direction, if it still exists.
+    fn find(flow: EDataFlow, id: &str) -> BevResult<IMMDevice> {
         let enumerator = enumerator()?;
-        let wide: Vec<u16> = id.encode_utf16().chain(std::iter::once(0)).collect();
         unsafe {
             let known = enumerator
-                .EnumAudioEndpoints(eRender, DEVICE_STATE_ACTIVE)
-                .map_err(|e| BevError::Os(format!("enumerate outputs: {e}")))?;
-            let count = known
-                .GetCount()
-                .map_err(|e| BevError::Os(format!("count outputs: {e}")))?;
-            let exists = (0..count)
+                .EnumAudioEndpoints(flow, DEVICE_STATE_ACTIVE)
+                .map_err(|e| BevError::Os(format!("enumerate devices: {e}")))?;
+            let count = known.GetCount().map_err(|e| BevError::Os(format!("count devices: {e}")))?;
+            (0..count)
                 .filter_map(|i| known.Item(i).ok())
-                .any(|d| device_id(&d).map(|d| d == id).unwrap_or(false));
-            if !exists {
-                return Err(BevError::NotFound("that output device is no longer available".into()));
-            }
+                .find(|d| device_id(d).map(|d| d == id).unwrap_or(false))
+                .ok_or_else(|| BevError::NotFound("that audio device is no longer available".into()))
+        }
+    }
+
+    fn set_default(flow: EDataFlow, id: &str) -> BevResult<()> {
+        let _g = ComGuard::new()?;
+        // Only accept an id that is a currently active endpoint in this direction.
+        find(flow, id)?;
+        let wide: Vec<u16> = id.encode_utf16().chain(std::iter::once(0)).collect();
+        unsafe {
 
             let unknown: IUnknown = CoCreateInstance(&CLSID_POLICY_CONFIG_CLIENT, None, CLSCTX_ALL)
                 .map_err(|e| BevError::Os(format!("policy config: {e}")))?;
@@ -187,7 +206,56 @@ mod imp {
             for role in [eConsole, eMultimedia, eCommunications] {
                 set_default(policy.as_raw(), PCWSTR(wide.as_ptr()), role)
                     .ok()
-                    .map_err(|e| BevError::Os(format!("set default output: {e}")))?;
+                    .map_err(|e| BevError::Os(format!("set default device: {e}")))?;
+            }
+        }
+        Ok(())
+    }
+
+    pub fn list_inputs() -> BevResult<Vec<InputDevice>> {
+        let _g = ComGuard::new()?;
+        let enumerator = enumerator()?;
+        unsafe {
+            let default_id = enumerator
+                .GetDefaultAudioEndpoint(eCapture, eConsole)
+                .ok()
+                .and_then(|d| device_id(&d).ok());
+            let devices = enumerator
+                .EnumAudioEndpoints(eCapture, DEVICE_STATE_ACTIVE)
+                .map_err(|e| BevError::Os(format!("enumerate microphones: {e}")))?;
+            let count = devices.GetCount().map_err(|e| BevError::Os(format!("count microphones: {e}")))?;
+            let mut out = Vec::with_capacity(count as usize);
+            for i in 0..count {
+                let Ok(device) = devices.Item(i) else { continue };
+                let Ok(id) = device_id(&device) else { continue };
+                let name = device_name(&device).unwrap_or_else(|| format!("Microphone {}", i + 1));
+                let vol: Option<IAudioEndpointVolume> = device.Activate(CLSCTX_ALL, None).ok();
+                let muted = vol.as_ref().and_then(|v| v.GetMute().ok()).map(|b| b.as_bool());
+                let volume = vol.as_ref().and_then(|v| v.GetMasterVolumeLevelScalar().ok());
+                let is_default = default_id.as_deref() == Some(id.as_str());
+                out.push(InputDevice { id, name, is_default, muted, volume });
+            }
+            Ok(out)
+        }
+    }
+
+    pub fn set_default_input(id: &str) -> BevResult<()> {
+        set_default(eCapture, id)
+    }
+
+    /// Windows input level (0..1) and/or mute for one microphone.
+    pub fn set_input_level(id: &str, volume: Option<f32>, muted: Option<bool>) -> BevResult<()> {
+        let _g = ComGuard::new()?;
+        let device = find(eCapture, id)?;
+        unsafe {
+            let ep: IAudioEndpointVolume =
+                device.Activate(CLSCTX_ALL, None).map_err(|e| BevError::Os(format!("microphone level: {e}")))?;
+            if let Some(v) = volume {
+                ep.SetMasterVolumeLevelScalar(v.clamp(0.0, 1.0), std::ptr::null())
+                    .map_err(|e| BevError::Os(format!("set microphone level: {e}")))?;
+            }
+            if let Some(m) = muted {
+                ep.SetMute(m, std::ptr::null()).map_err(|e| BevError::Os(format!("mute microphone: {e}")))?;
             }
         }
         Ok(())
@@ -255,6 +323,33 @@ mod imp {
     pub fn set_output(_id: &str) -> BevResult<()> {
         Err(BevError::Unsupported("audio control is Windows-only".into()))
     }
+    pub fn list_inputs() -> BevResult<Vec<InputDevice>> {
+        Err(BevError::Unsupported("audio control is Windows-only".into()))
+    }
+    pub fn set_default_input(_id: &str) -> BevResult<()> {
+        Err(BevError::Unsupported("audio control is Windows-only".into()))
+    }
+    pub fn set_input_level(_id: &str, _v: Option<f32>, _m: Option<bool>) -> BevResult<()> {
+        Err(BevError::Unsupported("audio control is Windows-only".into()))
+    }
+}
+
+/// Recording devices with Windows' mute state and input level.
+#[tauri::command]
+pub fn list_input_devices() -> BevResult<Vec<InputDevice>> {
+    imp::list_inputs()
+}
+
+/// Make `id` the Windows default microphone (speech recognition uses it).
+#[tauri::command]
+pub fn set_default_input_device(id: String) -> BevResult<()> {
+    imp::set_default_input(&id)
+}
+
+/// Set a microphone's Windows input level (0..1) and/or mute.
+#[tauri::command]
+pub fn set_input_device_level(id: String, volume: Option<f32>, muted: Option<bool>) -> BevResult<()> {
+    imp::set_input_level(&id, volume, muted)
 }
 
 #[tauri::command]
