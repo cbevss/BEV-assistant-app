@@ -29,6 +29,8 @@ const SCREEN = `You can see the user's screen with the look_at_screen tool. When
 
 const CONTROL = `To operate an app: read_app_controls, then use_control on the right #id, then confirm the result from what the tool reports (read again if unsure). If the app lists no controls, use read_screen_text and click_on_screen with the text.{SHOT} Use press_keys for shortcuts and type_text only when there's no box to target. Never enter passwords or payment details: ask the user to do that part. If BEV refuses an action (terminals, Run box, games), explain and offer another way.`;
 
+const MEMORY = `Long-term memory: facts and preferences shown below are the ones relevant now; use recall_memories for others. When the user mentions something from before, check search_conversations or search_notes before saying you don't know. Save research worth keeping with save_note and its source. When remember reports a possible clash, ask the user which is right.`;
+
 const TROUBLESHOOT = `When something on the PC is wrong (slow, crashing, no internet, no sound, an error), troubleshoot hands-on: check first (diagnose_pc for the relevant area, the error on screen via read_screen_text), then explain the likely cause in plain words, then offer a fix and do it only when the user agrees. Fix one thing at a time and check whether it helped.`;
 
 export function buildSystemPrompt(
@@ -44,9 +46,9 @@ export function buildSystemPrompt(
     ? "The user is gaming: answer in the fewest words possible and avoid follow-up questions."
     : "";
   const mem = memories.length
-    ? `Things the user asked you to remember (user-approved preferences):\n${memories
+    ? `Things the user asked you to remember (user-approved preferences, with #ids):\n${memories
         .slice(0, 40)
-        .map((m) => `- ${m.key}: ${m.value}`)
+        .map((m) => `- ${"id" in m ? `#${(m as { id: number }).id} ` : ""}${m.key}: ${m.value}`)
         .join("\n")}`
     : "";
   const screenOn = s.toolPermissions.look_at_screen !== false;
@@ -55,7 +57,7 @@ export function buildSystemPrompt(
     : "";
   const controlOn = s.toolPermissions.use_control !== false || s.toolPermissions.click_on_screen !== false;
   const diagOn = s.toolPermissions.diagnose_pc !== false;
-  return [BASE, style, LENGTH[s.responseLength], quiet, screenOn ? SCREEN : "", controlOn ? CONTROL.replace("{SHOT}", screenOn ? " As a last resort, look_at_screen and click_on_screen with x/y." : "") : "", diagOn ? TROUBLESHOOT : "", current, mem]
+  return [BASE, style, LENGTH[s.responseLength], quiet, MEMORY, screenOn ? SCREEN : "", controlOn ? CONTROL.replace("{SHOT}", screenOn ? " As a last resort, look_at_screen and click_on_screen with x/y." : "") : "", diagOn ? TROUBLESHOOT : "", current, mem]
     .filter(Boolean)
     .join("\n\n");
 }

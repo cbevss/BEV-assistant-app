@@ -3,6 +3,8 @@ import { native, MemoryRow } from "@/lib/native";
 import { looksSensitive } from "@/lib/sensitive";
 import { PageHeader, Section, TextInput, Button } from "../components/Form";
 import { ConfirmDialog } from "../components/ConfirmDialog";
+import { NotesPanel, HistoryPanel, SemanticSearchSettings } from "../components/BrainPanels";
+import { remember, forgetMemory, searchMemories } from "@/brain/memory";
 
 export function Memory() {
   const [rows, setRows] = useState<MemoryRow[]>([]);
@@ -13,6 +15,8 @@ export function Memory() {
   const [editing, setEditing] = useState<number | null>(null);
   const [editVal, setEditVal] = useState("");
   const [confirm, setConfirm] = useState<{ text: string; run: () => Promise<void> } | null>(null);
+  const [tab, setTab] = useState<"memories" | "notes" | "history">("memories");
+  const [ranked, setRanked] = useState<MemoryRow[] | null>(null);
 
   const refresh = useCallback(async () => {
     try {
@@ -27,10 +31,23 @@ export function Memory() {
     refresh();
   }, [refresh]);
 
+  // Search by meaning and words (falls back to plain matching).
+  useEffect(() => {
+    const s = q.trim();
+    if (!s) return setRanked(null);
+    const t = setTimeout(() => {
+      searchMemories(s, 50, rows)
+        .then((r) => setRanked(r.map((x) => x.item)))
+        .catch(() => setRanked(null));
+    }, 200);
+    return () => clearTimeout(t);
+  }, [q, rows]);
   const filtered = useMemo(() => {
     const s = q.trim().toLowerCase();
-    return s ? rows.filter((r) => `${r.key} ${r.value} ${r.category}`.toLowerCase().includes(s)) : rows;
-  }, [rows, q]);
+    if (!s) return rows;
+    if (ranked) return ranked;
+    return rows.filter((r) => `${r.key} ${r.value} ${r.category}`.toLowerCase().includes(s));
+  }, [rows, q, ranked]);
 
   const add = async () => {
     if (!newKey.trim() || !newVal.trim()) return;
@@ -38,7 +55,20 @@ export function Memory() {
       setErr("That looks like a password, key or card number. BEV doesn't store those.");
       return;
     }
-    await native.memoryUpsert(newKey.trim(), newVal.trim(), "manual");
+    const r = await remember(newKey.trim(), newVal.trim(), { category: "manual" });
+    if (r.kind === "conflict") {
+      setConfirm({
+        text: `This looks like "${r.existing.key}: ${r.existing.value}". Replace that memory with the new one?`,
+        run: async () => {
+          await remember(newKey.trim(), newVal.trim(), { category: "manual", replaces: r.existing.id });
+          setNewKey("");
+          setNewVal("");
+          refresh();
+        },
+      });
+      return;
+    }
+    if (r.kind === "duplicate") setErr(`Already remembered as "${r.existing.key}".`);
     setNewKey("");
     setNewVal("");
     refresh();
@@ -49,7 +79,7 @@ export function Memory() {
       setErr("That looks like sensitive data. Not saved.");
       return;
     }
-    await native.memoryUpsert(r.key, editVal.trim(), r.category);
+    await remember(r.key, editVal.trim(), { category: r.category });
     setEditing(null);
     refresh();
   };
@@ -68,9 +98,27 @@ export function Memory() {
     <div>
       <PageHeader
         title="Memory"
-        subtitle="Everything BEV remembers lives in a local SQLite database on this PC. Inspect, edit, export or permanently delete it."
+        subtitle="Everything BEV remembers (facts, notes and past conversations) lives in a local database on this PC. Inspect, edit, export or permanently delete it."
       />
       {err && <p className="mb-4 text-sm text-bev-danger">{err}</p>}
+
+      <div className="mb-4 flex gap-1" role="tablist">
+        {(["memories", "notes", "history"] as const).map((t) => (
+          <button
+            key={t}
+            role="tab"
+            aria-selected={tab === t}
+            onClick={() => setTab(t)}
+            className={`rounded-lg px-3 py-1.5 text-sm capitalize ${tab === t ? "bg-white/10 text-white" : "text-slate-400 hover:text-slate-200"}`}
+          >
+            {t === "memories" ? "Facts & preferences" : t}
+          </button>
+        ))}
+      </div>
+      {tab === "notes" && <NotesPanel />}
+      {tab === "history" && <HistoryPanel />}
+      {tab === "memories" && (
+        <>
 
       <Section title="Add a memory">
         <div className="flex flex-col gap-2 md:flex-row">
@@ -96,7 +144,7 @@ export function Memory() {
                 setConfirm({
                   text: `Permanently delete all ${rows.length} memories? This can't be undone.`,
                   run: async () => {
-                    for (const r of rows) await native.memoryDelete(r.id);
+                    for (const r of rows) await forgetMemory(r.id);
                     refresh();
                   },
                 })
@@ -148,7 +196,7 @@ export function Memory() {
                       setConfirm({
                         text: `Delete the memory "${r.key}"? This can't be undone.`,
                         run: async () => {
-                          await native.memoryDelete(r.id);
+                          await forgetMemory(r.id);
                           refresh();
                         },
                       })
@@ -167,6 +215,10 @@ export function Memory() {
           )}
         </ul>
       </Section>
+
+          <SemanticSearchSettings />
+        </>
+      )}
 
       {confirm && (
         <ConfirmDialog

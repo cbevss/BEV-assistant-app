@@ -11,6 +11,7 @@ import { bevCloud } from "@/lib/bevCloud";
 import { appsApi, describeOpen, describeClose } from "@/lib/apps";
 import { controlCache, formatSnapshot, formatOcr, findText, centre, riskOfLabel, riskOfKeys, riskOfTyping } from "@/lib/control";
 import { diagnose, formatFindings, type Area } from "@/lib/diagnose";
+import * as brain from "@/brain/memory";
 
 /**
  * The BEV tool registry. Each tool has a JSON-schema spec the model sees, a
@@ -384,13 +385,15 @@ export const tools: Record<string, RegisteredTool> = {
     spec: {
       name: "remember",
       description:
-        "Save a user preference or fact to persistent memory, e.g. key='gaming mode apps' value='Discord, Spotify'. Never store passwords or secrets.",
+        "Save a fact or preference about the user to long-term memory, e.g. key='main browser' value='Chrome'. If it may clash with something already remembered, BEV says so: ask the user, then call again with replaces=<id> (it's an update) or distinct=true (both are true). Never store passwords or secrets.",
       parameters: {
         type: "object",
         properties: {
           key: { type: "string" },
           value: { type: "string" },
           category: { type: "string" },
+          replaces: { type: "number", description: "id of the memory this updates" },
+          distinct: { type: "boolean", description: "save even though a similar memory exists" },
         },
         required: ["key", "value"],
       },
@@ -401,18 +404,148 @@ export const tools: Record<string, RegisteredTool> = {
       if (looksSensitive(key, value)) {
         throw new Error("refused: that looks like a password, key or other sensitive data — BEV doesn't store those");
       }
-      await native.memoryUpsert(key, value, typeof a.category === "string" ? a.category : undefined);
-      return `remembered "${key}"`;
+      const r = await brain.remember(key, value, {
+        category: typeof a.category === "string" ? a.category : undefined,
+        replaces: a.replaces !== undefined ? num(a.replaces, "replaces") : undefined,
+        distinct: a.distinct === true || a.distinct === "true",
+      });
+      if (r.kind === "duplicate") return `Already remembered (#${r.existing.id} ${r.existing.key}: ${r.existing.value}). Nothing changed.`;
+      if (r.kind === "conflict")
+        return `Not saved yet: this may clash with memory #${r.existing.id} "${r.existing.key}: ${r.existing.value}". Ask the user whether the new one replaces it (call again with replaces=${r.existing.id}) or both are true (distinct=true).`;
+      return r.previous ? `Updated "${key}" (it was: ${r.previous}).` : `Remembered "${key}".`;
     },
   },
 
   recall_memories: {
     spec: {
       name: "recall_memories",
-      description: "List everything BEV currently remembers (keys, values, categories).",
-      parameters: { type: "object", properties: {}, required: [] },
+      description:
+        "Look up what BEV remembers about the user. With a query, finds the most relevant memories by meaning and words; without one, lists everything (up to 100).",
+      parameters: { type: "object", properties: { query: { type: "string" } }, required: [] },
     },
-    run: async () => JSON.stringify(await native.memoryList()),
+    run: async (a) => {
+      if (typeof a.query === "string" && a.query.trim()) {
+        const hits = await brain.searchMemories(a.query.trim(), 10);
+        if (hits.length === 0) return "Nothing remembered about that.";
+        return hits.map(({ item: m }) => `#${m.id} ${m.key}: ${m.value}`).join("\n");
+      }
+      const all = await native.memoryList();
+      if (all.length === 0) return "Nothing remembered yet.";
+      return all.slice(0, 100).map((m) => `#${m.id} ${m.key}: ${m.value}`).join("\n") + (all.length > 100 ? `\n(${all.length - 100} more; search with a query)` : "");
+    },
+  },
+
+  forget_memory: {
+    spec: {
+      name: "forget_memory",
+      description: "Delete one memory by its #id (from recall_memories) when the user asks BEV to forget it.",
+      parameters: { type: "object", properties: { id: { type: "number" } }, required: ["id"] },
+      sensitive: true,
+    },
+    run: async (a) => {
+      const id = num(a.id, "id");
+      const m = (await native.memoryList()).find((r) => r.id === id);
+      if (!m) return `There's no memory #${id}.`;
+      await brain.forgetMemory(id);
+      return `Forgot "${m.key}".`;
+    },
+  },
+
+  save_note: {
+    spec: {
+      name: "save_note",
+      description:
+        "Save something to the user's notes vault for later: research findings, instructions, a summary, details they'll want again. Always give the source (a URL, or 'conversation' if the user said it). To edit a note, pass its id.",
+      parameters: {
+        type: "object",
+        properties: {
+          title: { type: "string" },
+          body: { type: "string" },
+          source: { type: "string", description: "URL, file, or 'conversation'" },
+          tags: { type: "string", description: "comma-separated" },
+          id: { type: "number", description: "existing note to replace" },
+        },
+        required: ["title", "body", "source"],
+      },
+    },
+    run: async (a) => {
+      const title = str(a.title, "title");
+      const body = str(a.body, "body");
+      if (looksLikeSecretValue(body)) throw new Error("that looks like it contains a key, ID or card number; BEV doesn't store those");
+      const id = await brain.saveNote({
+        id: a.id !== undefined ? num(a.id, "id") : undefined,
+        title,
+        body,
+        source: typeof a.source === "string" ? a.source.trim() : "",
+        tags: typeof a.tags === "string" ? a.tags : "",
+      });
+      return `Saved note #${id} "${title}".`;
+    },
+  },
+
+  search_notes: {
+    spec: {
+      name: "search_notes",
+      description: "Search the user's notes vault by meaning and words. Returns titles, snippets and sources; use read_note for the full text. Cite the source when you use a note.",
+      parameters: { type: "object", properties: { query: { type: "string" } }, required: ["query"] },
+    },
+    untrustedOutput: true,
+    run: async (a) => {
+      const hits = await brain.searchNotes(str(a.query, "query"), 6);
+      if (hits.length === 0) return "No notes about that.";
+      return hits
+        .map((h) => `#${h.id} ${JSON.stringify(h.title)} (${h.source || "no source"}, ${new Date(h.updated_at * 1000).toLocaleDateString("en-GB")}): ${h.snippet}`)
+        .join("\n");
+    },
+  },
+
+  read_note: {
+    spec: {
+      name: "read_note",
+      description: "Read a note from the vault in full by #id.",
+      parameters: { type: "object", properties: { id: { type: "number" } }, required: ["id"] },
+    },
+    untrustedOutput: true,
+    run: async (a) => {
+      const n = await native.noteGet(num(a.id, "id"));
+      if (!n) return "There's no such note.";
+      const body = n.body.length > 6000 ? `${n.body.slice(0, 6000)}… (truncated)` : n.body;
+      return `${n.title}\nSource: ${n.source || "none"} · saved ${new Date(n.created_at * 1000).toLocaleDateString("en-GB")}${n.tags ? ` · tags: ${n.tags}` : ""}\n\n${body}`;
+    },
+  },
+
+  delete_note: {
+    spec: {
+      name: "delete_note",
+      description: "Delete a note from the vault by #id, when the user asks.",
+      parameters: { type: "object", properties: { id: { type: "number" } }, required: ["id"] },
+      sensitive: true,
+    },
+    run: async (a) => {
+      const id = num(a.id, "id");
+      const n = await native.noteGet(id);
+      if (!n) return "There's no such note.";
+      await brain.deleteNote(id);
+      return `Deleted note "${n.title}".`;
+    },
+  },
+
+  search_conversations: {
+    spec: {
+      name: "search_conversations",
+      description:
+        "Search past conversations with the user (kept on this PC) when they refer to something discussed before: \"what did we say about…\", \"that thing from last week\". Returns matching lines with dates.",
+      parameters: { type: "object", properties: { query: { type: "string" } }, required: ["query"] },
+    },
+    untrustedOutput: true,
+    run: async (a) => {
+      if (!useSettings.getState().settings.keepHistory) return "Conversation history is turned off in Memory settings.";
+      const hits = await native.convSearch(str(a.query, "query"), 8);
+      if (hits.length === 0) return "Nothing in past conversations matches that.";
+      return hits
+        .map((h) => `${new Date(h.at * 1000).toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" })} ${h.role === "user" ? "User" : "BEV"}: ${h.snippet}`)
+        .join("\n");
+    },
   },
 
   open_website: {

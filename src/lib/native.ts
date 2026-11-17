@@ -132,7 +132,58 @@ export const native = {
   diagSystem: () => invoke<SystemFacts>("diag_system"),
   diagNetwork: () => invoke<NetworkFacts>("diag_network"),
   diagEvents: () => invoke<EventFacts>("diag_events"),
+
+  // Second brain (brain.rs)
+  convAdd: (session: string, role: "user" | "assistant", text: string) => invoke<number>("conv_add", { session, role, text }),
+  convSearch: (query: string, limit?: number) => invoke<ConvHit[]>("conv_search", { query, limit }),
+  convSession: (session: string) => invoke<ConvMessage[]>("conv_session", { session }),
+  convSessions: (limit?: number) => invoke<ConvSession[]>("conv_sessions", { limit }),
+  convPrune: (keepDays: number) => invoke<number>("conv_prune", { keepDays }),
+  convClear: () => invoke<void>("conv_clear"),
+  notesList: () => invoke<Note[]>("notes_list"),
+  noteGet: (id: number) => invoke<Note | null>("note_get", { id }),
+  noteSave: (n: { id?: number; title: string; body: string; source?: string; tags?: string }) => invoke<number>("note_save", n),
+  noteDelete: (id: number) => invoke<void>("note_delete", { id }),
+  notesSearch: (query: string, limit?: number) => invoke<NoteHit[]>("notes_search", { query, limit }),
+  setEmbedding: (kind: "memory" | "note", id: number, vec: string) => invoke<void>("set_embedding", { kind, id, vec }),
+  embeddingsList: (kind: "memory" | "note") => invoke<Array<{ id: number; vec: string }>>("embeddings_list", { kind }),
 };
+
+export interface ConvHit {
+  id: number;
+  session: string;
+  role: "user" | "assistant";
+  snippet: string;
+  at: number;
+}
+export interface ConvMessage {
+  role: "user" | "assistant";
+  text: string;
+  at: number;
+}
+export interface ConvSession {
+  session: string;
+  started: number;
+  first: string;
+  count: number;
+}
+export interface Note {
+  id: number;
+  title: string;
+  body: string;
+  source: string;
+  tags: string;
+  created_at: number;
+  updated_at: number;
+  has_embedding: boolean;
+}
+export interface NoteHit {
+  id: number;
+  title: string;
+  snippet: string;
+  source: string;
+  updated_at: number;
+}
 
 export interface UiElement {
   id: number;

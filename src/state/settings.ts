@@ -33,6 +33,12 @@ export interface Settings {
   noiseSuppression: boolean;
   /** Talk over BEV to interrupt it. */
   bargeIn: boolean;
+  /** Keep a searchable history of conversations on this PC. */
+  keepHistory: boolean;
+  /** Days of history to keep. */
+  historyDays: number;
+  /** Search memories and notes by meaning (small model on this PC). */
+  semanticSearch: boolean;
   /** Which voice engine speaks: Windows (built-in), Kokoro (free, local) or ElevenLabs. */
   ttsEngine: "windows" | "kokoro" | "elevenlabs";
   /** Windows voice (when ttsEngine is "windows"). */
@@ -100,6 +106,9 @@ export const defaultSettings: Settings = {
   whisperSize: "base",
   noiseSuppression: false,
   bargeIn: true,
+  keepHistory: true,
+  historyDays: 90,
+  semanticSearch: true,
   ttsEngine: "windows",
   voiceId: "",
   kokoroVoice: "bm_george",

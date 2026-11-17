@@ -5,6 +5,7 @@
 //! returns an `Err`, never a fabricated success.
 
 mod audio;
+mod brain;
 mod control;
 mod diagnostics;
 mod apps;
@@ -76,6 +77,7 @@ pub fn run() {
             let conn = db::open(&db_path)?;
             // Task journal; anything left "running" was cut off last time.
             journal::init(&conn)?;
+            brain::init(&conn)?;
             let cut_off = journal::mark_interrupted(&conn, journal::now_ms())?;
             if cut_off > 0 {
                 log::info!("{cut_off} task(s) were interrupted last session");
@@ -171,6 +173,19 @@ pub fn run() {
             diagnostics::diag_system,
             diagnostics::diag_network,
             diagnostics::diag_events,
+            brain::conv_add,
+            brain::conv_search,
+            brain::conv_session,
+            brain::conv_sessions,
+            brain::conv_prune,
+            brain::conv_clear,
+            brain::notes_list,
+            brain::note_get,
+            brain::note_save,
+            brain::note_delete,
+            brain::notes_search,
+            brain::set_embedding,
+            brain::embeddings_list,
             system::delete_temp_file,
             system::open_settings_page,
             system::list_monitors,
