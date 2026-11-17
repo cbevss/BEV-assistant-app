@@ -49,7 +49,6 @@ asks for and the plan the work follows.
 - Application discovery/index (Start apps, Store packages, shortcuts, App Paths), resolution and verified execution.
 - Diagnostics for services, devices and drivers (performance, network, event-log stability and mic checks exist since 1.1.11).
 - Browser control beyond "open URL"; web research pipeline on the desktop.
-- Semantic memory / knowledge vault; conversation search.
 - Integrations (Gmail, Calendar, GitHub, Spotify, Discord, Home Assistant, MCP).
 - Design system documentation; HUD.
 
@@ -72,11 +71,19 @@ Order follows the spec's rule: build the underlying systems first, then connect 
 | C. Voice | Mic hot-plug + default-device tracking, calibration (level, clipping, noise floor), Whisper option for STT, barge-in while speaking | **Done in 1.1.10** |
 | D. Vision & control | UI Automation tree reading + invoke, OCR (Windows.Media.Ocr), keyboard/mouse fallback, hands-on troubleshooting flows | **Done in 1.1.11** |
 | — Diagnostics | Read-only performance, network, event-log stability and mic checks | **Done in 1.1.11** (services/devices/drivers later) |
-| E. Second brain | Conversation history, semantic memory (local embeddings), duplicates/contradictions, knowledge vault with sources | Later |
+| E. Second brain | Conversation history, semantic memory (local embeddings), duplicates/contradictions, knowledge vault with sources | **Done in 1.1.12** |
 | F. Advanced AI | Plan → act → verify loop, background tasks with progress/cancel, model routing per workload | Later |
 | G. Interface | Design-system tokens doc, HUD with real data, state visuals | Later |
 | H. Integrations | Connector framework + MCP; Gmail/Calendar/GitHub/Spotify/Home Assistant | Later |
 | I. Proactive | Desktop background monitoring (crashes, device loss, resource spikes), briefings (cloud side exists) | Later |
+
+## What 1.1.12 changed (Phase E)
+
+- **Conversation history** (`brain.rs`): what the user and BEV said is kept in SQLite with an FTS5 index (porter stemming), grouped into conversations (new after 30 minutes' quiet or a cleared chat). Screenshots, tool output and web content are not stored, and text that looks like a key or card number is replaced. There's an on/off switch and a retention setting (default 90 days, pruned at start-up). `search_conversations` lets BEV look back; the Memory page can browse, search and delete.
+- **Semantic memory**: all-MiniLM-L6-v2 (q8, ~23 MB) runs in a worker on the CPU; vectors are stored with each memory and note and backfilled in the background. Search ranks by meaning and words together and falls back to words alone when the model isn't available. With more than 40 memories, the prompt carries the ones relevant to the current request plus the most recent.
+- **Duplicates and contradictions**: `remember` spots an existing memory with the same or a similar key (or a close meaning) and won't overwrite it silently. BEV asks, then saves with `replaces` or `distinct`. Updates report the old value.
+- **Notes vault**: notes with title, body, tags and a source (URL, file or "conversation"), with full-text plus semantic search, and `save_note` / `search_notes` / `read_note` / `delete_note`. Note text is treated as outside content when read back.
+- **Not verified here**: the embedding model couldn't be downloaded in this environment, so semantic ranking has only been tested with stand-in vectors. The SQL (FTS5, triggers, pruning, embeddings) is unit-tested against real SQLite.
 
 ## What 1.1.11 changed (Phase D)
 

@@ -2,6 +2,7 @@ import { native } from "@/lib/native";
 import { useSettings, toolAllowed, autoApproveOn } from "@/state/settings";
 import { AiImage, AiMessage, AiProvider, ProviderError, ToolCall } from "./types";
 import { tools, toolSpecs, sensitiveReason, ToolOutput } from "./tools";
+import { memoriesForPrompt, recordExchange, startNewSession } from "@/brain/memory";
 import { buildSystemPrompt } from "./persona";
 
 export interface OrchestratorHooks {
@@ -36,10 +37,10 @@ export function _resetInterruptedCheck() {
 }
 
 /** Builds the system prompt from current settings, approved memories and what's on screen. */
-async function currentSystemPrompt(): Promise<string> {
+async function currentSystemPrompt(userText = ""): Promise<string> {
   const s = useSettings.getState().settings;
   const [memories, fg] = await Promise.all([
-    native.memoryList().catch(() => []),
+    memoriesForPrompt(userText).catch(() => []),
     // Screen awareness is governed by the look_at_screen permission.
     toolAllowed("look_at_screen") ? native.foregroundWindow().catch(() => null) : Promise.resolve(null),
   ]);
@@ -103,6 +104,7 @@ export class Orchestrator {
 
   reset() {
     this.history = [];
+    startNewSession();
   }
 
   getHistory(): readonly AiMessage[] {
@@ -118,6 +120,7 @@ export class Orchestrator {
     try {
       const text = await this.run(userText, runId, signal);
       if (runId !== null) native.journalFinish(runId, "done", text).catch(() => {});
+      recordExchange(userText, text).catch(() => {});
       return text;
     } catch (e) {
       const aborted = e instanceof DOMException && e.name === "AbortError";
@@ -131,7 +134,7 @@ export class Orchestrator {
     this.trimHistory();
     let finalText = "";
     const note = await interruptedNote();
-    const system = [await currentSystemPrompt(), note].filter(Boolean).join("\n\n");
+    const system = [await currentSystemPrompt(userText), note].filter(Boolean).join("\n\n");
     // Only advertise tools the user hasn't revoked.
     const specs = toolSpecs().filter((t) => toolAllowed(t.name));
 

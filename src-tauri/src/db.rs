@@ -68,7 +68,8 @@ pub fn memory_upsert(
     let conn = state.db.lock().unwrap();
     conn.execute(
         "INSERT INTO memories (key, value, category) VALUES (?1, ?2, ?3)
-         ON CONFLICT(key) DO UPDATE SET value=?2, category=?3, updated_at=strftime('%s','now')",
+         ON CONFLICT(key) DO UPDATE SET value=?2, category=?3, updated_at=strftime('%s','now'),
+           embedding=CASE WHEN value=?2 THEN embedding ELSE NULL END",
         rusqlite::params![key, value, category.unwrap_or_else(|| "general".into())],
     )?;
     Ok(())

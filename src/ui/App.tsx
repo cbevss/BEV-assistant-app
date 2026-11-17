@@ -18,6 +18,7 @@ import { Settings } from "./pages/Settings";
 import { Onboarding } from "./pages/Onboarding";
 import { ApprovalModal } from "./components/ApprovalModal";
 import { TitleBar } from "./components/TitleBar";
+import { pruneHistory, startBrain } from "@/brain/memory";
 import { bootstrapVoice, getController, maybeStartListening, setPrivacy } from "@/voice/bootstrap";
 import { startMonitor } from "@/lib/monitor";
 import { check } from "@tauri-apps/plugin-updater";
@@ -81,6 +82,10 @@ export function App() {
 
       // CPU/RAM alerts, when switched on in Settings.
       startMonitor();
+
+      // Second brain: trim old history, then fill in semantic-search vectors.
+      pruneHistory().catch(() => {});
+      startBrain();
 
       // Wire the full voice vertical slice (shortcut + tray + controller).
       bootstrapVoice().catch(() => {});
