@@ -47,8 +47,7 @@ asks for and the plan the work follows.
 
 ### Missing
 - Application discovery/index (Start apps, Store packages, shortcuts, App Paths), resolution and verified execution.
-- UI Automation, OCR, mouse/keyboard control (vision is screenshot → model only).
-- Diagnostics (event logs, services, devices, drivers, network tests).
+- Diagnostics for services, devices and drivers (performance, network, event-log stability and mic checks exist since 1.1.11).
 - Browser control beyond "open URL"; web research pipeline on the desktop.
 - Semantic memory / knowledge vault; conversation search.
 - Integrations (Gmail, Calendar, GitHub, Spotify, Discord, Home Assistant, MCP).
@@ -70,14 +69,27 @@ Order follows the spec's rule: build the underlying systems first, then connect 
 |---|---|---|
 | A. Foundation | Safety layer (untrusted-content guard, risk levels), task journal + crash recovery, per-tool timeouts | **Done in 1.1.9** |
 | B. Windows intelligence | App discovery + persistent index, resolver (aliases, ranking, ambiguity, not-installed), execution (Store activation, Win32, shortcuts, URIs), launch verification, graceful close, default browser | **Done in 1.1.9** (browser page control → D) |
-| C. Voice | Mic hot-plug + default-device tracking, calibration (level, clipping, noise floor), Whisper option for STT, barge-in while speaking | Next |
-| D. Vision & control | UI Automation tree reading + invoke, OCR (Windows.Media.Ocr), keyboard/mouse fallback, hands-on troubleshooting flows | Next |
-| — Diagnostics | Read-only event log, services, devices, drivers, network tools | With D |
+| C. Voice | Mic hot-plug + default-device tracking, calibration (level, clipping, noise floor), Whisper option for STT, barge-in while speaking | **Done in 1.1.10** |
+| D. Vision & control | UI Automation tree reading + invoke, OCR (Windows.Media.Ocr), keyboard/mouse fallback, hands-on troubleshooting flows | **Done in 1.1.11** |
+| — Diagnostics | Read-only performance, network, event-log stability and mic checks | **Done in 1.1.11** (services/devices/drivers later) |
 | E. Second brain | Conversation history, semantic memory (local embeddings), duplicates/contradictions, knowledge vault with sources | Later |
 | F. Advanced AI | Plan → act → verify loop, background tasks with progress/cancel, model routing per workload | Later |
 | G. Interface | Design-system tokens doc, HUD with real data, state visuals | Later |
 | H. Integrations | Connector framework + MCP; Gmail/Calendar/GitHub/Spotify/Home Assistant | Later |
 | I. Proactive | Desktop background monitoring (crashes, device loss, resource spikes), briefings (cloud side exists) | Later |
+
+## What 1.1.11 changed (Phase D)
+
+**Control** (`src-tauri/src/control/`):
+- `uia`: one worker thread owns the UI Automation client. `read_app_controls` fetches a window's control tree in one cached call, keeps interactive controls and readable text (capped, reading order, password values never read), and `use_control` operates them through Invoke/Toggle/SelectionItem/ExpandCollapse/Value patterns, reading the state back to verify. It falls back to a real click only when a control has no pattern, and says that result isn't confirmed.
+- `ocr`: Windows.Media.Ocr on the front window, its display, or all displays, entirely on the PC, with word boxes mapped to desktop pixels (`read_screen_text`, `click_on_screen` by text).
+- `input`: SendInput keys, Unicode typing and clicks; the pointer is put back afterwards. Screenshot points are mapped back to the desktop with the geometry of the last capture.
+- `guard` (native hard limits): no typing or keys into terminals, the Run box, Start search, the Registry Editor or UAC prompts; never into password boxes; no Win+R / Win+X; no input while an exclusive-fullscreen game is in front; never BEV's own window.
+- Approval (`sensitiveCheck`, live): clicking anything labelled delete/send/buy/install/sign out/allow…, Enter in messaging apps, and Shift+Delete ask first, saying why. Control tools are forbidden in routines.
+
+**Diagnostics** (`src-tauri/src/diagnostics.rs`, `src/lib/diagnose.ts`): CPU/memory with the biggest users grouped by app, disk space, uptime, pending-restart updates; internet vs DNS vs blocked-traffic tests; a week of app crashes/freezes, blue screens and unexpected shutdowns from the event log (fixed script); microphone state. `diagnose_pc` reports plain findings with fixes, and the persona troubleshoots check → explain → fix with consent.
+
+**Not verified on a real PC**: the UI Automation, OCR, input and event-log code is compiled by Windows CI only. Pure logic (key parsing, guards, element shaping, coordinate mapping, risk labels, findings) is unit-tested.
 
 ## What 1.1.9 changed (Phases A and B)
 

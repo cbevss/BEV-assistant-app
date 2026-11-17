@@ -5,6 +5,8 @@
 //! returns an `Err`, never a fabricated success.
 
 mod audio;
+mod control;
+mod diagnostics;
 mod apps;
 mod appengine;
 mod db;
@@ -158,6 +160,17 @@ pub fn run() {
             system::take_screenshot,
             screen::capture_screen,
             screen::foreground_window,
+            control::ui_read,
+            control::ui_act,
+            control::screen_ocr,
+            control::input_keys,
+            control::input_type,
+            control::input_click,
+            control::point_info,
+            control::input_target,
+            diagnostics::diag_system,
+            diagnostics::diag_network,
+            diagnostics::diag_events,
             system::delete_temp_file,
             system::open_settings_page,
             system::list_monitors,

@@ -37,3 +37,8 @@ export function looksSensitive(...parts: string[]): boolean {
   const text = parts.join(" ");
   return PATTERNS.some((p) => p.test(text)) || hasCardNumber(text);
 }
+
+/** Stricter than looksSensitive: actual secret values (keys, card numbers), not just the words. */
+export function looksLikeSecretValue(text: string): boolean {
+  return PATTERNS.slice(1).some((p) => p.test(text)) || hasCardNumber(text);
+}

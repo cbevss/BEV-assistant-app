@@ -87,6 +87,11 @@ export function Security() {
                         needs approval
                       </span>
                     )}
+                    {!isSensitive(t.name) && tools[t.name]?.sensitiveCheck && (
+                      <span className="rounded bg-amber-400/15 px-1.5 text-[10px] uppercase tracking-wider text-amber-300">
+                        asks before risky actions
+                      </span>
+                    )}
                   </div>
                   <p className="text-xs text-slate-500">{t.description}</p>
                 </div>
