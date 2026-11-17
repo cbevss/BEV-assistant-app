@@ -79,6 +79,7 @@ export class VoiceController {
       onToolResult: (name, ok, result) =>
         useAssistant.getState().pushMessage({ role: "tool", content: result, toolName: name, ok }),
       requestApproval: (_call, description) => this.approve(description),
+      onPlan: (plan) => useAssistant.getState().setPlan(plan),
     });
   }
 

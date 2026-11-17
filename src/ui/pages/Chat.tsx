@@ -4,6 +4,7 @@ import { useSettings, ProviderId } from "@/state/settings";
 import { Orchestrator } from "@/ai/orchestrator";
 import { makeProvider, providerLabels } from "@/ai/factory";
 import { Select, Button } from "../components/Form";
+import { PlanView } from "../components/PlanView";
 
 /**
  * One chat orchestrator for the app's lifetime, so conversation context
@@ -20,6 +21,7 @@ function getChatOrchestrator(): Orchestrator {
         useAssistant.getState().pushMessage({ role: "tool", content: result, toolName: name, ok }),
       requestApproval: (_c, description) =>
         useAssistant.getState().requestApproval?.(description) ?? Promise.resolve(false),
+      onPlan: (plan) => useAssistant.getState().setPlan(plan),
     });
   } else {
     chatOrch.setProvider(makeProvider(s));
@@ -28,7 +30,7 @@ function getChatOrchestrator(): Orchestrator {
 }
 
 export function Chat() {
-  const { messages, pushMessage, clearMessages, state, setState } = useAssistant();
+  const { messages, pushMessage, clearMessages, state, setState, plan } = useAssistant();
   const { settings, update } = useSettings();
   const [input, setInput] = useState("");
   const abortRef = useRef<AbortController | null>(null);
@@ -106,6 +108,7 @@ export function Chat() {
             {m.role === "tool" ? `${m.ok ? "✓" : "✕"} ${m.toolName}: ${truncate(m.content, 400)}` : m.content}
           </div>
         ))}
+        {plan && plan.length > 0 && <PlanView plan={plan} />}
         {busy && <div className="text-xs text-bev-violet">{state === "executing" ? "Working on it…" : "Thinking…"}</div>}
         <div ref={endRef} />
       </div>

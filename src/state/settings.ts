@@ -20,6 +20,11 @@ export interface Settings {
   anthropicModel: string;
   openaiModel: string;
   ollamaModel: string;
+  /** Send quick, simple requests to a faster, cheaper model. */
+  modelRouting: boolean;
+  anthropicFastModel: string;
+  openaiFastModel: string;
+  ollamaFastModel: string;
   ollamaHost: string;
   personality: Personality;
   customPersonality: string;
@@ -97,6 +102,10 @@ export const defaultSettings: Settings = {
   anthropicModel: "claude-sonnet-5-5",
   openaiModel: "gpt-4.1-mini",
   ollamaModel: "llama3.1",
+  modelRouting: true,
+  anthropicFastModel: "claude-haiku-5-5",
+  openaiFastModel: "gpt-4.1-nano",
+  ollamaFastModel: "",
   ollamaHost: "http://localhost:11434",
   personality: "casual",
   customPersonality: "",

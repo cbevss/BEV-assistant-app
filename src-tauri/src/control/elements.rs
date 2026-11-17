@@ -11,6 +11,7 @@ pub const PAT_EXPAND: u8 = 16;
 
 /// What UI Automation reports for one element (cached in one cross-process call).
 #[derive(Debug, Clone, Default)]
+#[allow(dead_code)] // automation_id/focusable are read for future matching
 pub struct RawElement {
     pub name: String,
     pub control_type: i32,

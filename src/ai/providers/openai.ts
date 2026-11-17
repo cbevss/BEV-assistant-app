@@ -27,7 +27,7 @@ export class OpenAiProvider implements AiProvider {
       method: "POST",
       headers: { "content-type": "application/json", authorization: `Bearer ${key}` },
       body: JSON.stringify({
-        model: this.model,
+        model: req.model || this.model,
         // max_completion_tokens works on every chat model; newer ones reject
         // max_tokens. Temperature only when asked, as reasoning models refuse it.
         max_completion_tokens: req.maxTokens ?? 1024,

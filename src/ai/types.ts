@@ -46,6 +46,8 @@ export interface ChatRequest {
   messages: AiMessage[];
   tools: ToolSpec[];
   maxTokens?: number;
+  /** Use this model for this request instead of the provider's default (model routing). */
+  model?: string;
   temperature?: number;
   signal?: AbortSignal;
 }

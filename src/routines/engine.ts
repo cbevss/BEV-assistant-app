@@ -17,6 +17,8 @@ export const ROUTINE_FORBIDDEN = new Set([
   "list_routines",
   // A screenshot is only useful to the AI; a routine has no one to look at it.
   "look_at_screen",
+  // Plans belong to a conversation with the AI.
+  "update_plan",
   // Controlling apps needs someone watching: nothing unattended clicks or types.
   "read_app_controls",
   "use_control",

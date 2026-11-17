@@ -4,6 +4,8 @@ import { AiImage, AiMessage, AiProvider, ProviderError, ToolCall } from "./types
 import { tools, toolSpecs, sensitiveReason, ToolOutput } from "./tools";
 import { memoriesForPrompt, recordExchange, startNewSession } from "@/brain/memory";
 import { buildSystemPrompt } from "./persona";
+import { parsePlan, unfinished, formatPlan, type PlanStep } from "./plan";
+import { classify, modelFor, maxTokensFor } from "./routing";
 
 export interface OrchestratorHooks {
   onState: (s: "thinking" | "executing" | "speaking" | "completed" | "error") => void;
@@ -11,7 +13,26 @@ export interface OrchestratorHooks {
   onToolResult: (name: string, ok: boolean, result: string) => void;
   /** Return true to allow a sensitive tool call. */
   requestApproval: (call: ToolCall, description: string) => Promise<boolean>;
+  /** The task plan changed (update_plan). */
+  onPlan?: (plan: PlanStep[]) => void;
 }
+
+export interface OrchestratorOptions {
+  /** Runs unattended: no screen/input tools, no questions, a report at the end. */
+  background?: boolean;
+}
+
+/** Tools a background task may not use: nobody is watching the screen. */
+export const BACKGROUND_FORBIDDEN = new Set([
+  "look_at_screen",
+  "use_control",
+  "click_on_screen",
+  "press_keys",
+  "type_text",
+  "start_background_task",
+]);
+
+const BACKGROUND_NOTE = `You are running as a BACKGROUND TASK: the user isn't watching and can't answer questions. Write a plan with update_plan, work through it, make sensible choices and say which ones you made. Actions that need the user's approval will be refused: note them for the user instead. End with a short report of what you found or did, including anything left for the user.`;
 
 let interruptedChecked = false;
 
@@ -98,9 +119,13 @@ const MAX_HISTORY = 30;
  */
 export class Orchestrator {
   private history: AiMessage[] = [];
-  private readonly maxSteps = 6;
+  private plan: PlanStep[] | null = null;
 
-  constructor(private provider: AiProvider, private hooks: OrchestratorHooks) {}
+  constructor(private provider: AiProvider, private hooks: OrchestratorHooks, private opts: OrchestratorOptions = {}) {}
+
+  getPlan(): readonly PlanStep[] | null {
+    return this.plan;
+  }
 
   reset() {
     this.history = [];
@@ -120,7 +145,7 @@ export class Orchestrator {
     try {
       const text = await this.run(userText, runId, signal);
       if (runId !== null) native.journalFinish(runId, "done", text).catch(() => {});
-      recordExchange(userText, text).catch(() => {});
+      if (!this.opts.background) recordExchange(userText, text).catch(() => {});
       return text;
     } catch (e) {
       const aborted = e instanceof DOMException && e.name === "AbortError";
@@ -132,17 +157,26 @@ export class Orchestrator {
   private async run(userText: string, runId: number | null, signal?: AbortSignal): Promise<string> {
     this.history.push({ role: "user", content: userText });
     this.trimHistory();
+    const turnStart = Math.max(0, this.history.length - 1);
+    this.plan = null;
+    this.hooks.onPlan?.([]);
     let finalText = "";
-    const note = await interruptedNote();
-    const system = [await currentSystemPrompt(userText), note].filter(Boolean).join("\n\n");
-    // Only advertise tools the user hasn't revoked.
-    const specs = toolSpecs().filter((t) => toolAllowed(t.name));
+    let nudged = false;
+    let finished = false;
+    const bg = !!this.opts.background;
+    const note = bg ? "" : await interruptedNote();
+    const system = [await currentSystemPrompt(userText), note, bg ? BACKGROUND_NOTE : ""].filter(Boolean).join("\n\n");
+    // Only advertise tools the user hasn't revoked (and, in the background, that don't need a watcher).
+    const specs = toolSpecs().filter((t) => toolAllowed(t.name) && !(bg && BACKGROUND_FORBIDDEN.has(t.name)));
+    // A planned task gets room to work; a simple request stays short.
+    const limit = () => (this.plan ? 20 : 8);
 
-    for (let step = 0; step < this.maxSteps; step++) {
+    for (let step = 0; step < limit(); step++) {
       if (signal?.aborted) throw new DOMException("aborted", "AbortError");
       this.hooks.onState("thinking");
 
-      const res = await this.chatWithRetry(system, specs, signal);
+      const workload = classify(userText, this.history.slice(turnStart), { hasPlan: !!this.plan, background: bg });
+      const res = await this.chatWithRetry(system, specs, signal, workload);
 
       if (res.text || res.toolCalls.length) {
         // One assistant message carrying both text and tool calls, so providers
@@ -158,11 +192,28 @@ export class Orchestrator {
         this.hooks.onAssistantText(res.text);
       }
 
-      if (res.toolCalls.length === 0) break;
+      if (res.toolCalls.length === 0) {
+        // Verify before finishing: a plan with open steps gets one reminder.
+        const open = unfinished(this.plan);
+        if (open.length && !nudged && this.plan) {
+          nudged = true;
+          this.history.push({
+            role: "user",
+            content: `[BEV check, not from the user] Your plan still has unfinished steps:\n${formatPlan(this.plan)}\nContinue them, or mark them failed/skipped with the reason, then give your final answer. Only report what the tool results confirm.`,
+          });
+          continue;
+        }
+        finished = true;
+        break;
+      }
 
       this.hooks.onState("executing");
       for (const call of res.toolCalls) {
-        const result = await this.runTool(call, signal);
+        if (bg && BACKGROUND_FORBIDDEN.has(call.name)) {
+          this.history.push({ role: "tool", toolCallId: call.id, toolName: call.name, content: `${call.name} isn't available in background tasks.` });
+          continue;
+        }
+        const result = call.name === "update_plan" ? this.applyPlan(call) : await this.runTool(call, signal);
         const untrusted = result.ok && !!tools[call.name]?.untrustedOutput;
         this.history.push({
           role: "tool",
@@ -179,16 +230,39 @@ export class Orchestrator {
       }
     }
 
+    if (!finished) {
+      const open = unfinished(this.plan);
+      const tail = open.length ? ` Still to do: ${open.map((s) => s.text).join("; ")}.` : "";
+      finalText = `${finalText ? `${finalText}\n\n` : ""}I stopped here because the task took more steps than I'm allowed in one go.${tail} Ask me to carry on if you want.`;
+      this.hooks.onAssistantText(finalText);
+    }
     this.hooks.onState("completed");
     return finalText;
   }
 
+  /** update_plan: validated here because the plan belongs to this run. */
+  private applyPlan(call: ToolCall): { ok: boolean; text: string; images?: AiImage[] } {
+    if (!toolAllowed("update_plan")) return { ok: false, text: "permission for update_plan is revoked in Security settings" };
+    try {
+      const plan = parsePlan(call.args.steps);
+      this.plan = plan;
+      this.hooks.onPlan?.(plan);
+      const open = unfinished(plan).length;
+      return { ok: true, text: open ? `Plan saved (${open} step${open === 1 ? "" : "s"} to go).` : "Plan saved: every step is finished. Give your final answer." };
+    } catch (e) {
+      return { ok: false, text: `error: ${e instanceof Error ? e.message : String(e)}` };
+    }
+  }
+
   /** One retry with backoff on transient (network / 5xx) provider failures. */
-  private async chatWithRetry(system: string, specs: ReturnType<typeof toolSpecs>, signal?: AbortSignal) {
-    const req = { system, messages: this.history, tools: specs, signal };
+  private async chatWithRetry(system: string, specs: ReturnType<typeof toolSpecs>, signal: AbortSignal | undefined, workload: ReturnType<typeof classify>) {
+    const model = modelFor(useSettings.getState().settings, workload);
+    const req = { system, messages: this.history, tools: specs, signal, model, maxTokens: maxTokensFor(workload) };
     try {
       return await this.provider.chat(req);
     } catch (e) {
+      // The fast model failed (wrong name, not pulled, overloaded): use the main one.
+      if (model && !signal?.aborted) return await this.provider.chat({ ...req, model: undefined, maxTokens: maxTokensFor("complex") });
       const retriable = e instanceof ProviderError && e.retriable;
       if (!retriable || signal?.aborted) throw e;
       await new Promise((r) => setTimeout(r, 1200));

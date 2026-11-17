@@ -12,6 +12,7 @@ import { appsApi, describeOpen, describeClose } from "@/lib/apps";
 import { controlCache, formatSnapshot, formatOcr, findText, centre, riskOfLabel, riskOfKeys, riskOfTyping } from "@/lib/control";
 import { diagnose, formatFindings, type Area } from "@/lib/diagnose";
 import * as brain from "@/brain/memory";
+import { startBackgroundTask, cancelBackgroundTask, useBackground, describeTask } from "./background";
 
 /**
  * The BEV tool registry. Each tool has a JSON-schema spec the model sees, a
@@ -736,6 +737,70 @@ Object.assign(tools, {
       };
       await useRoutines.getState().save(routine);
       return `created routine "${name}" with ${steps.length} step${steps.length === 1 ? "" : "s"}. Say "${routine.triggers[0]}" to run it.`;
+    },
+  },
+
+  start_background_task: {
+    spec: {
+      name: "start_background_task",
+      description:
+        "Hand off a longer job to work on in the background while the user carries on: research, comparing options, checking several things, organising notes. Give a complete, self-contained goal (it won't see this conversation). It can't use the screen or keyboard, and anything needing approval is listed for the user. The user is notified when it finishes. Not for things that need doing right now or that must happen while the PC is off (use track_task for those).",
+      parameters: { type: "object", properties: { goal: { type: "string" } }, required: ["goal"] },
+    },
+    run: async (a) => {
+      const t = startBackgroundTask(str(a.goal, "goal"));
+      return `Started background task #${t.id}. The user will get a notification when it's done; they can watch or cancel it on the Dashboard.`;
+    },
+  },
+
+  list_background_tasks: {
+    spec: {
+      name: "list_background_tasks",
+      description: "Show BEV's background tasks: progress, results and anything waiting for the user's OK.",
+      parameters: { type: "object", properties: {}, required: [] },
+    },
+    run: async () => {
+      const ts = useBackground.getState().tasks;
+      return ts.length ? ts.slice(0, 10).map(describeTask).join("\n") : "No background tasks.";
+    },
+  },
+
+  cancel_background_task: {
+    spec: {
+      name: "cancel_background_task",
+      description: "Stop a running background task by #id.",
+      parameters: { type: "object", properties: { id: { type: "number" } }, required: ["id"] },
+    },
+    run: async (a) => (cancelBackgroundTask(num(a.id, "id")) ? "Cancelled." : "That task isn't running."),
+  },
+
+  update_plan: {
+    spec: {
+      name: "update_plan",
+      description:
+        "For tasks with three or more steps: write the plan before acting, then call again to mark each step in_progress / done / failed / skipped as you go, with a short note of the evidence (what the tool reported). Finish only when every step is done, failed or skipped. The user sees this plan.",
+      parameters: {
+        type: "object",
+        properties: {
+          steps: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                text: { type: "string" },
+                status: { type: "string", enum: ["pending", "in_progress", "done", "failed", "skipped"] },
+                note: { type: "string" },
+              },
+              required: ["text", "status"],
+            },
+          },
+        },
+        required: ["steps"],
+      },
+    },
+    // Handled inside the Orchestrator, which owns the plan for its run.
+    run: async () => {
+      throw new Error("update_plan is handled by the orchestrator");
     },
   },
 
