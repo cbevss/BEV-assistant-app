@@ -2,7 +2,7 @@
  * Turns measured facts into plain findings for troubleshooting. Thresholds
  * live here (tested); the facts come from read-only native checks.
  */
-import { native, type EventFacts, type NetworkFacts, type SystemFacts } from "./native";
+import { native, type DeviceFacts, type EventFacts, type NetworkFacts, type SystemFacts } from "./native";
 import { winMics, endpointProblems, type WinInput } from "@/voice/mic";
 
 export type Level = "ok" | "warn" | "problem";
@@ -85,7 +85,38 @@ export function audioFindings(inputs: WinInput[], micLabel: string, usesWindowsE
   return problems.map((p) => ({ level: p.kind === "muted" ? "problem" : "warn", area: "Microphone", summary: p.message }));
 }
 
-export type Area = "all" | "performance" | "network" | "stability" | "audio";
+/** Device Manager error codes people actually meet. */
+const PNP_CODES: Record<number, string> = {
+  1: "isn't set up correctly",
+  10: "can't start",
+  12: "can't find enough free resources",
+  14: "needs a restart",
+  18: "needs its driver reinstalled",
+  19: "has a bad registry entry",
+  28: "has no driver installed",
+  31: "isn't working properly (driver problem)",
+  39: "has a missing or corrupt driver",
+  43: "was stopped by Windows after reporting a problem",
+  45: "isn't connected",
+  52: "has an unsigned driver",
+};
+
+export function deviceFindings(d: DeviceFacts, now = Date.now()): Finding[] {
+  const out: Finding[] = [];
+  for (const p of d.problems.slice(0, 6)) {
+    if (p.code === 45) continue; // unplugged devices aren't a fault
+    out.push({ level: "warn", area: "Devices", summary: `${p.name || "A device"} ${PNP_CODES[p.code] ?? `has a problem (code ${p.code})`}.`, fix: p.code === 28 || p.code === 18 || p.code === 39 ? "Install its driver from the maker's website, or try Windows Update → Optional updates." : "Unplug and replug it, or update its driver in Device Manager." });
+  }
+  for (const s of d.stopped) out.push({ level: "problem", area: "Services", summary: `${s.display || s.name} isn't running but should be.`, fix: "Restarting the PC usually starts it again." });
+  for (const drv of d.drivers.filter((x) => x.class === "DISPLAY")) {
+    const t = Date.parse(drv.date);
+    if (Number.isFinite(t) && now - t > 365 * 86400_000) out.push({ level: "warn", area: "Drivers", summary: `The graphics driver for ${drv.device} is from ${drv.date}.`, fix: "Update it from AMD, NVIDIA or Intel's website, especially if games crash." });
+  }
+  if (!out.length) out.push({ level: "ok", area: "Devices", summary: "No device problems, key services are running and drivers look current." });
+  return out;
+}
+
+export type Area = "all" | "performance" | "network" | "stability" | "audio" | "devices";
 
 export function formatFindings(fs: Finding[]): string {
   const order: Record<Level, number> = { problem: 0, warn: 1, ok: 2 };
@@ -104,6 +135,7 @@ export async function diagnose(area: Area, mic: { label: string; usesWindowsEngi
   if (want("performance")) jobs.push(guard("Performance", native.diagSystem().then(systemFindings)));
   if (want("network")) jobs.push(guard("Internet", native.diagNetwork().then(networkFindings)));
   if (want("stability")) jobs.push(guard("Stability", native.diagEvents().then((e) => eventFindings(e))));
+  if (want("devices")) jobs.push(guard("Devices", native.diagDevices().then((d) => deviceFindings(d))));
   if (want("audio")) jobs.push(guard("Microphone", winMics.list().then((l) => audioFindings(l, mic.label, mic.usesWindowsEngine))));
   return (await Promise.all(jobs)).flat();
 }

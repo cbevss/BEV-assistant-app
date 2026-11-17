@@ -47,8 +47,6 @@ asks for and the plan the work follows.
 
 ### Missing
 - Application discovery/index (Start apps, Store packages, shortcuts, App Paths), resolution and verified execution.
-- Diagnostics for services, devices and drivers (performance, network, event-log stability and mic checks exist since 1.1.11).
-- Browser control beyond "open URL"; web research pipeline on the desktop.
 - Discord integration (others since 1.1.15).
 
 ### Security posture
@@ -75,6 +73,12 @@ Order follows the spec's rule: build the underlying systems first, then connect 
 | G. Interface | Design-system tokens doc, HUD with real data, state visuals | **Done in 1.1.14** |
 | H. Integrations | Connector framework + MCP; Gmail/Calendar/GitHub/Spotify/Home Assistant | **Done in 1.1.15** |
 | I. Proactive | Desktop background monitoring (crashes, device loss, resource spikes), briefings (cloud side exists) | **Done in 1.1.16** |
+
+## What 1.1.17 changed (research and device diagnostics)
+
+- **Web research**: `web_search` uses Claude's built-in web search (`web_search_20250305`, on the fast model) when the provider is Anthropic, with no extra key. Otherwise it uses a Brave Search API key, which also serves as a fallback. `read_web_page` reads public pages through a Rust fetcher: GET only, http/https, at most 3 MB, no credentials in URLs. It resolves the host and refuses loopback, private, link-local, CGNAT and multicast addresses on every redirect hop, so injected content can't reach the router or local services. Page text is extracted locally (main/article first; scripts, nav and footers dropped). Both outputs count as outside content, and the persona answers with sources and offers to save notes. Background tasks can now do real research.
+- **Device diagnostics** (`diagnose_pc` area "devices", fixed read-only script): present devices with Device Manager errors, in plain words (unplugged ones ignored); key auto-start services that aren't running (audio, networking, WMI, updates and so on); and graphics drivers over a year old.
+- Browsers themselves are operated through UI Automation, OCR and keys (1.1.11).
 
 ## What 1.1.16 changed (Phase I)
 

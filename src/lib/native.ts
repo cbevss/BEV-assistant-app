@@ -132,6 +132,7 @@ export const native = {
   diagSystem: () => invoke<SystemFacts>("diag_system"),
   diagNetwork: () => invoke<NetworkFacts>("diag_network"),
   diagEvents: (minutes?: number) => invoke<EventFacts>("diag_events", { minutes }),
+  diagDevices: () => invoke<DeviceFacts>("diag_devices"),
 
   // Second brain (brain.rs)
   convAdd: (session: string, role: "user" | "assistant", text: string) => invoke<number>("conv_add", { session, role, text }),
@@ -156,6 +157,7 @@ export const native = {
   mcpSpawn: (id: string, command: string, args: string[], env?: Record<string, string>) => invoke<void>("mcp_spawn", { id, command, args, env }),
   mcpSend: (id: string, message: string, timeoutSecs?: number) => invoke<string | null>("mcp_send", { id, message, timeoutSecs }),
   mcpKill: (id: string) => invoke<void>("mcp_kill", { id }),
+  webFetch: (url: string) => invoke<{ status: number; url: string; content_type: string; body: string }>("web_fetch", { url }),
   embeddingsList: (kind: "memory" | "note") => invoke<Array<{ id: number; vec: string }>>("embeddings_list", { kind }),
 };
 
@@ -312,4 +314,10 @@ export interface MonitorInfo {
   y: number;
   scale: number;
   primary: boolean;
+}
+
+export interface DeviceFacts {
+  problems: Array<{ name: string; class: string; status: string; code: number }>;
+  stopped: Array<{ name: string; display: string }>;
+  drivers: Array<{ device: string; class: string; version: string; date: string }>;
 }
