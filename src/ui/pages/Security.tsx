@@ -83,12 +83,12 @@ export function Security() {
                   <div className="flex items-center gap-2">
                     <span className="font-mono text-sm text-slate-200">{t.name}</span>
                     {isSensitive(t.name) && (
-                      <span className="rounded bg-bev-danger/15 px-1.5 text-[10px] uppercase tracking-wider text-bev-danger">
+                      <span className="rounded bg-bev-danger/15 px-1.5 text-[11px] text-bev-danger">
                         needs approval
                       </span>
                     )}
                     {!isSensitive(t.name) && tools[t.name]?.sensitiveCheck && (
-                      <span className="rounded bg-amber-400/15 px-1.5 text-[10px] uppercase tracking-wider text-amber-300">
+                      <span className="rounded bg-amber-400/15 px-1.5 text-[11px] text-amber-300">
                         asks before risky actions
                       </span>
                     )}

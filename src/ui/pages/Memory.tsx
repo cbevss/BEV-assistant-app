@@ -162,7 +162,7 @@ export function Memory() {
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
                   <span className="text-sm font-medium text-slate-100">{r.key}</span>
-                  <span className="rounded bg-white/5 px-1.5 text-[10px] uppercase tracking-wider text-slate-500">
+                  <span className="rounded bg-white/5 px-1.5 text-[11px] text-slate-500">
                     {r.category}
                   </span>
                 </div>

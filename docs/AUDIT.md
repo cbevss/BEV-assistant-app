@@ -50,7 +50,6 @@ asks for and the plan the work follows.
 - Diagnostics for services, devices and drivers (performance, network, event-log stability and mic checks exist since 1.1.11).
 - Browser control beyond "open URL"; web research pipeline on the desktop.
 - Integrations (Gmail, Calendar, GitHub, Spotify, Discord, Home Assistant, MCP).
-- Design system documentation; HUD.
 
 ### Security posture
 - Good: keys in Credential Manager; no arbitrary shell from the AI; `open_path` uses explorer with a single argument; screen/web text labelled as data in the prompt; approvals for power/close/programs.
@@ -73,9 +72,16 @@ Order follows the spec's rule: build the underlying systems first, then connect 
 | — Diagnostics | Read-only performance, network, event-log stability and mic checks | **Done in 1.1.11** (services/devices/drivers later) |
 | E. Second brain | Conversation history, semantic memory (local embeddings), duplicates/contradictions, knowledge vault with sources | **Done in 1.1.12** |
 | F. Advanced AI | Plan → act → verify loop, background tasks with progress/cancel, model routing per workload | **Done in 1.1.13** |
-| G. Interface | Design-system tokens doc, HUD with real data, state visuals | Later |
+| G. Interface | Design-system tokens doc, HUD with real data, state visuals | **Done in 1.1.14** |
 | H. Integrations | Connector framework + MCP; Gmail/Calendar/GitHub/Spotify/Home Assistant | Later |
 | I. Proactive | Desktop background monitoring (crashes, device loss, resource spikes), briefings (cloud side exists) | Later |
+
+## What 1.1.14 changed (Phase G)
+
+- `docs/DESIGN.md` documents the system: palette and semantic state colours, type roles and scale, surfaces, motion, writing and accessibility rules. `src/ui/design.ts` is the single source for state colours and words, used by the overlay orb, the sidebar and the Dashboard.
+- **Dashboard status line**: what BEV is doing in words, a live mic/voice level trace in the state colour (only while listening or speaking), the current plan step, and live facts (wake engine, speech engine, reply models including routing, background tasks). Every value comes from live state.
+- The sidebar's fixed "assistant online" text now shows the real state (privacy mode, mic off, or the current state).
+- All-caps tracked labels became sentence case; live numbers use tabular figures. Keyboard focus is visible everywhere, and `prefers-reduced-motion` turns motion off.
 
 ## What 1.1.13 changed (Phase F)
 
