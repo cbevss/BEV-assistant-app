@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { enable as enableAutostart, disable as disableAutostart, isEnabled as autostartEnabled } from "@tauri-apps/plugin-autostart";
 import { getVersion } from "@tauri-apps/api/app";
 import { useSettings, Personality } from "@/state/settings";
-import { PageHeader, Section, Field, Select, Slider, Toggle, TextArea, Button } from "../components/Form";
+import { PageHeader, Section, Field, Select, Slider, Toggle, TextArea, TextInput, Button } from "../components/Form";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { AppsIndex } from "../components/AppsIndex";
 import { applyAppearance } from "@/lib/appearance";
@@ -106,7 +106,7 @@ export function Settings() {
       </Section>
 
       <Section title="Proactive monitoring">
-        <Field label="Enable alerts" hint="BEV watches CPU/RAM and notifies you when a threshold is crossed. Off by default.">
+        <Field label="Keep an eye on the PC" hint="BEV notices high CPU or memory, app crashes, the internet dropping and disks filling up, and lets you know. Nothing pops up during a fullscreen game; it waits until afterwards. Off by default.">
           <Toggle label="Proactive monitoring" checked={settings.proactiveMonitoring} onChange={(proactiveMonitoring) => update({ proactiveMonitoring })} />
         </Field>
         {settings.proactiveMonitoring && (
@@ -117,8 +117,26 @@ export function Settings() {
             <Field label="RAM alert threshold">
               <Slider ariaLabel="RAM threshold" min={50} max={100} value={settings.ramAlertPercent} onChange={(ramAlertPercent) => update({ ramAlertPercent })} format={(v) => `${v}%`} />
             </Field>
+            <Field label="App crashes and blue screens">
+              <Toggle label="Watch for crashes" checked={settings.watch.crashes} onChange={(crashes) => update({ watch: { ...settings.watch, crashes } })} />
+            </Field>
+            <Field label="Internet dropping out">
+              <Toggle label="Watch the internet" checked={settings.watch.network} onChange={(network) => update({ watch: { ...settings.watch, network } })} />
+            </Field>
+            <Field label="Disks filling up">
+              <Toggle label="Watch disk space" checked={settings.watch.disk} onChange={(disk) => update({ watch: { ...settings.watch, disk } })} />
+            </Field>
           </>
         )}
+      </Section>
+
+      <Section title="Daily briefing">
+        <Field label="Time" hint="BEV gathers today's calendar, important email, tasks due and anything wrong with the PC, then tells you. Uses whichever of those you've connected. Leave empty for none.">
+          <TextInput type="time" aria-label="Briefing time" value={settings.briefingTime} onChange={(e) => update({ briefingTime: e.target.value })} />
+        </Field>
+        <Field label="Say it out loud" hint="Spoken if BEV isn't busy and quiet mode is off; it's also in Chat and as a notification.">
+          <Toggle label="Speak the briefing" checked={settings.briefingSpoken} onChange={(briefingSpoken) => update({ briefingSpoken })} />
+        </Field>
       </Section>
 
       <Section title="Diagnostics">

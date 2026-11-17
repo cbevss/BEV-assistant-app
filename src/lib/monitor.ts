@@ -1,4 +1,4 @@
-import { notify } from "./notify";
+import { raise } from "@/proactive/notices";
 import { native } from "./native";
 import { useSettings } from "@/state/settings";
 
@@ -18,13 +18,9 @@ export function startMonitor() {
   started = true;
 
   const over = { cpu: 0, ram: 0 };
-  const lastAlert = { cpu: 0, ram: 0 };
 
   const alert = async (kind: "cpu" | "ram", title: string, body: string) => {
-    const now = Date.now();
-    if (now - lastAlert[kind] < COOLDOWN_MS) return;
-    lastAlert[kind] = now;
-    await notify(title, body);
+    await raise("resources", title, body, { key: `resources:${kind}`, cooldownMs: COOLDOWN_MS });
   };
 
   const tick = async () => {
@@ -43,7 +39,7 @@ export function startMonitor() {
       const top = await native.getRunningApps(1).catch(() => []);
       await alert(
         "cpu",
-        "BEV: CPU running hot",
+        "CPU running hot",
         `CPU has been at ${Math.round(stats.cpu_usage)}% for the last 30 seconds.` +
           (top[0] ? ` Biggest app right now: ${top[0].name}.` : "")
       );
@@ -51,7 +47,7 @@ export function startMonitor() {
     if (over.ram >= SUSTAINED_SAMPLES) {
       await alert(
         "ram",
-        "BEV: memory nearly full",
+        "Memory nearly full",
         `RAM is at ${Math.round(stats.mem_percent)}% (${(stats.mem_used_mb / 1024).toFixed(1)} of ${(
           stats.mem_total_mb / 1024
         ).toFixed(0)} GB).`

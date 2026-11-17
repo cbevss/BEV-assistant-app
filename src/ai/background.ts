@@ -15,6 +15,8 @@ export type BgStatus = "running" | "done" | "failed" | "cancelled";
 export interface BgTask {
   id: number;
   goal: string;
+  /** Short name shown instead of the goal (e.g. "Daily briefing"). */
+  title?: string;
   status: BgStatus;
   startedAt: number;
   endedAt?: number;
@@ -65,12 +67,12 @@ export function configureBackground(d: BgDeps) {
 
 const short = (s: string, n = 140) => (s.length > n ? `${s.slice(0, n)}…` : s);
 
-export function startBackgroundTask(goal: string): BgTask {
+export function startBackgroundTask(goal: string, opts: { title?: string; quiet?: boolean } = {}): BgTask {
   if (!deps) throw new Error("background tasks aren't ready yet");
   const running = useBackground.getState().tasks.filter((t) => t.status === "running").length;
   if (running >= MAX_RUNNING) throw new Error(`${running} background tasks are already running; wait for one to finish or cancel one`);
   const id = nextId++;
-  const task: BgTask = { id, goal, status: "running", startedAt: Date.now(), plan: [], log: [], needsApproval: [] };
+  const task: BgTask = { id, goal, title: opts.title, status: "running", startedAt: Date.now(), plan: [], log: [], needsApproval: [] };
   const store = useBackground.getState();
   store.add(task);
   const ctl = new AbortController();
@@ -90,12 +92,12 @@ export function startBackgroundTask(goal: string): BgTask {
   o.send(goal, ctl.signal)
     .then((result) => {
       patch(id, { status: "done", result, endedAt: Date.now() });
-      d.notify("BEV finished a task", short(`${goal}: ${result || "done"}`, 220));
+      if (!opts.quiet) d.notify("BEV finished a task", short(`${opts.title ?? goal}: ${result || "done"}`, 220));
     })
     .catch((e) => {
       const cancelled = e instanceof DOMException && e.name === "AbortError";
       patch(id, { status: cancelled ? "cancelled" : "failed", result: cancelled ? "Cancelled." : String(e instanceof Error ? e.message : e), endedAt: Date.now() });
-      if (!cancelled) d.notify("BEV couldn't finish a task", short(goal, 200));
+      if (!cancelled && !opts.quiet) d.notify("BEV couldn't finish a task", short(opts.title ?? goal, 200));
     })
     .finally(() => controllers.delete(id));
   return task;

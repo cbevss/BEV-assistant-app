@@ -188,10 +188,11 @@ pub struct SysEvent {
     pub provider: String,
 }
 
-/// App crashes/hangs, unexpected shutdowns and blue screens from the last week.
+/// App crashes/hangs, unexpected shutdowns and blue screens in the last __MINUTES__ minutes
+/// (the number is filled in by BEV; nothing else in the script varies).
 const EVENTS_SCRIPT: &str = r#"
 $ErrorActionPreference = 'SilentlyContinue'
-$since = (Get-Date).AddDays(-7)
+$since = (Get-Date).AddMinutes(-__MINUTES__)
 $app = Get-WinEvent -FilterHashtable @{LogName='Application'; ProviderName='Application Error','Application Hang'; StartTime=$since} -MaxEvents 200 |
   ForEach-Object { [pscustomobject]@{ t = $_.TimeCreated.ToString('o'); kind = $(if ($_.Id -eq 1002) { 'hang' } else { 'crash' }); app = [string]$_.Properties[0].Value } }
 $sys = Get-WinEvent -FilterHashtable @{LogName='System'; Id=41,6008,1001; StartTime=$since} -MaxEvents 50 |
@@ -206,10 +207,13 @@ pub fn parse_events(stdout: &str) -> EventFacts {
 }
 
 #[tauri::command]
-pub async fn diag_events(app: tauri::AppHandle) -> BevResult<EventFacts> {
+pub async fn diag_events(app: tauri::AppHandle, minutes: Option<u32>) -> BevResult<EventFacts> {
     use tauri::Manager;
     let dir = app.path().app_cache_dir().map_err(|e| crate::error::BevError::Os(e.to_string()))?;
-    tauri::async_runtime::spawn_blocking(move || run_script(&dir, "diag-events.ps1", EVENTS_SCRIPT).map(|o| parse_events(&o)))
+    // Default: the last week. The value is a plain integer, so the script stays fixed text.
+    let mins = minutes.unwrap_or(7 * 24 * 60).clamp(1, 30 * 24 * 60);
+    let script = EVENTS_SCRIPT.replace("__MINUTES__", &mins.to_string());
+    tauri::async_runtime::spawn_blocking(move || run_script(&dir, "diag-events.ps1", &script).map(|o| parse_events(&o)))
         .await
         .map_err(|e| crate::error::BevError::Os(format!("task: {e}")))?
         .map_err(crate::error::BevError::Os)

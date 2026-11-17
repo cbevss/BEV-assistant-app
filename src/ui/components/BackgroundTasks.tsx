@@ -62,7 +62,7 @@ export function BackgroundTasks() {
             <li key={t.id} className="py-3">
               <div className="flex items-start justify-between gap-3">
                 <button className="min-w-0 flex-1 text-left" onClick={() => setOpen(open === t.id ? null : t.id)}>
-                  <div className="truncate text-sm text-slate-100">{t.goal}</div>
+                  <div className="truncate text-sm text-slate-100">{t.title ?? t.goal}</div>
                   <div className="text-xs text-slate-500">
                     <span className={STATUS[t.status].cls}>{STATUS[t.status].label}</span> · {elapsed(t, now)}
                     {t.status === "running" && current ? ` · ${current}` : ""}

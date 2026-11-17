@@ -74,7 +74,18 @@ Order follows the spec's rule: build the underlying systems first, then connect 
 | F. Advanced AI | Plan → act → verify loop, background tasks with progress/cancel, model routing per workload | **Done in 1.1.13** |
 | G. Interface | Design-system tokens doc, HUD with real data, state visuals | **Done in 1.1.14** |
 | H. Integrations | Connector framework + MCP; Gmail/Calendar/GitHub/Spotify/Home Assistant | **Done in 1.1.15** |
-| I. Proactive | Desktop background monitoring (crashes, device loss, resource spikes), briefings (cloud side exists) | Later |
+| I. Proactive | Desktop background monitoring (crashes, device loss, resource spikes), briefings (cloud side exists) | **Done in 1.1.16** |
+
+## What 1.1.16 changed (Phase I)
+
+- **Notices pipeline** (`src/proactive/notices.ts`): every proactive alert is de-duplicated with a cooldown and held back while a fullscreen game (exclusive or borderless) is in front or quiet mode is on. Afterwards it's delivered, as one summary if several piled up. The last six hours of notices go into the AI's prompt so BEV can bring them up when relevant, and they show on the Dashboard ("BEV noticed").
+- **Watchers** (under Settings → Keep an eye on the PC, each switchable):
+  - CPU/RAM thresholds (now routed through the pipeline);
+  - app crashes and freezes, blue screens and unexpected shutdowns, from a 15-minute event-log window every 10 minutes, plus the last 24 hours at start-up;
+  - the internet dropping (two misses in a row) and coming back, with the time it was down;
+  - disks under 5% / 5 GB free, at most daily.
+  - Device loss: the microphone fallback/return notices from 1.1.10 remain.
+- **Daily briefing**: at a chosen time (due for three hours, once a day, so a sleeping PC still gets it), a quiet background task gathers whatever is connected (calendar, important unread email, tracked tasks, PC notices). It then posts the briefing to Chat, notifies, and speaks it if BEV is idle and quiet mode is off. Phone briefings remain on BEV Cloud.
 
 ## What 1.1.15 changed (Phase H)
 

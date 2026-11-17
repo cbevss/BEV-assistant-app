@@ -4,6 +4,7 @@ import { AiImage, AiMessage, AiProvider, ProviderError, ToolCall } from "./types
 import { getTool, toolSpecs, sensitiveReason, ToolOutput } from "./tools";
 import { memoriesForPrompt, recordExchange, startNewSession } from "@/brain/memory";
 import { buildSystemPrompt } from "./persona";
+import { noticesForPrompt } from "@/proactive/notices";
 import { parsePlan, unfinished, formatPlan, type PlanStep } from "./plan";
 import { classify, modelFor, maxTokensFor } from "./routing";
 
@@ -65,7 +66,7 @@ async function currentSystemPrompt(userText = ""): Promise<string> {
     // Screen awareness is governed by the look_at_screen permission.
     toolAllowed("look_at_screen") ? native.foregroundWindow().catch(() => null) : Promise.resolve(null),
   ]);
-  return buildSystemPrompt(s, memories, foregroundLabel(fg));
+  return [buildSystemPrompt(s, memories, foregroundLabel(fg)), noticesForPrompt()].filter(Boolean).join("\n\n");
 }
 
 /** "Discord — #general (Discord.exe)", or "" for BEV itself / nothing useful. */

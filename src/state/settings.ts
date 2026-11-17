@@ -110,6 +110,12 @@ export interface Settings {
   listenOnStartup: boolean;
   gamingQuietMode: boolean;
   proactiveMonitoring: boolean;
+  /** What BEV keeps an eye on while proactive monitoring is on. */
+  watch: { crashes: boolean; network: boolean; disk: boolean };
+  /** Daily briefing time "HH:MM", or "" for none. */
+  briefingTime: string;
+  /** Speak the briefing (if BEV isn't busy), as well as notifying. */
+  briefingSpoken: boolean;
   cpuAlertPercent: number;
   ramAlertPercent: number;
   // Permissions: tool name → allowed
@@ -169,6 +175,9 @@ export const defaultSettings: Settings = {
   listenOnStartup: true,
   gamingQuietMode: false,
   proactiveMonitoring: false,
+  watch: { crashes: true, network: true, disk: true },
+  briefingTime: "",
+  briefingSpoken: true,
   cpuAlertPercent: 90,
   ramAlertPercent: 90,
   toolPermissions: {},

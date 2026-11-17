@@ -158,6 +158,20 @@ export class VoiceController {
    * Windows default (announced once, and switched back when it returns).
    */
   /** Is a conversation going on? (Don't swap mics mid-sentence.) */
+  /** Say something BEV noticed on its own (e.g. a briefing). Skipped while busy. */
+  async announce(text: string): Promise<boolean> {
+    if (this.busy || !text.trim()) return false;
+    try {
+      this.setState("speaking", "Briefing");
+      await this.tts.speak(text, { onLevel: (l) => this.setAudio(l) });
+      return true;
+    } catch {
+      return false;
+    } finally {
+      this.setState("idle");
+    }
+  }
+
   get busy() {
     return this.active;
   }

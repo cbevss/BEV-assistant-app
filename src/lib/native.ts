@@ -131,7 +131,7 @@ export const native = {
   // Diagnostics (read-only)
   diagSystem: () => invoke<SystemFacts>("diag_system"),
   diagNetwork: () => invoke<NetworkFacts>("diag_network"),
-  diagEvents: () => invoke<EventFacts>("diag_events"),
+  diagEvents: (minutes?: number) => invoke<EventFacts>("diag_events", { minutes }),
 
   // Second brain (brain.rs)
   convAdd: (session: string, role: "user" | "assistant", text: string) => invoke<number>("conv_add", { session, role, text }),
