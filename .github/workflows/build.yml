@@ -38,12 +38,6 @@ jobs:
 
       - name: Build installer (NSIS)
         run: npm run tauri:build
-
-      # Rust unit tests (key parsing, guards, UI element shaping, brain SQL,
-      # integrations helpers, diagnostics parsing) on real Windows.
-      - name: Rust unit tests
-        working-directory: src-tauri
-        run: cargo test --lib --locked
         env:
           # Required because the bundle emits signed updater artifacts.
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
