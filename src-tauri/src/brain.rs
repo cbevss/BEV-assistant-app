@@ -334,7 +334,8 @@ pub fn embeddings_list(state: State<AppState>, kind: String) -> BevResult<Vec<Em
     Ok(rows.into_iter().map(|(id, b)| Embedding { id, vec: base64::engine::general_purpose::STANDARD.encode(b) }).collect())
 }
 
-/// When text changes, its embedding is stale.
+/// When text changes, its embedding is stale. (memory_upsert does this in SQL.)
+#[allow(dead_code)]
 pub fn clear_memory_embedding_sql(c: &Connection, key: &str) -> rusqlite::Result<usize> {
     c.execute("UPDATE memories SET embedding=NULL WHERE key=?1", [key])
 }

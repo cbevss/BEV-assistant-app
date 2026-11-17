@@ -158,3 +158,91 @@ describe("task journal", () => {
     expect(await interruptedNote()).toBe("");
   });
 });
+
+describe("plan → act → verify", () => {
+  it("reminds once about unfinished plan steps before finishing", async () => {
+    const { h } = hooks(true);
+    const plans: unknown[] = [];
+    const o = new Orchestrator(
+      scripted([
+        { toolCalls: [tc("1", "update_plan", { steps: [{ text: "Sleep the PC", status: "in_progress" }] })] },
+        { text: "All done!" }, // claims success with the step still open
+        { toolCalls: [tc("2", "power_action", { action: "sleep" }), tc("3", "update_plan", { steps: [{ text: "Sleep the PC", status: "done", note: "power_action ok" }] })] },
+        { text: "The PC is going to sleep." },
+      ]),
+      { ...h, onPlan: (p) => plans.push(p) }
+    );
+    const out = await o.send("sleep the pc");
+    expect(out).toBe("The PC is going to sleep.");
+    const nudge = o.getHistory().find((m) => m.role === "user" && m.content.startsWith("[BEV check"));
+    expect(nudge?.content).toContain("[>] 1. Sleep the PC");
+    expect(o.getPlan()?.[0].status).toBe("done");
+    expect(plans.length).toBeGreaterThanOrEqual(3); // reset + two updates
+  });
+
+  it("rejects a malformed plan with a message the model can fix", async () => {
+    const { h } = hooks(true);
+    const o = new Orchestrator(scripted([{ toolCalls: [tc("1", "update_plan", { steps: [] })] }, { text: "ok" }]), h);
+    await o.send("do things");
+    expect(o.getHistory().find((m) => m.toolName === "update_plan")?.content).toMatch(/non-empty/);
+  });
+
+  it("says plainly when it runs out of steps", async () => {
+    const { h } = hooks(true);
+    const turns = Array.from({ length: 30 }, (_, i) => ({ toolCalls: [tc(String(i), "get_datetime")] }));
+    const o = new Orchestrator(scripted(turns), h);
+    const out = await o.send("loop forever");
+    expect(out).toMatch(/took more steps than I'm allowed/);
+  });
+});
+
+describe("model routing", () => {
+  function recording(fail?: (model?: string) => boolean) {
+    const models: Array<string | undefined> = [];
+    const p = {
+      id: "anthropic",
+      chat: async (req: { model?: string }) => {
+        models.push(req.model);
+        if (fail?.(req.model)) throw new Error("model not found");
+        return { text: "ok", toolCalls: [] };
+      },
+    } as unknown as AiProvider;
+    return { p, models };
+  }
+  beforeEach(() => useSettings.setState((s) => ({ settings: { ...s.settings, provider: "anthropic", modelRouting: true, anthropicFastModel: "fast-model" } })));
+
+  it("quick asks use the fast model, real tasks the main one", async () => {
+    const { p, models } = recording();
+    const o = new Orchestrator(p, hooks(true).h);
+    await o.send("what time is it");
+    await o.send("research the best monitors and write a summary");
+    expect(models).toEqual(["fast-model", undefined]);
+  });
+
+  it("falls back to the main model if the fast one fails", async () => {
+    const { p, models } = recording((m) => m === "fast-model");
+    const o = new Orchestrator(p, hooks(true).h);
+    expect(await o.send("hi")).toBe("ok");
+    expect(models).toEqual(["fast-model", undefined]);
+  });
+});
+
+describe("background orchestrator", () => {
+  it("doesn't offer or run screen/input tools", async () => {
+    const seen: string[][] = [];
+    const p = {
+      id: "anthropic",
+      chat: vi.fn(async (req: { tools: Array<{ name: string }> }) => {
+        seen.push(req.tools.map((t) => t.name));
+        return seen.length === 1 ? { text: "", toolCalls: [tc("1", "press_keys", { keys: "enter" })] } : { text: "Report.", toolCalls: [] };
+      }),
+    } as unknown as AiProvider;
+    const o = new Orchestrator(p, hooks(true).h, { background: true });
+    await o.send("goal");
+    expect(seen[0]).not.toContain("press_keys");
+    expect(seen[0]).not.toContain("look_at_screen");
+    expect(seen[0]).toContain("update_plan");
+    expect(calls.some(([n]) => n === "inputKeys")).toBe(false);
+    expect(o.getHistory().find((m) => m.toolName === "press_keys")?.content).toMatch(/isn't available in background/);
+  });
+});

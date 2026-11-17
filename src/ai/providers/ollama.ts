@@ -44,7 +44,7 @@ export class OllamaProvider implements AiProvider {
 
   private async post(req: ChatRequest, messages: unknown[]): Promise<AiResponse> {
     const body = {
-      model: this.model,
+      model: req.model || this.model,
       stream: false,
       messages,
       tools: req.tools.map((t) => ({

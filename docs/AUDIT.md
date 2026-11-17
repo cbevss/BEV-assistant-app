@@ -72,10 +72,17 @@ Order follows the spec's rule: build the underlying systems first, then connect 
 | D. Vision & control | UI Automation tree reading + invoke, OCR (Windows.Media.Ocr), keyboard/mouse fallback, hands-on troubleshooting flows | **Done in 1.1.11** |
 | — Diagnostics | Read-only performance, network, event-log stability and mic checks | **Done in 1.1.11** (services/devices/drivers later) |
 | E. Second brain | Conversation history, semantic memory (local embeddings), duplicates/contradictions, knowledge vault with sources | **Done in 1.1.12** |
-| F. Advanced AI | Plan → act → verify loop, background tasks with progress/cancel, model routing per workload | Later |
+| F. Advanced AI | Plan → act → verify loop, background tasks with progress/cancel, model routing per workload | **Done in 1.1.13** |
 | G. Interface | Design-system tokens doc, HUD with real data, state visuals | Later |
 | H. Integrations | Connector framework + MCP; Gmail/Calendar/GitHub/Spotify/Home Assistant | Later |
 | I. Proactive | Desktop background monitoring (crashes, device loss, resource spikes), briefings (cloud side exists) | Later |
+
+## What 1.1.13 changed (Phase F)
+
+- **Plan → act → verify**: `update_plan` keeps a visible step list (pending / in progress / done / failed / skipped, with evidence notes), shown live in Chat and on background tasks. If the model tries to finish with open steps, the orchestrator sends one check-back listing them. A planned task gets up to 20 tool rounds (8 otherwise), and running out is reported with what's left instead of ending silently.
+- **Background tasks**: `start_background_task` runs a self-contained goal in its own orchestrator (own history, plan, AbortController), at most two at once. Progress, step log and result show on the Dashboard with Cancel, and a Windows notification fires on finish. Background runs get no screen, keyboard or mouse tools, never prompt; anything needing approval is refused and listed for the user. They also skip conversation history.
+- **Model routing**: each round is classified quick / complex / vision. Quick rounds go to a faster model (default Claude Haiku 5.5 or GPT-4.1 nano; none for Ollama unless set), with a fallback to the main model on any error. Planned, multi-step, failing, background and screenshot rounds stay on the main model. There's a toggle and fast-model field in Integrations.
+- **Not verified here**: no live provider calls were made; routing and the loop are tested with scripted providers.
 
 ## What 1.1.12 changed (Phase E)
 

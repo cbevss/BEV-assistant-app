@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import type { PlanStep } from "@/ai/plan";
 
 /** The eight canonical assistant states that drive overlay animation. */
 export type AssistantState =
@@ -32,6 +33,9 @@ interface AssistantStore {
   wake: { engine: "speech" | "on-device"; note: string | null } | null;
   /** Latest note about the voice (e.g. a fallback), shown in Voice & Audio. */
   voiceNote: string | null;
+  /** The plan of the task BEV is working on now (update_plan), if any. */
+  plan: PlanStep[] | null;
+  setPlan: (p: PlanStep[] | null) => void;
 
   /** Set by the UI to route sensitive-tool approvals through a modal. */
   requestApproval?: (description: string) => Promise<boolean>;
@@ -56,6 +60,8 @@ export const useAssistant = create<AssistantStore>((set) => ({
   messages: [],
   wake: null,
   voiceNote: null,
+  plan: null,
+  setPlan: (plan) => set({ plan }),
 
   setApprovalHandler: (fn) => set({ requestApproval: fn }),
   setState: (state, statusText) =>

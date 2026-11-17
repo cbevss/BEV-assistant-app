@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { native, SystemStats, RunningApp } from "@/lib/native";
+import { BackgroundTasks } from "../components/BackgroundTasks";
 import { RecentTasks } from "../components/RecentTasks";
 
 export function Dashboard() {
@@ -78,6 +79,7 @@ export function Dashboard() {
         </Panel>
 
         <RecentTasks />
+        <BackgroundTasks />
       </div>
     </div>
   );

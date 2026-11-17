@@ -3,7 +3,7 @@ import { native } from "@/lib/native";
 import { useSettings, ProviderId } from "@/state/settings";
 import { makeProvider, providerLabels, secretNameFor } from "@/ai/factory";
 import { bevCloud, CLOUD_KEY_SECRET, normaliseCloudUrl } from "@/lib/bevCloud";
-import { PageHeader, Section, Field, TextInput, Select, Button, StatusPill } from "../components/Form";
+import { PageHeader, Section, Field, TextInput, Select, Button, StatusPill, Toggle } from "../components/Form";
 
 type Check = { ok: boolean | null; msg: string };
 
@@ -29,6 +29,29 @@ export function Integrations() {
             }))}
           />
         </Field>
+        <Field
+          label="Quick replies on a faster model"
+          hint="Short, simple requests (the time, volume, opening an app) use the faster model below; anything that needs planning, several steps or a screenshot uses your main model. If the fast model fails, BEV retries on the main one."
+        >
+          <Toggle label="Model routing" checked={settings.modelRouting} onChange={(modelRouting) => update({ modelRouting })} />
+        </Field>
+        {settings.modelRouting && (
+          <Field label="Fast model" hint={settings.provider === "ollama" ? "Leave empty to always use the main model." : undefined}>
+            <TextInput
+              aria-label="Fast model"
+              value={settings.provider === "openai" ? settings.openaiFastModel : settings.provider === "ollama" ? settings.ollamaFastModel : settings.anthropicFastModel}
+              onChange={(e) =>
+                update(
+                  settings.provider === "openai"
+                    ? { openaiFastModel: e.target.value }
+                    : settings.provider === "ollama"
+                      ? { ollamaFastModel: e.target.value }
+                      : { anthropicFastModel: e.target.value }
+                )
+              }
+            />
+          </Field>
+        )}
       </Section>
 
       <ProviderCard id="anthropic" modelValue={settings.anthropicModel} onModel={(anthropicModel) => update({ anthropicModel })} />

@@ -19,6 +19,10 @@ import { Onboarding } from "./pages/Onboarding";
 import { ApprovalModal } from "./components/ApprovalModal";
 import { TitleBar } from "./components/TitleBar";
 import { pruneHistory, startBrain } from "@/brain/memory";
+import { configureBackground } from "@/ai/background";
+import { Orchestrator } from "@/ai/orchestrator";
+import { makeProvider } from "@/ai/factory";
+import { notify } from "@/lib/notify";
 import { bootstrapVoice, getController, maybeStartListening, setPrivacy } from "@/voice/bootstrap";
 import { startMonitor } from "@/lib/monitor";
 import { check } from "@tauri-apps/plugin-updater";
@@ -82,6 +86,13 @@ export function App() {
 
       // CPU/RAM alerts, when switched on in Settings.
       startMonitor();
+
+      // Background tasks run in their own orchestrators.
+      configureBackground({
+        makeProvider: () => makeProvider(useSettings.getState().settings),
+        makeOrchestrator: (p, h) => new Orchestrator(p, h, { background: true }),
+        notify: (t, b) => void notify(t, b),
+      });
 
       // Second brain: trim old history, then fill in semantic-search vectors.
       pruneHistory().catch(() => {});

@@ -33,7 +33,7 @@ export class AnthropicProvider implements AiProvider {
     if (!key) throw new ProviderError("Anthropic API key not set");
 
     const body = {
-      model: this.model,
+      model: req.model || this.model,
       max_tokens: req.maxTokens ?? 1024,
       // Only send temperature when explicitly set — newer Claude models reject it.
       ...(req.temperature !== undefined ? { temperature: req.temperature } : {}),
