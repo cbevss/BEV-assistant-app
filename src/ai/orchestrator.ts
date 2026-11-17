@@ -1,7 +1,7 @@
 import { native } from "@/lib/native";
 import { useSettings, toolAllowed, autoApproveOn } from "@/state/settings";
 import { AiImage, AiMessage, AiProvider, ProviderError, ToolCall } from "./types";
-import { tools, toolSpecs, isSensitive, ToolOutput } from "./tools";
+import { tools, toolSpecs, sensitiveReason, ToolOutput } from "./tools";
 import { buildSystemPrompt } from "./persona";
 
 export interface OrchestratorHooks {
@@ -214,10 +214,11 @@ export class Orchestrator {
     // Auto-approve: when the setting is on, the user's request is the approval,
     // except once outside content (screen, web, other apps) is in play: that
     // content could be what's asking, so the user confirms explicitly.
-    if (isSensitive(call.name, call.args)) {
+    const reason = await sensitiveReason(call.name, call.args);
+    if (reason !== null) {
       const fromOutside = tainted(this.history);
       if (!autoApproveOn() || fromOutside) {
-        const desc = describeCall(call) + (fromOutside ? " (BEV read content from your screen or the web in this conversation; make sure this is what you asked for.)" : "");
+        const desc = describeCall(call) + (reason ? ` This ${reason}.` : "") + (fromOutside ? " (BEV read content from your screen or the web in this conversation; make sure this is what you asked for.)" : "");
         const approved = await this.hooks.requestApproval(call, desc);
         if (!approved) return { ok: false, text: "user declined this action" };
       }
@@ -244,6 +245,14 @@ function describeCall(call: ToolCall): string {
       const d = call.args.delay_seconds ?? 15;
       return `BEV wants to ${a} the PC in ${String(d)} seconds. Save your work first.`;
     }
+    case "use_control":
+      return `BEV wants to ${String(call.args.action ?? "use")} a control in the app in front.`;
+    case "click_on_screen":
+      return typeof call.args.text === "string" ? `BEV wants to click "${call.args.text}" on screen.` : "BEV wants to click on the screen.";
+    case "press_keys":
+      return `BEV wants to press ${String(call.args.keys ?? "keys")}.`;
+    case "type_text":
+      return `BEV wants to type: "${String(call.args.text ?? "").slice(0, 120)}".`;
     default:
       return `BEV wants to run ${call.name} with ${JSON.stringify(call.args)}.`;
   }

@@ -116,7 +116,99 @@ export const native = {
   deleteTempFile: (path: string) => invoke<void>("delete_temp_file", { path }),
   openSettingsPage: (page: string) => invoke<string>("open_settings_page", { page }),
   listMonitors: () => invoke<MonitorInfo[]>("list_monitors"),
+
+  // Vision & control (control/ in Rust)
+  uiRead: (hwnd?: number) => invoke<UiSnapshot>("ui_read", { hwnd }),
+  uiAct: (id: number, action: string, text?: string) => invoke<ActResult>("ui_act", { id, action, text }),
+  screenOcr: (target?: "window" | "screen" | "all") => invoke<OcrResult>("screen_ocr", { target }),
+  inputKeys: (keys: string) => invoke<InputTarget>("input_keys", { keys }),
+  inputType: (text: string) => invoke<InputTarget>("input_type", { text }),
+  inputClick: (x: number, y: number, space: "screen" | "screenshot", button?: "left" | "right", double?: boolean) =>
+    invoke<ClickResult>("input_click", { x, y, space, button, double }),
+  pointInfo: (x: number, y: number, space: "screen" | "screenshot") => invoke<PointInfo | null>("point_info", { x, y, space }),
+  inputTarget: () => invoke<InputTarget | null>("input_target"),
+
+  // Diagnostics (read-only)
+  diagSystem: () => invoke<SystemFacts>("diag_system"),
+  diagNetwork: () => invoke<NetworkFacts>("diag_network"),
+  diagEvents: () => invoke<EventFacts>("diag_events"),
 };
+
+export interface UiElement {
+  id: number;
+  role: string;
+  name: string;
+  value?: string;
+  actions: string[];
+  enabled: boolean;
+  state?: string;
+  password: boolean;
+  /** x, y, width, height in desktop pixels. */
+  rect: [number, number, number, number];
+}
+export interface UiSnapshot {
+  title: string;
+  process: string;
+  hwnd: number;
+  elements: UiElement[];
+  truncated: boolean;
+}
+export interface ActResult {
+  done: string;
+  verified: boolean;
+  detail: string;
+}
+export interface OcrWord {
+  text: string;
+  rect: [number, number, number, number];
+}
+export interface OcrLine extends OcrWord {
+  words: OcrWord[];
+}
+export interface OcrResult {
+  source: string;
+  lines: OcrLine[];
+}
+export interface InputTarget {
+  title: string;
+  process: string;
+}
+export interface PointInfo {
+  name: string;
+  role: string;
+  process: string;
+  password: boolean;
+}
+export interface ClickResult {
+  x: number;
+  y: number;
+  target: PointInfo | null;
+}
+export interface Probe {
+  ok: boolean;
+  ms: number | null;
+  error: string | null;
+}
+export interface SystemFacts {
+  cpu: number;
+  cores: number;
+  mem_used_mb: number;
+  mem_total_mb: number;
+  uptime_secs: number;
+  disks: Array<{ mount: string; total_gb: number; free_gb: number }>;
+  top_cpu: Array<{ name: string; cpu: number; mem_mb: number }>;
+  top_mem: Array<{ name: string; cpu: number; mem_mb: number }>;
+  pending_reboot: boolean;
+}
+export interface NetworkFacts {
+  dns: Probe;
+  direct: Array<[string, Probe]>;
+  named: Probe;
+}
+export interface EventFacts {
+  app: Array<{ t: string; kind: "crash" | "hang"; app: string }>;
+  system: Array<{ t: string; id: number; provider: string }>;
+}
 
 export interface TaskRun {
   id: number;

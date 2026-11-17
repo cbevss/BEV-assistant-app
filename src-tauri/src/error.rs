@@ -21,6 +21,9 @@ pub enum BevError {
     Os(String),
     #[error("not found: {0}")]
     NotFound(String),
+    /// A plain explanation for the user (safety refusals, guidance).
+    #[error("{0}")]
+    Message(String),
 }
 
 impl Serialize for BevError {

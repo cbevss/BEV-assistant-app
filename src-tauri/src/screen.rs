@@ -76,28 +76,53 @@ pub async fn capture_screen(target: Option<String>) -> BevResult<ScreenCapture> 
 }
 
 fn capture_blocking(target: &str) -> BevResult<ScreenCapture> {
+    let (img, ox, oy, label) = capture_raw(target)?;
+    let (w, h) = fit(img.width(), img.height());
+    if let Ok(mut g) = LAST_SHOT.lock() {
+        *g = Some(crate::control::guard::ShotGeom { origin_x: ox, origin_y: oy, src_w: img.width(), src_h: img.height(), img_w: w, img_h: h });
+    }
+    encode(img, label)
+}
+
+/// Where the last screenshot sent to the AI came from, so a point the AI picks
+/// on it can be mapped back to the desktop.
+pub(crate) static LAST_SHOT: std::sync::Mutex<Option<crate::control::guard::ShotGeom>> = std::sync::Mutex::new(None);
+
+/// Full-resolution capture plus its top-left desktop position.
+pub(crate) fn capture_raw(target: &str) -> BevResult<(RgbaImage, i32, i32, String)> {
     let monitors = xcap::Monitor::all().map_err(os("monitors"))?;
     if monitors.is_empty() {
         return Err(BevError::NotFound("no displays found".into()));
     }
     let n = monitors.len();
+    let one = |i: usize| -> BevResult<(RgbaImage, i32, i32, String)> {
+        let m = &monitors[i];
+        Ok((m.capture_image().map_err(os("capture"))?, m.x().unwrap_or(0), m.y().unwrap_or(0), describe(m, i, n)))
+    };
     match target {
         "all" if n > 1 => capture_all(&monitors),
-        "primary" => {
-            let i = monitors.iter().position(|m| m.is_primary().unwrap_or(false)).unwrap_or(0);
-            encode(monitors[i].capture_image().map_err(os("capture"))?, describe(&monitors[i], i, n))
-        }
-        _ => {
-            let i = cursor_monitor(&monitors).unwrap_or_else(|| {
-                monitors.iter().position(|m| m.is_primary().unwrap_or(false)).unwrap_or(0)
-            });
-            encode(monitors[i].capture_image().map_err(os("capture"))?, describe(&monitors[i], i, n))
-        }
+        "primary" => one(monitors.iter().position(|m| m.is_primary().unwrap_or(false)).unwrap_or(0)),
+        _ => one(cursor_monitor(&monitors).unwrap_or_else(|| monitors.iter().position(|m| m.is_primary().unwrap_or(false)).unwrap_or(0))),
     }
 }
 
+/// Capture the display containing a desktop point (for cropping to a window).
+pub(crate) fn capture_at(x: i32, y: i32) -> BevResult<(RgbaImage, i32, i32)> {
+    let monitors = xcap::Monitor::all().map_err(os("monitors"))?;
+    let m = monitors
+        .iter()
+        .find(|m| {
+            let (mx, my) = (m.x().unwrap_or(0), m.y().unwrap_or(0));
+            let (w, h) = (m.width().unwrap_or(0) as i32, m.height().unwrap_or(0) as i32);
+            x >= mx && x < mx + w && y >= my && y < my + h
+        })
+        .or_else(|| monitors.first())
+        .ok_or_else(|| BevError::NotFound("no displays found".into()))?;
+    Ok((m.capture_image().map_err(os("capture"))?, m.x().unwrap_or(0), m.y().unwrap_or(0)))
+}
+
 /// Stitch every display onto one canvas using their desktop positions.
-fn capture_all(monitors: &[xcap::Monitor]) -> BevResult<ScreenCapture> {
+fn capture_all(monitors: &[xcap::Monitor]) -> BevResult<(RgbaImage, i32, i32, String)> {
     let mut shots = Vec::with_capacity(monitors.len());
     for m in monitors {
         let (x, y) = (m.x().unwrap_or(0), m.y().unwrap_or(0));
@@ -116,7 +141,7 @@ fn capture_all(monitors: &[xcap::Monitor]) -> BevResult<ScreenCapture> {
     for (x, y, img) in &shots {
         image::imageops::overlay(&mut canvas, img, (x - min_x) as i64, (y - min_y) as i64);
     }
-    encode(canvas, format!("all {} displays side by side", monitors.len()))
+    Ok((canvas, min_x, min_y, format!("all {} displays side by side", monitors.len())))
 }
 
 #[cfg(windows)]

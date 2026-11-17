@@ -17,6 +17,13 @@ export const ROUTINE_FORBIDDEN = new Set([
   "list_routines",
   // A screenshot is only useful to the AI; a routine has no one to look at it.
   "look_at_screen",
+  // Controlling apps needs someone watching: nothing unattended clicks or types.
+  "read_app_controls",
+  "use_control",
+  "read_screen_text",
+  "click_on_screen",
+  "press_keys",
+  "type_text",
   // Managing tracked tasks is a conversation, not a routine step.
   "list_tracked_tasks",
   "update_tracked_task",

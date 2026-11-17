@@ -24,6 +24,8 @@ vi.mock("@/lib/native", () => ({
     journalStep: rec("journalStep", undefined),
     journalFinish: rec("journalFinish", undefined),
     journalTakeInterrupted: rec("journalTakeInterrupted", []),
+    inputTarget: vi.fn(async () => ({ title: "general - Discord", process: "Discord.exe" })),
+    inputKeys: rec("inputKeys", { title: "general - Discord", process: "Discord.exe" }),
   },
 }));
 
@@ -90,6 +92,25 @@ describe("prompt-injection guard", () => {
     expect(calls.some(([n]) => n === "powerAction")).toBe(false);
     const tool = o.getHistory().find((m) => m.role === "tool" && m.toolName === "power_action");
     expect(tool?.content).toBe("user declined this action");
+  });
+
+  it("live checks ask before risky input even with auto-approve off… and say why", async () => {
+    useSettings.setState((s) => ({ settings: { ...s.settings, autoApproveActions: false } }));
+    const { h, asked } = hooks(false);
+    const o = new Orchestrator(scripted([{ toolCalls: [tc("1", "press_keys", { keys: "enter" })] }, { text: "Not sent." }]), h);
+    await o.send("press enter");
+    expect(asked).toHaveLength(1);
+    expect(asked[0]).toMatch(/may send a message in Discord\.exe/);
+    expect(calls.some(([n]) => n === "inputKeys")).toBe(false);
+  });
+
+  it("ordinary input runs without asking", async () => {
+    useSettings.setState((s) => ({ settings: { ...s.settings, autoApproveActions: false } }));
+    const { h, asked } = hooks(false);
+    const o = new Orchestrator(scripted([{ toolCalls: [tc("1", "press_keys", { keys: "ctrl+s" })] }, { text: "Saved." }]), h);
+    await o.send("save it");
+    expect(asked).toEqual([]);
+    expect(calls.some(([n]) => n === "inputKeys")).toBe(true);
   });
 
   it("fences outside content and can't be broken out of", () => {
