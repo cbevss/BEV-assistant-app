@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { native, SystemStats, RunningApp } from "@/lib/native";
 import { BackgroundTasks } from "../components/BackgroundTasks";
 import { StatusHud } from "../components/StatusHud";
+import { Noticed } from "../components/Noticed";
 import { RecentTasks } from "../components/RecentTasks";
 
 export function Dashboard() {
@@ -39,6 +40,7 @@ export function Dashboard() {
       </header>
 
       <StatusHud />
+      <Noticed />
 
       {err && (
         <div className="glass rounded-xl border border-bev-danger/30 p-4 text-sm text-bev-danger">

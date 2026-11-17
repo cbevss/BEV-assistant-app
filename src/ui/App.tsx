@@ -22,6 +22,10 @@ import { TitleBar } from "./components/TitleBar";
 import { pruneHistory, startBrain } from "@/brain/memory";
 import { configureBackground } from "@/ai/background";
 import { startIntegrations } from "@/integrations/registry";
+import { native } from "@/lib/native";
+import { configureNotices } from "@/proactive/notices";
+import { startWatchers } from "@/proactive/watchers";
+import { startBriefings } from "@/proactive/briefing";
 import { Orchestrator } from "@/ai/orchestrator";
 import { makeProvider } from "@/ai/factory";
 import { notify } from "@/lib/notify";
@@ -86,8 +90,18 @@ export function App() {
           })
       );
 
-      // CPU/RAM alerts, when switched on in Settings.
+      // Proactive: alerts wait while a game is fullscreen or quiet mode is on.
+      configureNotices({
+        notify: (t, b) => notify(t, b),
+        holdBack: async () => useSettings.getState().settings.gamingQuietMode || (await native.fullscreenState().catch(() => "none")) !== "none",
+      });
+      // CPU/RAM alerts, crash/network/disk watchers and the daily briefing.
       startMonitor();
+      startWatchers();
+      startBriefings({
+        announce: async (t) => (await getController()?.announce(t)) ?? false,
+        toChat: (t) => useAssistant.getState().pushMessage({ role: "assistant", content: t }),
+      });
 
       // Background tasks run in their own orchestrators.
       configureBackground({
