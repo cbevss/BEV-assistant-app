@@ -4,6 +4,7 @@ import { getVersion } from "@tauri-apps/api/app";
 import { useSettings, Personality } from "@/state/settings";
 import { PageHeader, Section, Field, Select, Slider, Toggle, TextArea, Button } from "../components/Form";
 import { ConfirmDialog } from "../components/ConfirmDialog";
+import { AppsIndex } from "../components/AppsIndex";
 import { applyAppearance } from "@/lib/appearance";
 
 export function Settings() {
@@ -32,6 +33,8 @@ export function Settings() {
   return (
     <div>
       <PageHeader title="Settings" subtitle="Startup, personality, performance and diagnostics." />
+
+      <AppsIndex />
 
       <Section title="Startup & background">
         <Field label="Start BEV with Windows" hint="Launches minimised to the tray on sign-in.">

@@ -11,6 +11,8 @@ export interface AiMessage {
   content: string;
   /** Images on user or tool messages. Only the newest is kept in history. */
   images?: AiImage[];
+  /** Tool result carrying outside content (screen, window titles, web). Never sent to providers. */
+  untrusted?: boolean;
   toolCallId?: string;
   toolName?: string;
   /** On assistant messages: the tool calls the model issued in that turn. */

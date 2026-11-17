@@ -20,6 +20,7 @@ export const ROUTINE_FORBIDDEN = new Set([
   // Managing tracked tasks is a conversation, not a routine step.
   "list_tracked_tasks",
   "update_tracked_task",
+  "refresh_app_list",
 ]);
 
 let current: AbortController | null = null;
