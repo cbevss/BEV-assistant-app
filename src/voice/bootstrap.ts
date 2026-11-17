@@ -4,6 +4,8 @@ import { listen } from "@tauri-apps/api/event";
 import { VoiceController } from "./controller";
 import { useAssistant } from "@/state/assistant";
 import { useSettings } from "@/state/settings";
+import { watchMics } from "./mic";
+import { preloadWhisper } from "./stt/whisper";
 
 let controller: VoiceController | null = null;
 let starting: Promise<VoiceController> | null = null;
@@ -35,6 +37,16 @@ async function start(): Promise<VoiceController> {
 
   // Tray "Privacy mode" is a toggle.
   listen("tray://privacy-mode", () => setPrivacy(!useAssistant.getState().privacyMode));
+
+  // Mic plugged in or removed: switch to the right one without a restart.
+  watchMics(async () => {
+    if (c.busy || !useAssistant.getState().micEnabled) return;
+    if (await c.micChanged()) await restartListening();
+  });
+
+  // Load the on-PC recogniser early so the first request isn't slow.
+  const s0 = useSettings.getState().settings;
+  if (s0.sttEngine === "whisper") setTimeout(() => preloadWhisper(s0.whisperSize, s0.kokoroUseGpu), 4000);
 
   // Warm up the free natural voice in the background (it's cached after the
   // first download), so the first reply doesn't fall back to Windows.

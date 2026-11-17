@@ -26,6 +26,13 @@ export interface Settings {
   responseLength: "short" | "normal" | "detailed";
   // Voice
   micDeviceId: string;
+  /** Speech recognition: Windows (online, default mic only) or Whisper (on this PC, BEV's chosen mic). */
+  sttEngine: "windows" | "whisper";
+  whisperSize: "base" | "small";
+  /** Windows/Chromium noise suppression on BEV's mic (helps noisy rooms; can hurt clean mics). */
+  noiseSuppression: boolean;
+  /** Talk over BEV to interrupt it. */
+  bargeIn: boolean;
   /** Which voice engine speaks: Windows (built-in), Kokoro (free, local) or ElevenLabs. */
   ttsEngine: "windows" | "kokoro" | "elevenlabs";
   /** Windows voice (when ttsEngine is "windows"). */
@@ -89,6 +96,10 @@ export const defaultSettings: Settings = {
   customPersonality: "",
   responseLength: "short",
   micDeviceId: "",
+  sttEngine: "windows",
+  whisperSize: "base",
+  noiseSuppression: false,
+  bargeIn: true,
   ttsEngine: "windows",
   voiceId: "",
   kokoroVoice: "bm_george",

@@ -18,6 +18,13 @@ import { useRoutines, matchRoutine } from "@/routines/store";
 import { runRoutine, summariseRun } from "@/routines/engine";
 import { playChime } from "./sounds";
 import { SttError } from "./webspeech";
+import type { SpeechRecognizer } from "./types";
+import { WhisperRecognizer } from "./stt/whisper";
+import { effectiveMic } from "./mic";
+import { listenForBargeIn } from "./bargein";
+
+/** Below this Windows-recogniser confidence, a short request is checked with the user. */
+const LOW_CONFIDENCE = 0.35;
 
 /**
  * After BEV speaks, wait before listening: speakers (Bluetooth especially)
@@ -52,6 +59,10 @@ export class VoiceController {
   /** The live wake-word engine (read by Voice & Audio for live tuning). */
   wake?: WakeWordEngine;
   private stt = new WebSpeechRecognizer("en-GB");
+  private whisper: WhisperRecognizer | null = null;
+  private whisperKey = "";
+  /** The mic actually in use ("" = Windows default) and whether that's a fallback. */
+  private mic = { deviceId: "", fallback: false, label: "" };
   private tts: SpeechSynthesizer = this.makeTts();
   /** Set by a dismissal ("that's all") so the popup closes without the "done" step. */
   private closeQuietly = false;
@@ -141,13 +152,54 @@ export class VoiceController {
     useAssistant.getState().setWake(null);
   }
 
+  /**
+   * Work out which mic to use: the chosen one if it's plugged in, else the
+   * Windows default (announced once, and switched back when it returns).
+   */
+  /** Is a conversation going on? (Don't swap mics mid-sentence.) */
+  get busy() {
+    return this.active;
+  }
+
+  /** Re-check the mic; true if a different device should now be used. */
+  async micChanged(): Promise<boolean> {
+    const before = this.mic.deviceId;
+    await this.refreshMic();
+    return this.mic.deviceId !== before;
+  }
+
+  async refreshMic(): Promise<void> {
+    const devices = await navigator.mediaDevices?.enumerateDevices().catch(() => []) ?? [];
+    const next = effectiveMic(settings().micDeviceId, devices.filter((d) => d.kind === "audioinput"));
+    if (next.fallback && !this.mic.fallback) notify("BEV microphone", `Your chosen microphone isn't connected, so BEV is using ${next.label}.`);
+    if (!next.fallback && this.mic.fallback) notify("BEV microphone", `Back on ${next.label}.`);
+    this.mic = next;
+  }
+
+  /** The recogniser chosen in Voice & Audio. */
+  private recognizer(): SpeechRecognizer {
+    const s = settings();
+    if (s.sttEngine !== "whisper") return this.stt;
+    const key = `${s.whisperSize}|${s.kokoroUseGpu}`;
+    if (!this.whisper || key !== this.whisperKey) {
+      this.whisperKey = key;
+      this.whisper = new WhisperRecognizer({
+        size: s.whisperSize,
+        allowGpu: s.kokoroUseGpu,
+        capture: () => ({ deviceId: this.mic.deviceId || undefined, noiseSuppression: settings().noiseSuppression, echoCancellation: true }),
+      });
+    }
+    return this.whisper;
+  }
+
   private speechEngine(): WakeWordEngine {
-    return new WebSpeechWakeWord({ deviceId: settings().micDeviceId || undefined });
+    return new WebSpeechWakeWord({ deviceId: this.mic.deviceId || undefined });
   }
 
   /** The engine chosen in Voice & Audio, or speech if on-device isn't set up. */
   private async makeWakeEngine(): Promise<{ engine: WakeWordEngine; note: string | null }> {
     const s = settings();
+    await this.refreshMic();
     if (s.wakeEngine !== "on-device") return { engine: this.speechEngine(), note: null };
     let models: Uint8Array[];
     try {
@@ -167,7 +219,7 @@ export class VoiceController {
     return {
       engine: new OnDeviceWakeWord({
         models,
-        deviceId: s.micDeviceId || undefined,
+        deviceId: this.mic.deviceId || undefined,
         threshold: thresholdFor(s.wakeSensitivity),
       }),
       note: null,
@@ -227,7 +279,7 @@ export class VoiceController {
       settings().conversationTimeoutMs
     );
     try {
-      return await this.stt.listenOnce({
+      return await this.recognizer().listenOnce({
         signal: ctl.signal,
         onPartial: (t) => {
           if (timer) {
@@ -244,6 +296,7 @@ export class VoiceController {
   }
 
   private async conversationTurn() {
+    let askedRepeat = false;
     try {
       while (this.active) {
         this.setState("listening", "");
@@ -262,6 +315,20 @@ export class VoiceController {
         }
 
         if (!utterance) break; // silence → end conversation
+
+        // The Windows recogniser wasn't sure about a short request: check
+        // rather than act on a guess (once per turn).
+        if (settings().sttEngine !== "whisper" && !askedRepeat) {
+          const conf = this.stt.lastConfidence;
+          if (conf > 0 && conf < LOW_CONFIDENCE && utterance.split(/\s+/).length <= 8) {
+            askedRepeat = true;
+            this.setState("speaking");
+            await this.tts.speak("Sorry, I didn't quite catch that. Say it again?", { signal: this.abort.signal, onLevel: (l) => this.setAudio(l) }).catch(() => {});
+            await pause(ECHO_GAP_MS);
+            continue;
+          }
+        }
+        askedRepeat = false;
 
         const intent = endIntent(utterance);
         if (intent === "stop") {
@@ -299,11 +366,26 @@ export class VoiceController {
 
         if (reply) {
           this.setState("speaking");
-          await this.tts.speak(reply, {
-            signal: this.abort.signal,
-            onLevel: (l) => this.setAudio(l),
-          });
-          await pause(ECHO_GAP_MS);
+          // Barge-in: talking over BEV stops it and goes straight to listening.
+          const barge = settings().bargeIn ? new AbortController() : null;
+          let interrupted = false;
+          const watching = barge
+            ? listenForBargeIn({ deviceId: this.mic.deviceId || undefined, noiseSuppression: settings().noiseSuppression }, barge.signal).then((hit) => {
+                if (hit) {
+                  interrupted = true;
+                  this.tts.cancel();
+                }
+              })
+            : null;
+          try {
+            await this.tts.speak(reply, { signal: this.abort.signal, onLevel: (l) => this.setAudio(l) });
+          } catch (e) {
+            if (!interrupted) throw e;
+          } finally {
+            barge?.abort();
+            await watching;
+          }
+          if (!interrupted) await pause(ECHO_GAP_MS);
         }
         // loop: follow-up window without repeating the wake word
       }
