@@ -70,8 +70,9 @@ describe("tool registry", () => {
     await expect(tools.open_path.run({ path: "  " })).rejects.toThrow(/non-empty/);
   });
 
-  it("flags close_app as sensitive and get_system_stats as not", () => {
-    expect(isSensitive("close_app")).toBe(true);
+  it("needs approval only to force-close; reading stats never", () => {
+    expect(isSensitive("close_app", { name: "notepad" })).toBe(false);
+    expect(isSensitive("close_app", { name: "notepad", force: true })).toBe(true);
     expect(isSensitive("get_system_stats")).toBe(false);
   });
 

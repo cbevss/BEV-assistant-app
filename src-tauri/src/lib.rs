@@ -6,9 +6,11 @@
 
 mod audio;
 mod apps;
+mod appengine;
 mod db;
 mod error;
 mod files;
+mod journal;
 mod games;
 mod overlay;
 mod screen;
@@ -70,6 +72,12 @@ pub fn run() {
                 .join("bev.db");
             std::fs::create_dir_all(db_path.parent().unwrap()).ok();
             let conn = db::open(&db_path)?;
+            // Task journal; anything left "running" was cut off last time.
+            journal::init(&conn)?;
+            let cut_off = journal::mark_interrupted(&conn, journal::now_ms())?;
+            if cut_off > 0 {
+                log::info!("{cut_off} task(s) were interrupted last session");
+            }
 
             let mut sys = sysinfo::System::new_all();
             sys.refresh_all();
@@ -78,6 +86,8 @@ pub fn run() {
                 sys: std::sync::Mutex::new(sys),
                 db: std::sync::Mutex::new(conn),
             });
+            // Installed-app index: loads instantly, rescans in the background if stale.
+            app.manage(appengine::start(db_path.parent().unwrap().to_path_buf()));
 
             tray::build(app.handle())?;
             overlay::ensure_overlay(app.handle()).ok();
@@ -103,8 +113,17 @@ pub fn run() {
             audio::list_output_devices,
             audio::set_output_device,
             // Application control
-            apps::launch_app,
-            apps::close_app,
+            appengine::apps_open,
+            appengine::apps_close,
+            appengine::apps_search,
+            appengine::apps_refresh,
+            appengine::apps_status,
+            appengine::apps_list,
+            journal::journal_start,
+            journal::journal_step,
+            journal::journal_finish,
+            journal::journal_recent,
+            journal::journal_take_interrupted,
             apps::list_processes,
             games::list_games,
             games::launch_game,

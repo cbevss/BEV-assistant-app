@@ -58,8 +58,6 @@ export const native = {
   setOutputDevice: (id: string) => invoke<void>("set_output_device", { id }),
 
   // Apps
-  launchApp: (name: string) => invoke<string>("launch_app", { name }),
-  closeApp: (name: string) => invoke<string>("close_app", { name }),
   /** Installed Steam games. Rejects if Steam isn't installed. */
   listGames: () => invoke<InstalledGame[]>("list_games"),
   /** Through Steam: online = the game's first launch option, offline = its second. */
@@ -75,6 +73,14 @@ export const native = {
   // Overlay
   showOverlay: () => invoke<void>("show_overlay"),
   hideOverlay: () => invoke<void>("hide_overlay"),
+  // Task journal (crash recovery)
+  journalStart: (request: string) => invoke<number>("journal_start", { request }),
+  journalStep: (id: number, tool: string, ok: boolean, summary: string) =>
+    invoke<void>("journal_step", { id, tool, ok, summary }),
+  journalFinish: (id: number, status: "done" | "failed" | "cancelled", result?: string) =>
+    invoke<void>("journal_finish", { id, status, result }),
+  journalRecent: (limit = 30) => invoke<TaskRun[]>("journal_recent", { limit }),
+  journalTakeInterrupted: () => invoke<TaskRun[]>("journal_take_interrupted"),
   fullscreenState: () => invoke<"none" | "borderless" | "exclusive">("fullscreen_state"),
   setOverlayClickthrough: (ignore: boolean) =>
     invoke<void>("set_overlay_clickthrough", { ignore }),
@@ -111,6 +117,16 @@ export const native = {
   openSettingsPage: (page: string) => invoke<string>("open_settings_page", { page }),
   listMonitors: () => invoke<MonitorInfo[]>("list_monitors"),
 };
+
+export interface TaskRun {
+  id: number;
+  request: string;
+  status: "running" | "done" | "failed" | "cancelled" | "interrupted";
+  steps: Array<{ tool: string; ok: boolean; summary: string }>;
+  result: string | null;
+  started_at: number;
+  ended_at: number | null;
+}
 
 export interface ScreenCapture {
   /** Base64 JPEG. */

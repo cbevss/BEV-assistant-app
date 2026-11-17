@@ -1,12 +1,11 @@
 import { useEffect, useState } from "react";
 import { native, SystemStats, RunningApp } from "@/lib/native";
-import { useAssistant } from "@/state/assistant";
+import { RecentTasks } from "../components/RecentTasks";
 
 export function Dashboard() {
   const [stats, setStats] = useState<SystemStats | null>(null);
   const [apps, setApps] = useState<RunningApp[]>([]);
   const [err, setErr] = useState<string | null>(null);
-  const messages = useAssistant((s) => s.messages);
 
   useEffect(() => {
     let alive = true;
@@ -78,21 +77,7 @@ export function Dashboard() {
           </ul>
         </Panel>
 
-        <Panel title="Recent assistant activity">
-          <ul className="space-y-2 text-sm">
-            {messages.slice(-6).reverse().map((m) => (
-              <li key={m.id} className="flex items-start gap-2">
-                <span className="mt-0.5 text-xs text-bev-cyan">
-                  {m.role === "tool" ? (m.ok ? "✓" : "✕") : m.role === "user" ? "›" : "‹"}
-                </span>
-                <span className="truncate text-slate-300">{m.toolName ?? m.content}</span>
-              </li>
-            ))}
-            {messages.length === 0 && (
-              <li className="text-slate-500">Say “BEV” or use the chat to get started.</li>
-            )}
-          </ul>
-        </Panel>
+        <RecentTasks />
       </div>
     </div>
   );

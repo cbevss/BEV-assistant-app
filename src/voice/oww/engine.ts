@@ -53,11 +53,14 @@ export class OnDeviceWakeWord implements WakeWordEngine {
     this.stream = await navigator.mediaDevices.getUserMedia({
       audio: {
         ...(this.cfg.deviceId ? { deviceId: { exact: this.cfg.deviceId } } : {}),
-        // Raw-ish audio: the models expect natural levels, and Windows' voice
-        // processing can swallow a quiet wake word.
+        // Raw audio: the models expect natural levels, and Windows' voice
+        // processing can swallow a quiet wake word. Gain control stays OFF:
+        // on Windows it adjusts the system microphone volume, and with this
+        // stream always open it kept drifting the level that speech
+        // recognition then heard (quiet or distorted transcripts).
         echoCancellation: false,
         noiseSuppression: false,
-        autoGainControl: true,
+        autoGainControl: false,
         channelCount: 1,
       },
     });

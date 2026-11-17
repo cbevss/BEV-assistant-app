@@ -17,6 +17,14 @@ import { thresholdFor } from "./oww/pipeline";
 import { useRoutines, matchRoutine } from "@/routines/store";
 import { runRoutine, summariseRun } from "@/routines/engine";
 import { playChime } from "./sounds";
+import { SttError } from "./webspeech";
+
+/**
+ * After BEV speaks, wait before listening: speakers (Bluetooth especially)
+ * are still playing the last of BEV's words, and the recogniser would hear them.
+ */
+const ECHO_GAP_MS = 350;
+const pause = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 
 const settings = () => useSettings.getState().settings;
@@ -198,7 +206,10 @@ export class VoiceController {
     await showOverlayUnlessGaming();
     this.setState("activating");
     playChime("wake");
-    if (!settings().gamingQuietMode) await this.tts.speak("Yeah?").catch(() => {});
+    if (!settings().gamingQuietMode) {
+      await this.tts.speak("Yeah?").catch(() => {});
+      await pause(ECHO_GAP_MS);
+    }
     await this.conversationTurn();
   }
 
@@ -237,7 +248,18 @@ export class VoiceController {
       while (this.active) {
         this.setState("listening", "");
         this.abort = new AbortController();
-        const utterance = (await this.listenWithTimeout(this.abort.signal).catch(() => "")).trim();
+        let utterance: string;
+        try {
+          utterance = (await this.listenWithTimeout(this.abort.signal)).trim();
+        } catch (e) {
+          // Show real recogniser failures (no internet, mic blocked) instead of
+          // quietly ending; a timeout/abort is just silence.
+          if (e instanceof SttError) {
+            this.setState("error", e.message);
+            await pause(2500);
+          }
+          break;
+        }
 
         if (!utterance) break; // silence → end conversation
 
@@ -281,6 +303,7 @@ export class VoiceController {
             signal: this.abort.signal,
             onLevel: (l) => this.setAudio(l),
           });
+          await pause(ECHO_GAP_MS);
         }
         // loop: follow-up window without repeating the wake word
       }

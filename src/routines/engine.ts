@@ -17,6 +17,10 @@ export const ROUTINE_FORBIDDEN = new Set([
   "list_routines",
   // A screenshot is only useful to the AI; a routine has no one to look at it.
   "look_at_screen",
+  // Managing tracked tasks is a conversation, not a routine step.
+  "list_tracked_tasks",
+  "update_tracked_task",
+  "refresh_app_list",
 ]);
 
 let current: AbortController | null = null;
