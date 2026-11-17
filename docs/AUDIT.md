@@ -47,9 +47,6 @@ asks for and the plan the work follows.
 
 ### Missing
 - Application discovery/index (Start apps, Store packages, shortcuts, App Paths), resolution and verified execution.
-- Diagnostics for services, devices and drivers (performance, network, event-log stability and mic checks exist since 1.1.11).
-- Browser control beyond "open URL"; web research pipeline on the desktop.
-- Discord integration (others since 1.1.15).
 
 ### Security posture
 - Good: keys in Credential Manager; no arbitrary shell from the AI; `open_path` uses explorer with a single argument; screen/web text labelled as data in the prompt; approvals for power/close/programs.
@@ -76,6 +73,12 @@ Order follows the spec's rule: build the underlying systems first, then connect 
 | H. Integrations | Connector framework + MCP; Gmail/Calendar/GitHub/Spotify/Home Assistant | **Done in 1.1.15** |
 | I. Proactive | Desktop background monitoring (crashes, device loss, resource spikes), briefings (cloud side exists) | **Done in 1.1.16** |
 
+## What 1.1.17 changed (research and device diagnostics)
+
+- **Web research**: `web_search` uses Claude's built-in web search (`web_search_20250305`, on the fast model) when the provider is Anthropic, with no extra key. Otherwise it uses a Brave Search API key, which also serves as a fallback. `read_web_page` reads public pages through a Rust fetcher: GET only, http/https, at most 3 MB, no credentials in URLs. It resolves the host and refuses loopback, private, link-local, CGNAT and multicast addresses on every redirect hop, so injected content can't reach the router or local services. Page text is extracted locally (main/article first; scripts, nav and footers dropped). Both outputs count as outside content, and the persona answers with sources and offers to save notes. Background tasks can now do real research.
+- **Device diagnostics** (`diagnose_pc` area "devices", fixed read-only script): present devices with Device Manager errors, in plain words (unplugged ones ignored); key auto-start services that aren't running (audio, networking, WMI, updates and so on); and graphics drivers over a year old.
+- Browsers themselves are operated through UI Automation, OCR and keys (1.1.11).
+
 ## What 1.1.16 changed (Phase I)
 
 - **Notices pipeline** (`src/proactive/notices.ts`): every proactive alert is de-duplicated with a cooldown and held back while a fullscreen game (exclusive or borderless) is in front or quiet mode is on. Afterwards it's delivered, as one summary if several piled up. The last six hours of notices go into the AI's prompt so BEV can bring them up when relevant, and they show on the Dashboard ("BEV noticed").
@@ -97,6 +100,7 @@ Order follows the spec's rule: build the underlying systems first, then connect 
 - **Gmail and Calendar**: search, read, drafts only (never sends), list and add events (no guests).
 - **MCP**: stdio servers run as child processes started from user settings only, plus Streamable HTTP with session ids and SSE replies. Tools appear as `mcp_<server>_<tool>`. All output is untrusted; actions need approval unless the server is trusted or the tool is read-only.
 - Setup guide: `docs/INTEGRATIONS.md`.
+- **Discord** (1.1.17): the user's own bot token; list channels, read messages; posting needs approval and suppresses @mentions.
 - **Not verified here**: no live calls to any of these services were possible from this environment. Payload shapes follow the public API docs; the pure helpers (matching, service mapping, MIME, SSE parsing, PKCE against the RFC 7636 vector) are unit-tested.
 
 ## What 1.1.14 changed (Phase G)

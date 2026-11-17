@@ -29,6 +29,7 @@ export interface McpServerConfig {
 export interface IntegrationSettings {
   homeassistant: { enabled: boolean; url: string };
   github: { enabled: boolean };
+  discord?: { enabled: boolean };
   spotify: { enabled: boolean; clientId: string };
   google: { enabled: boolean; clientId: string };
   mcp: McpServerConfig[];

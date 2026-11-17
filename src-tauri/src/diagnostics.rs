@@ -219,6 +219,78 @@ pub async fn diag_events(app: tauri::AppHandle, minutes: Option<u32>) -> BevResu
         .map_err(crate::error::BevError::Os)
 }
 
+#[derive(Serialize, Deserialize, Default)]
+pub struct DeviceFacts {
+    /// Present devices Windows reports a problem with.
+    #[serde(default)]
+    pub problems: Vec<ProblemDevice>,
+    /// Important services set to start automatically that aren't running.
+    #[serde(default)]
+    pub stopped: Vec<StoppedService>,
+    #[serde(default)]
+    pub drivers: Vec<DriverInfo>,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct ProblemDevice {
+    #[serde(default)]
+    pub name: String,
+    #[serde(default)]
+    pub class: String,
+    #[serde(default)]
+    pub status: String,
+    #[serde(default)]
+    pub code: u32,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct StoppedService {
+    pub name: String,
+    #[serde(default)]
+    pub display: String,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct DriverInfo {
+    #[serde(default)]
+    pub device: String,
+    #[serde(default)]
+    pub class: String,
+    #[serde(default)]
+    pub version: String,
+    /// yyyy-mm-dd
+    #[serde(default)]
+    pub date: String,
+}
+
+/// Problem devices, key services that should be running, and graphics/network/audio driver dates.
+const DEVICES_SCRIPT: &str = r#"
+$ErrorActionPreference = 'SilentlyContinue'
+$problems = Get-CimInstance Win32_PnPEntity | Where-Object { $_.ConfigManagerErrorCode -ne 0 -and $_.ConfigManagerErrorCode -ne 22 -and $_.Present -ne $false } |
+  Select-Object -First 20 | ForEach-Object { [pscustomobject]@{ name = [string]$_.Name; class = [string]$_.PNPClass; status = [string]$_.Status; code = [int]$_.ConfigManagerErrorCode } }
+$important = 'Audiosrv','AudioEndpointBuilder','Dhcp','Dnscache','WlanSvc','Winmgmt','EventLog','Spooler','BITS','wuauserv','nsi','netprofm','Themes','UserManager','ProfSvc'
+$stopped = Get-CimInstance Win32_Service | Where-Object { $_.StartMode -eq 'Auto' -and $_.State -ne 'Running' -and $important -contains $_.Name } |
+  ForEach-Object { [pscustomobject]@{ name = [string]$_.Name; display = [string]$_.DisplayName } }
+$drivers = Get-CimInstance Win32_PnPSignedDriver | Where-Object { $_.DeviceClass -in 'DISPLAY','NET','MEDIA' -and $_.DeviceName } |
+  Select-Object -First 15 | ForEach-Object { [pscustomobject]@{ device = [string]$_.DeviceName; class = [string]$_.DeviceClass; version = [string]$_.DriverVersion; date = $(if ($_.DriverDate) { ([datetime]$_.DriverDate).ToString('yyyy-MM-dd') } else { '' }) } }
+[pscustomobject]@{ problems = @($problems); stopped = @($stopped); drivers = @($drivers) } | ConvertTo-Json -Depth 4 -Compress
+"#;
+
+pub fn parse_devices(stdout: &str) -> DeviceFacts {
+    let s = stdout.trim_start_matches('\u{feff}');
+    s.find('{').and_then(|i| serde_json::from_str(&s[i..]).ok()).unwrap_or_default()
+}
+
+#[tauri::command]
+pub async fn diag_devices(app: tauri::AppHandle) -> BevResult<DeviceFacts> {
+    use tauri::Manager;
+    let dir = app.path().app_cache_dir().map_err(|e| crate::error::BevError::Os(e.to_string()))?;
+    tauri::async_runtime::spawn_blocking(move || run_script(&dir, "diag-devices.ps1", DEVICES_SCRIPT).map(|o| parse_devices(&o)))
+        .await
+        .map_err(|e| crate::error::BevError::Os(format!("task: {e}")))?
+        .map_err(crate::error::BevError::Os)
+}
+
 #[cfg(windows)]
 fn run_script(dir: &std::path::Path, name: &str, script: &str) -> Result<String, String> {
     use std::io::Read;
@@ -273,6 +345,15 @@ mod tests {
         assert_eq!(e.app.len(), 1);
         assert_eq!(e.app[0].app, "game.exe");
         assert_eq!(e.system[0].id, 41);
+    }
+
+    #[test]
+    fn parses_device_json() {
+        let d = parse_devices(r#"{"problems":[{"name":"USB Audio","class":"MEDIA","status":"Error","code":10}],"stopped":[{"name":"Audiosrv","display":"Windows Audio"}],"drivers":[{"device":"AMD Radeon RX 9060 XT","class":"DISPLAY","version":"32.0.1","date":"2025-01-10"}]}"#);
+        assert_eq!(d.problems[0].code, 10);
+        assert_eq!(d.stopped[0].name, "Audiosrv");
+        assert_eq!(d.drivers[0].date, "2025-01-10");
+        assert!(parse_devices("").problems.is_empty());
     }
 
     #[test]

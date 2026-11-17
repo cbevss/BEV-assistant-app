@@ -42,6 +42,17 @@ Google needs a free Cloud project with an OAuth client:
 
 BEV can search and read email, write **drafts** (you send them yourself; BEV never sends email), list upcoming events and add events without guests. While the consent screen is in "Testing", Google asks you to sign in again every 7 days.
 
+## Discord
+
+BEV uses a bot you create, so it only sees servers you add it to (never your personal DMs):
+
+1. https://discord.com/developers/applications → **New Application** (for example "BEV").
+2. **Bot** → **Reset Token** → copy it. Under **Privileged Gateway Intents**, turn on **Message Content Intent**.
+3. **OAuth2 → URL Generator**: tick **bot**, then **View Channels**, **Read Message History** and **Send Messages**. Open the generated link and add the bot to your server.
+4. Paste the token into BEV and press **Save and test**.
+
+Try: "what's new in #general?". Posting a message always asks first.
+
 ## MCP servers
 
 MCP is a standard way for apps to offer tools to AI assistants. In BEV you can add:

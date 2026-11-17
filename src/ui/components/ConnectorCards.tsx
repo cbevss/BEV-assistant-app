@@ -4,11 +4,13 @@ import { native } from "@/lib/native";
 import { useSettings, type IntegrationSettings, type McpServerConfig } from "@/state/settings";
 import { HA_TOKEN, testHomeAssistant } from "@/integrations/homeassistant";
 import { GH_TOKEN, testGitHub } from "@/integrations/github";
+import { DISCORD_TOKEN, testDiscord } from "@/integrations/discord";
 import { spotifyOAuth } from "@/integrations/spotify";
 import { googleOAuth, GOOGLE_SECRET } from "@/integrations/google";
 import { signIn, signOut, isSignedIn } from "@/integrations/oauth";
 import { connectMcp, disconnectMcp, mcpClient, onMcpChange } from "@/integrations/registry";
 import { mcpSecret } from "@/integrations/mcp";
+import { BRAVE_KEY, webSearch } from "@/research/search";
 import { Section, Field, TextInput, Button, Toggle, StatusPill, Select } from "./Form";
 
 function usePatch() {
@@ -297,6 +299,95 @@ export function McpCard() {
         <div className="flex justify-end">
           <Button onClick={add}>Add server</Button>
         </div>
+      </div>
+      <Result r={r} />
+    </Section>
+  );
+}
+
+// ---------------------------------------------------------------------------
+
+export function WebSearchCard() {
+  const { settings } = useSettings();
+  const [key, setKey] = useState("");
+  const [bump, setBump] = useState(0);
+  const has = useHasSecret(BRAVE_KEY, bump);
+  const [r, setR] = useState<{ ok: boolean; text: string } | null>(null);
+  const viaClaude = settings.provider === "anthropic";
+  return (
+    <Section title="Web search" aside={<StatusPill ok={viaClaude || has ? true : null} label={viaClaude ? "via Claude" : has ? "Brave" : "not set up"} />}>
+      <p className="text-sm text-slate-400">
+        Lets BEV look things up and read web pages for research.{" "}
+        {viaClaude ? "With Claude as the AI it uses Claude's built-in web search, so there's nothing to set up." : "With this AI provider it needs a Brave Search key (free tier available)."}
+      </p>
+      <Field label="Brave Search API key" hint="Optional with Claude (used as a fallback). Get one at api-dashboard.search.brave.com. Stored in Windows Credential Manager.">
+        <TextInput type="password" placeholder={has ? "saved (paste to replace)" : "paste key"} value={key} onChange={(e) => setKey(e.target.value)} />
+      </Field>
+      <div className="flex justify-end gap-2">
+        {has && (
+          <Button
+            variant="ghost"
+            onClick={async () => {
+              await native.deleteSecret(BRAVE_KEY);
+              setBump((b) => b + 1);
+            }}
+          >
+            Remove key
+          </Button>
+        )}
+        <Button
+          disabled={!key.trim() && !viaClaude && !has}
+          onClick={() =>
+            run(async () => {
+              if (key.trim()) await native.storeSecret(BRAVE_KEY, key.trim());
+              setKey("");
+              setBump((b) => b + 1);
+              const o = await webSearch("weather London today");
+              return `Working: ${o.results.length} results via ${o.engine === "anthropic" ? "Claude" : "Brave"}.`;
+            }, setR)
+          }
+        >
+          {key.trim() ? "Save and test" : "Test"}
+        </Button>
+      </div>
+      <Result r={r} />
+    </Section>
+  );
+}
+
+export function DiscordCard() {
+  const { i, patch } = usePatch();
+  const enabled = !!i.discord?.enabled;
+  const [token, setToken] = useState("");
+  const [bump, setBump] = useState(0);
+  const has = useHasSecret(DISCORD_TOKEN, bump);
+  const [r, setR] = useState<{ ok: boolean; text: string } | null>(null);
+  return (
+    <Section title="Discord" aside={enabled ? <StatusPill ok={has} label={has ? "connected" : "no token"} /> : undefined}>
+      <p className="text-sm text-slate-400">Read channels in your servers through your own bot, and post as the bot after you confirm. BEV can't read your personal DMs.</p>
+      <Field label="Bot token" hint="discord.com/developers → New Application → Bot → Reset Token (turn on Message Content Intent). Invite it with OAuth2 → URL Generator → bot, Read Messages and Send Messages. See docs/INTEGRATIONS.md.">
+        <TextInput type="password" placeholder={has ? "saved (paste to replace)" : "paste token"} value={token} onChange={(e) => setToken(e.target.value)} />
+      </Field>
+      <div className="flex justify-end gap-2">
+        {enabled && (
+          <Button variant="ghost" onClick={() => patch("discord", { enabled: false })}>
+            Turn off
+          </Button>
+        )}
+        <Button
+          disabled={!has && !token.trim()}
+          onClick={() =>
+            run(async () => {
+              if (token.trim()) await native.storeSecret(DISCORD_TOKEN, token.trim());
+              setToken("");
+              setBump((b) => b + 1);
+              await patch("discord", { enabled: true });
+              return await testDiscord();
+            }, setR)
+          }
+        >
+          Save and test
+        </Button>
       </div>
       <Result r={r} />
     </Section>

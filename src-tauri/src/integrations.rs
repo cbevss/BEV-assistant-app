@@ -21,6 +21,8 @@ const KNOWN: &[&str] = &[
     "https://www.googleapis.com",
     "https://gmail.googleapis.com",
     "https://oauth2.googleapis.com",
+    "https://api.search.brave.com",
+    "https://discord.com",
 ];
 
 /// scheme://host[:port], lower-cased; None if it isn't an http(s) URL.
@@ -314,5 +316,96 @@ mod tests {
         assert_eq!(response_id(r#"{"jsonrpc":"2.0","id":"a","error":{"code":1}}"#).as_deref(), Some("\"a\""));
         assert_eq!(response_id(r#"{"jsonrpc":"2.0","method":"notifications/progress"}"#), None);
         assert_eq!(response_id("not json"), None);
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Reading public web pages for research. GET only, public addresses only
+// (no localhost, LAN or link-local, checked on every redirect hop), capped.
+
+pub fn is_public_ip(ip: std::net::IpAddr) -> bool {
+    match ip {
+        std::net::IpAddr::V4(v) => {
+            let o = v.octets();
+            !(v.is_private() || v.is_loopback() || v.is_link_local() || v.is_broadcast() || v.is_unspecified() || v.is_documentation()
+                || o[0] == 0 || (o[0] == 100 && (64..128).contains(&o[1])) // CGNAT
+                || o[0] >= 224)
+        }
+        std::net::IpAddr::V6(v) => {
+            if let Some(v4) = v.to_ipv4_mapped() {
+                return is_public_ip(std::net::IpAddr::V4(v4));
+            }
+            let s = v.segments();
+            !(v.is_loopback() || v.is_unspecified() || (s[0] & 0xfe00) == 0xfc00 || (s[0] & 0xffc0) == 0xfe80 || (s[0] & 0xff00) == 0xff00)
+        }
+    }
+}
+
+fn check_public(url: &reqwest::Url) -> BevResult<()> {
+    if url.scheme() != "http" && url.scheme() != "https" {
+        return Err(BevError::Message("only web pages (http/https) can be read".into()));
+    }
+    if !url.username().is_empty() || url.password().is_some() {
+        return Err(BevError::Message("addresses with passwords aren't allowed".into()));
+    }
+    let host = url.host_str().ok_or_else(|| BevError::Message("no host in that address".into()))?;
+    let port = url.port_or_known_default().unwrap_or(443);
+    use std::net::ToSocketAddrs;
+    let addrs: Vec<_> = (host, port).to_socket_addrs().map_err(|e| BevError::Message(format!("couldn't find {host}: {e}")))?.collect();
+    if addrs.is_empty() || addrs.iter().any(|a| !is_public_ip(a.ip())) {
+        return Err(BevError::Message("BEV only reads public websites, not addresses on this PC or your network".into()));
+    }
+    Ok(())
+}
+
+#[derive(Serialize)]
+pub struct WebPage {
+    pub status: u16,
+    pub url: String,
+    pub content_type: String,
+    pub body: String,
+}
+
+#[tauri::command]
+pub async fn web_fetch(url: String) -> BevResult<WebPage> {
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(20))
+        .redirect(reqwest::redirect::Policy::none())
+        .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) BEV/1 (personal assistant)")
+        .build()
+        .map_err(|e| BevError::Os(e.to_string()))?;
+    let mut current = reqwest::Url::parse(url.trim()).map_err(|_| BevError::Message("that isn't a valid web address".into()))?;
+    for _ in 0..6 {
+        let u = current.clone();
+        tauri::async_runtime::spawn_blocking(move || check_public(&u)).await.map_err(|e| BevError::Os(e.to_string()))??;
+        let res = client.get(current.clone()).send().await.map_err(|e| BevError::Message(format!("couldn't load the page: {}", e.without_url())))?;
+        if res.status().is_redirection() {
+            let loc = res.headers().get("location").and_then(|v| v.to_str().ok()).ok_or_else(|| BevError::Message("the page redirected nowhere".into()))?;
+            current = current.join(loc).map_err(|_| BevError::Message("bad redirect".into()))?;
+            continue;
+        }
+        let status = res.status().as_u16();
+        let content_type = res.headers().get("content-type").and_then(|v| v.to_str().ok()).unwrap_or("").to_string();
+        if !(content_type.is_empty() || content_type.contains("text") || content_type.contains("json") || content_type.contains("xml")) {
+            return Err(BevError::Message(format!("that link is a file ({content_type}), not a page BEV can read")));
+        }
+        let bytes = res.bytes().await.map_err(|e| BevError::Os(e.without_url().to_string()))?;
+        let body = String::from_utf8_lossy(&bytes[..bytes.len().min(3 * 1024 * 1024)]).into_owned();
+        return Ok(WebPage { status, url: current.to_string(), content_type, body });
+    }
+    Err(BevError::Message("too many redirects".into()))
+}
+
+#[cfg(test)]
+mod web_tests {
+    use super::is_public_ip;
+    #[test]
+    fn public_ips_only() {
+        for p in ["1.1.1.1", "8.8.8.8", "2606:4700:4700::1111"] {
+            assert!(is_public_ip(p.parse().unwrap()), "{p}");
+        }
+        for p in ["127.0.0.1", "10.0.0.5", "192.168.1.1", "172.16.4.4", "169.254.169.254", "100.64.0.1", "0.0.0.0", "224.0.0.1", "::1", "fe80::1", "fd00::1", "::ffff:192.168.1.1"] {
+            assert!(!is_public_ip(p.parse().unwrap()), "{p}");
+        }
     }
 }
