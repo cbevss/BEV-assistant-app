@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { native, SystemStats, RunningApp } from "@/lib/native";
 import { BackgroundTasks } from "../components/BackgroundTasks";
+import { StatusHud } from "../components/StatusHud";
 import { RecentTasks } from "../components/RecentTasks";
 
 export function Dashboard() {
@@ -34,10 +35,10 @@ export function Dashboard() {
     <div className="space-y-6">
       <header>
         <h1 className="text-2xl font-semibold text-glow">Dashboard</h1>
-        <p className="text-sm text-slate-400">
-          {stats?.host ? `${stats.host} · ` : ""}live system telemetry
-        </p>
+        {stats?.host && <p className="text-sm text-slate-400">{stats.host}</p>}
       </header>
+
+      <StatusHud />
 
       {err && (
         <div className="glass rounded-xl border border-bev-danger/30 p-4 text-sm text-bev-danger">
@@ -88,8 +89,8 @@ export function Dashboard() {
 function Metric({ label, value, sub, pct }: { label: string; value: string; sub?: string; pct?: number }) {
   return (
     <div className="glass rounded-xl p-4">
-      <div className="text-xs uppercase tracking-widest text-slate-400">{label}</div>
-      <div className="mt-1 text-2xl font-semibold text-glow">{value}</div>
+      <div className="text-sm text-slate-400">{label}</div>
+      <div className="mt-1 text-2xl font-semibold tabular-nums text-glow">{value}</div>
       {sub && <div className="text-[11px] text-slate-500">{sub}</div>}
       {pct != null && (
         <div className="mt-2 h-1 w-full overflow-hidden rounded bg-white/5">
@@ -106,7 +107,7 @@ function Metric({ label, value, sub, pct }: { label: string; value: string; sub?
 function Panel({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div className="glass rounded-xl p-5">
-      <h2 className="mb-3 text-sm font-medium uppercase tracking-widest text-slate-400">{title}</h2>
+      <h2 className="mb-3 text-sm font-medium text-slate-300">{title}</h2>
       {children}
     </div>
   );

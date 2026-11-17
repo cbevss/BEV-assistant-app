@@ -17,7 +17,7 @@ export function ApprovalModal({
         animate={{ scale: 1, opacity: 1 }}
         className="glass w-[420px] rounded-2xl border border-bev-danger/30 p-6"
       >
-        <div className="mb-1 text-xs uppercase tracking-widest text-bev-danger">
+        <div className="mb-1 text-xs text-bev-danger">
           Permission required
         </div>
         <p className="mb-5 text-sm text-slate-200">{description}</p>

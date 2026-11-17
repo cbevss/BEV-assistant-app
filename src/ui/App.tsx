@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Routes, Route, NavLink, Navigate } from "react-router-dom";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useAssistant } from "@/state/assistant";
+import { stateMeta } from "./design";
 import { useSettings } from "@/state/settings";
 import { useRoutines } from "@/routines/store";
 import { startScheduler } from "@/routines/scheduler";
@@ -137,8 +138,9 @@ export function App() {
           </div>
           <div>
             <div className="text-lg font-semibold tracking-wide text-glow">BEV</div>
-            <div className="text-[10px] uppercase tracking-[0.2em] text-slate-400">
-              assistant online
+            <div className="flex items-center gap-1.5 text-[11px] text-slate-400" aria-live="polite">
+              <span className="h-1.5 w-1.5 rounded-full" style={{ background: stateMeta[state].color }} aria-hidden="true" />
+              {privacyMode ? "Privacy mode" : !micEnabled && state === "idle" ? "Mic off" : stateMeta[state].label}
             </div>
           </div>
         </div>
@@ -176,7 +178,7 @@ export function App() {
           <StatusDot on={micEnabled && !privacyMode} />
           <span className="flex-1">
             {privacyMode ? "Privacy mode — mic off" : micEnabled ? "Listening for “BEV”" : "Mic off — click to listen"}
-            <span className="mt-0.5 block text-[10px] text-slate-500">
+            <span className="mt-0.5 block text-[11px] text-slate-500">
               {state} · Ctrl+Alt+B to talk
             </span>
           </span>

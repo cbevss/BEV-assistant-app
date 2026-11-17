@@ -82,15 +82,15 @@ export function RoutineEditor({
       >
         <h2 className="mb-4 text-lg font-semibold text-glow">{routine ? "Edit routine" : "New routine"}</h2>
 
-        <label className="mb-1 block text-xs uppercase tracking-widest text-slate-400">Name</label>
+        <label className="mb-1 block text-xs text-slate-400">Name</label>
         <TextInput value={name} onChange={(e) => setName(e.target.value)} placeholder="Gaming Mode" />
 
-        <label className="mb-1 mt-4 block text-xs uppercase tracking-widest text-slate-400">
+        <label className="mb-1 mt-4 block text-xs text-slate-400">
           Voice triggers (comma-separated)
         </label>
         <TextInput value={triggers} onChange={(e) => setTriggers(e.target.value)} placeholder="gaming mode, game time" />
 
-        <label className="mb-2 mt-4 block text-xs uppercase tracking-widest text-slate-400">Steps</label>
+        <label className="mb-2 mt-4 block text-xs text-slate-400">Steps</label>
         <div className="space-y-2">
           {steps.map((s, i) => (
             <div key={s.id} className="rounded-lg border border-white/10 bg-white/5 p-3">
@@ -124,7 +124,7 @@ export function RoutineEditor({
           + Add step
         </Button>
 
-        <label className="mb-1 mt-5 block text-xs uppercase tracking-widest text-slate-400">
+        <label className="mb-1 mt-5 block text-xs text-slate-400">
           Schedule (optional)
         </label>
         <div className="flex items-center gap-3">

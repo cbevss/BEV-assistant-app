@@ -14,7 +14,7 @@ export function Section({ title, children, aside }: { title: string; children: R
   return (
     <section className="glass mb-5 rounded-xl p-5">
       <div className="mb-4 flex items-center justify-between">
-        <h2 className="text-sm font-medium uppercase tracking-widest text-slate-400">{title}</h2>
+        <h2 className="text-base font-medium text-slate-200">{title}</h2>
         {aside}
       </div>
       <div className="space-y-4">{children}</div>

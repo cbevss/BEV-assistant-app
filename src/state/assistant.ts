@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import type { PlanStep } from "@/ai/plan";
+import { stateMeta } from "@/ui/design";
 
 /** The eight canonical assistant states that drive overlay animation. */
 export type AssistantState =
@@ -83,14 +84,7 @@ export const useAssistant = create<AssistantStore>((set) => ({
   clearMessages: () => set({ messages: [] }),
 }));
 
-/** Accent colour per state — consumed by the overlay orb + rings. */
-export const stateAccent: Record<AssistantState, string> = {
-  idle: "#22d3ee",
-  activating: "#38e8ff",
-  listening: "#22d3ee",
-  thinking: "#8b5cf6",
-  speaking: "#3b82f6",
-  executing: "#34d399",
-  completed: "#34d399",
-  error: "#f43f5e",
-};
+/** Accent colour per state — consumed by the overlay orb + rings (tokens in ui/design.ts). */
+export const stateAccent: Record<AssistantState, string> = Object.fromEntries(
+  Object.entries(stateMeta).map(([k, v]) => [k, v.color])
+) as Record<AssistantState, string>;
