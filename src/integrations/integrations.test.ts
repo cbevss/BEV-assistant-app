@@ -89,3 +89,15 @@ describe("OAuth and HTTP helpers", () => {
     expect(errorText(404, { error: { message: "nope" } })).toBe("not found: nope");
   });
 });
+
+import { formatMessages } from "./discord";
+describe("Discord", () => {
+  it("formats messages oldest first", () => {
+    const out = formatMessages([
+      { id: "2", content: "second", timestamp: "2026-11-17T10:05:00Z", author: { username: "b" } },
+      { id: "1", content: "", timestamp: "2026-11-17T10:00:00Z", author: { username: "a", global_name: "Alice" }, attachments: [{}] },
+    ]);
+    expect(out.split("\n")[0]).toMatch(/Alice: \[attachment\]$/);
+    expect(out.split("\n")[1]).toMatch(/b: second$/);
+  });
+});

@@ -47,7 +47,6 @@ asks for and the plan the work follows.
 
 ### Missing
 - Application discovery/index (Start apps, Store packages, shortcuts, App Paths), resolution and verified execution.
-- Discord integration (others since 1.1.15).
 
 ### Security posture
 - Good: keys in Credential Manager; no arbitrary shell from the AI; `open_path` uses explorer with a single argument; screen/web text labelled as data in the prompt; approvals for power/close/programs.
@@ -101,6 +100,7 @@ Order follows the spec's rule: build the underlying systems first, then connect 
 - **Gmail and Calendar**: search, read, drafts only (never sends), list and add events (no guests).
 - **MCP**: stdio servers run as child processes started from user settings only, plus Streamable HTTP with session ids and SSE replies. Tools appear as `mcp_<server>_<tool>`. All output is untrusted; actions need approval unless the server is trusted or the tool is read-only.
 - Setup guide: `docs/INTEGRATIONS.md`.
+- **Discord** (1.1.17): the user's own bot token; list channels, read messages; posting needs approval and suppresses @mentions.
 - **Not verified here**: no live calls to any of these services were possible from this environment. Payload shapes follow the public API docs; the pure helpers (matching, service mapping, MIME, SSE parsing, PKCE against the RFC 7636 vector) are unit-tested.
 
 ## What 1.1.14 changed (Phase G)

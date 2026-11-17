@@ -3,7 +3,7 @@ import { native } from "@/lib/native";
 import { useSettings, ProviderId } from "@/state/settings";
 import { makeProvider, providerLabels, secretNameFor } from "@/ai/factory";
 import { bevCloud, CLOUD_KEY_SECRET, normaliseCloudUrl } from "@/lib/bevCloud";
-import { WebSearchCard, HomeAssistantCard, SpotifyCard, GoogleCard, GitHubCard, McpCard } from "../components/ConnectorCards";
+import { WebSearchCard, HomeAssistantCard, SpotifyCard, GoogleCard, GitHubCard, DiscordCard, McpCard } from "../components/ConnectorCards";
 import { PageHeader, Section, Field, TextInput, Select, Button, StatusPill, Toggle } from "../components/Form";
 
 type Check = { ok: boolean | null; msg: string };
@@ -72,6 +72,7 @@ export function Integrations() {
       <SpotifyCard />
       <GoogleCard />
       <GitHubCard />
+      <DiscordCard />
       <McpCard />
     </div>
   );

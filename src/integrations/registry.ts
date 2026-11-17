@@ -3,6 +3,7 @@ import type { RegisteredTool } from "@/ai/tools";
 import { useSettings, type McpServerConfig } from "@/state/settings";
 import { homeAssistantTools } from "./homeassistant";
 import { githubTools } from "./github";
+import { discordTools } from "./discord";
 import { spotifyTools } from "./spotify";
 import { googleTools } from "./google";
 import { McpClient, mcpTools } from "./mcp";
@@ -50,6 +51,7 @@ export function connectorTools(): Record<string, RegisteredTool> {
   return {
     ...(i.homeassistant.enabled && i.homeassistant.url ? homeAssistantTools() : {}),
     ...(i.github.enabled ? githubTools() : {}),
+    ...(i.discord?.enabled ? discordTools() : {}),
     ...(i.spotify.enabled && i.spotify.clientId ? spotifyTools() : {}),
     ...(i.google.enabled && i.google.clientId ? googleTools() : {}),
     ...Object.assign({}, ...i.mcp.filter((m) => m.enabled).map((m) => (clients.get(m.id) ? mcpTools(clients.get(m.id)!) : {}))),
