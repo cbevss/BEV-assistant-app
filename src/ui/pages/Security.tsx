@@ -3,7 +3,7 @@ import { native, ActionLogRow } from "@/lib/native";
 import { useSettings } from "@/state/settings";
 import { useAssistant } from "@/state/assistant";
 import { setPrivacy } from "@/voice/bootstrap";
-import { tools, isSensitive } from "@/ai/tools";
+import { allTools, getTool, isSensitive } from "@/ai/tools";
 import { PageHeader, Section, Toggle, Button, StatusPill } from "../components/Form";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 
@@ -20,7 +20,7 @@ export function Security() {
     refresh();
   }, [refresh]);
 
-  const allTools = Object.values(tools).map((t) => t.spec);
+  const allToolSpecs = Object.values(allTools()).map((t) => t.spec);
 
   return (
     <div>
@@ -75,7 +75,7 @@ export function Security() {
             : " Tools marked “needs approval” show an Approve/Cancel prompt before running."}
         </p>
         <div className="divide-y divide-white/5">
-          {allTools.map((t) => {
+          {allToolSpecs.map((t) => {
             const allowed = settings.toolPermissions[t.name] !== false;
             return (
               <div key={t.name} className="flex items-start justify-between gap-4 py-3">
@@ -87,7 +87,7 @@ export function Security() {
                         needs approval
                       </span>
                     )}
-                    {!isSensitive(t.name) && tools[t.name]?.sensitiveCheck && (
+                    {!isSensitive(t.name) && getTool(t.name)?.sensitiveCheck && (
                       <span className="rounded bg-amber-400/15 px-1.5 text-[11px] text-amber-300">
                         asks before risky actions
                       </span>

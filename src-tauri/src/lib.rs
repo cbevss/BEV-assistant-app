@@ -5,6 +5,7 @@
 //! returns an `Err`, never a fabricated success.
 
 mod audio;
+mod integrations;
 mod brain;
 mod control;
 mod diagnostics;
@@ -78,6 +79,7 @@ pub fn run() {
             // Task journal; anything left "running" was cut off last time.
             journal::init(&conn)?;
             brain::init(&conn)?;
+            integrations::load_origins(app.handle());
             let cut_off = journal::mark_interrupted(&conn, journal::now_ms())?;
             if cut_off > 0 {
                 log::info!("{cut_off} task(s) were interrupted last session");
@@ -186,6 +188,14 @@ pub fn run() {
             brain::notes_search,
             brain::set_embedding,
             brain::embeddings_list,
+            integrations::integration_allow_origin,
+            integrations::integration_forget_origin,
+            integrations::integration_fetch,
+            integrations::oauth_listen,
+            integrations::oauth_wait,
+            integrations::mcp_spawn,
+            integrations::mcp_send,
+            integrations::mcp_kill,
             system::delete_temp_file,
             system::open_settings_page,
             system::list_monitors,

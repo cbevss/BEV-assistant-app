@@ -146,6 +146,16 @@ export const native = {
   noteDelete: (id: number) => invoke<void>("note_delete", { id }),
   notesSearch: (query: string, limit?: number) => invoke<NoteHit[]>("notes_search", { query, limit }),
   setEmbedding: (kind: "memory" | "note", id: number, vec: string) => invoke<void>("set_embedding", { kind, id, vec }),
+  // Connectors (integrations.rs)
+  integrationAllowOrigin: (url: string) => invoke<string>("integration_allow_origin", { url }),
+  integrationForgetOrigin: (url: string) => invoke<void>("integration_forget_origin", { url }),
+  integrationFetch: (url: string, method?: string, headers?: Array<[string, string]>, body?: string) =>
+    invoke<{ status: number; headers: Array<[string, string]>; body: string; content_type: string }>("integration_fetch", { url, method, headers, body }),
+  oauthListen: (port?: number) => invoke<number>("oauth_listen", { port }),
+  oauthWait: (port: number, timeoutSecs?: number) => invoke<string>("oauth_wait", { port, timeoutSecs }),
+  mcpSpawn: (id: string, command: string, args: string[], env?: Record<string, string>) => invoke<void>("mcp_spawn", { id, command, args, env }),
+  mcpSend: (id: string, message: string, timeoutSecs?: number) => invoke<string | null>("mcp_send", { id, message, timeoutSecs }),
+  mcpKill: (id: string) => invoke<void>("mcp_kill", { id }),
   embeddingsList: (kind: "memory" | "note") => invoke<Array<{ id: number; vec: string }>>("embeddings_list", { kind }),
 };
 

@@ -21,6 +21,7 @@ import { ApprovalModal } from "./components/ApprovalModal";
 import { TitleBar } from "./components/TitleBar";
 import { pruneHistory, startBrain } from "@/brain/memory";
 import { configureBackground } from "@/ai/background";
+import { startIntegrations } from "@/integrations/registry";
 import { Orchestrator } from "@/ai/orchestrator";
 import { makeProvider } from "@/ai/factory";
 import { notify } from "@/lib/notify";
@@ -94,6 +95,9 @@ export function App() {
         makeOrchestrator: (p, h) => new Orchestrator(p, h, { background: true }),
         notify: (t, b) => void notify(t, b),
       });
+
+      // Connected services: start the user's MCP servers.
+      startIntegrations().catch(() => {});
 
       // Second brain: trim old history, then fill in semantic-search vectors.
       pruneHistory().catch(() => {});

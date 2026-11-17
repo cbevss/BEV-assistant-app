@@ -12,6 +12,7 @@ import { appsApi, describeOpen, describeClose } from "@/lib/apps";
 import { controlCache, formatSnapshot, formatOcr, findText, centre, riskOfLabel, riskOfKeys, riskOfTyping } from "@/lib/control";
 import { diagnose, formatFindings, type Area } from "@/lib/diagnose";
 import * as brain from "@/brain/memory";
+import { connectorTools } from "@/integrations/registry";
 import { startBackgroundTask, cancelBackgroundTask, useBackground, describeTask } from "./background";
 
 /**
@@ -1000,16 +1001,22 @@ async function micLabel(deviceId: string): Promise<string> {
   }
 }
 
-export const toolSpecs = (): ToolSpec[] => Object.values(tools).map((t) => t.spec);
+/** Built-in tools plus those from connected services (Integrations). */
+export function allTools(): Record<string, RegisteredTool> {
+  return { ...connectorTools(), ...tools };
+}
+export const getTool = (name: string): RegisteredTool | undefined => tools[name] ?? connectorTools()[name];
+
+export const toolSpecs = (): ToolSpec[] => Object.values(allTools()).map((t) => t.spec);
 export const isSensitive = (name: string, args?: Record<string, unknown>): boolean => {
-  const t = tools[name];
+  const t = getTool(name);
   return !!t?.spec.sensitive || (!!args && !!t?.sensitiveFor?.(args));
 };
 
 /** Why this call needs approval, or null. Includes live checks (sensitiveCheck). */
 export async function sensitiveReason(name: string, args: Record<string, unknown>): Promise<string | null> {
   if (isSensitive(name, args)) return "";
-  const check = tools[name]?.sensitiveCheck;
+  const check = getTool(name)?.sensitiveCheck;
   if (!check) return null;
   try {
     return await check(args);

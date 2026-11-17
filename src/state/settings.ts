@@ -13,6 +13,27 @@ export type WakeEngine = "speech" | "on-device";
 export type GamePopup = "auto" | "show" | "hide";
 export type OverlayCorner = "top-right" | "top-left" | "bottom-right" | "bottom-left" | "center";
 
+export interface McpServerConfig {
+  id: string;
+  name: string;
+  /** "stdio" runs a program on this PC; "http" talks to a URL. */
+  transport: "stdio" | "http";
+  command?: string;
+  args?: string[];
+  url?: string;
+  enabled: boolean;
+  /** Ask before each of its actions (default). Off only for servers you trust. */
+  confirmActions: boolean;
+}
+
+export interface IntegrationSettings {
+  homeassistant: { enabled: boolean; url: string };
+  github: { enabled: boolean };
+  spotify: { enabled: boolean; clientId: string };
+  google: { enabled: boolean; clientId: string };
+  mcp: McpServerConfig[];
+}
+
 export interface Settings {
   onboarded: boolean;
   // AI
@@ -44,6 +65,8 @@ export interface Settings {
   historyDays: number;
   /** Search memories and notes by meaning (small model on this PC). */
   semanticSearch: boolean;
+  /** Connector settings (tokens live in the OS keyring, never here). */
+  integrations: IntegrationSettings;
   /** Which voice engine speaks: Windows (built-in), Kokoro (free, local) or ElevenLabs. */
   ttsEngine: "windows" | "kokoro" | "elevenlabs";
   /** Windows voice (when ttsEngine is "windows"). */
@@ -118,6 +141,7 @@ export const defaultSettings: Settings = {
   keepHistory: true,
   historyDays: 90,
   semanticSearch: true,
+  integrations: { homeassistant: { enabled: false, url: "" }, github: { enabled: false }, spotify: { enabled: false, clientId: "" }, google: { enabled: false, clientId: "" }, mcp: [] },
   ttsEngine: "windows",
   voiceId: "",
   kokoroVoice: "bm_george",

@@ -1,7 +1,7 @@
 import { native } from "@/lib/native";
 import { useSettings, toolAllowed, autoApproveOn } from "@/state/settings";
 import { AiImage, AiMessage, AiProvider, ProviderError, ToolCall } from "./types";
-import { tools, toolSpecs, sensitiveReason, ToolOutput } from "./tools";
+import { getTool, toolSpecs, sensitiveReason, ToolOutput } from "./tools";
 import { memoriesForPrompt, recordExchange, startNewSession } from "@/brain/memory";
 import { buildSystemPrompt } from "./persona";
 import { parsePlan, unfinished, formatPlan, type PlanStep } from "./plan";
@@ -214,7 +214,7 @@ export class Orchestrator {
           continue;
         }
         const result = call.name === "update_plan" ? this.applyPlan(call) : await this.runTool(call, signal);
-        const untrusted = result.ok && !!tools[call.name]?.untrustedOutput;
+        const untrusted = result.ok && !!getTool(call.name)?.untrustedOutput;
         this.history.push({
           role: "tool",
           toolCallId: call.id,
@@ -282,7 +282,7 @@ export class Orchestrator {
     call: ToolCall,
     signal?: AbortSignal
   ): Promise<{ ok: boolean; text: string; images?: AiImage[] }> {
-    const tool = tools[call.name];
+    const tool = getTool(call.name);
     if (!tool) return { ok: false, text: `unknown tool: ${call.name}` };
     if (!toolAllowed(call.name)) {
       return { ok: false, text: `permission for ${call.name} is revoked in Security settings` };
