@@ -5,6 +5,7 @@ import { native } from "@/lib/native";
 import { MicInput } from "@/voice/wakeword";
 import { WebSpeechSynthesizer } from "@/voice/webspeech";
 import { makeProvider, providerLabels, secretNameFor } from "@/ai/factory";
+import { Core } from "../components/Core";
 import { Button, TextInput, Select, StatusPill } from "../components/Form";
 
 /** Guided first-run setup. Explains what works locally vs needs a key/model. */
@@ -22,11 +23,11 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
 
   return (
     <div className="grid h-screen w-screen place-items-center p-8">
-      <div className="glass w-[620px] rounded-2xl p-8">
+      <div className="w-[620px] max-w-[calc(100vw-48px)] rounded-xl border border-line-subtle bg-surface-1 p-8">
         {/* progress */}
         <div className="mb-6 flex gap-1.5">
           {steps.map((_, i) => (
-            <div key={i} className={`h-1 flex-1 rounded ${i <= step ? "bg-bev-cyan" : "bg-white/10"}`} />
+            <div key={i} className={`h-1 flex-1 rounded ${i <= step ? "bg-accent" : "bg-surface-3"}`} />
           ))}
         </div>
 
@@ -57,9 +58,9 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
               Skip setup
             </Button>
             {step < steps.length - 1 ? (
-              <Button onClick={next}>Next</Button>
+              <Button variant="primary" onClick={next}>Next</Button>
             ) : (
-              <Button onClick={finish}>Finish</Button>
+              <Button variant="primary" onClick={finish}>Finish</Button>
             )}
           </div>
         </div>
@@ -71,12 +72,13 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
 function Welcome() {
   return (
     <div className="space-y-3">
-      <div className="text-3xl font-semibold text-glow">Meet BEV</div>
-      <p className="text-slate-300">
+      <Core state="idle" size={44} />
+      <div className="mt-5 text-2xl font-semibold">Meet BEV</div>
+      <p className="text-ink-2">
         Your always-available AI assistant for Windows. BEV listens for its wake word, talks back, and
         controls your PC — opening apps, setting volume, running routines and more.
       </p>
-      <p className="text-sm text-slate-500">
+      <p className="text-sm text-ink-3">
         This quick setup takes a minute. Wake-word and voice run locally; the AI brain uses a provider
         you choose (cloud API key, or fully local via Ollama). Nothing is uploaded without your say-so.
       </p>
@@ -111,7 +113,7 @@ function MicStep({ deviceId, onPick }: { deviceId: string; onPick: (id: string) 
     <div className="space-y-4">
       <h2 className="text-xl font-semibold">Choose your microphone</h2>
       {err ? (
-        <p className="text-sm text-bev-danger">Microphone access failed: {err}. You can grant it later in Voice settings.</p>
+        <p className="text-sm text-danger">Microphone access failed: {err}. You can grant it later in Voice settings.</p>
       ) : (
         <>
           <Select
@@ -121,9 +123,9 @@ function MicStep({ deviceId, onPick }: { deviceId: string; onPick: (id: string) 
             options={[{ value: "", label: "System default" }, ...mics.map((m, i) => ({ value: m.deviceId, label: m.label || `Microphone ${i + 1}` }))]}
           />
           <div>
-            <div className="mb-1 text-xs text-slate-500">Speak — the bar should move:</div>
-            <div className="h-2 overflow-hidden rounded bg-white/5">
-              <div className="h-full rounded bg-gradient-to-r from-bev-cyan to-bev-violet transition-[width] duration-75" style={{ width: `${Math.round(level * 100)}%` }} />
+            <div className="mb-1 text-xs text-ink-3">Speak — the bar should move:</div>
+            <div className="h-2 overflow-hidden rounded bg-surface-2">
+              <div className="h-full rounded bg-accent transition-[width] duration-75" style={{ width: `${Math.round(level * 100)}%` }} />
             </div>
           </div>
         </>
@@ -136,12 +138,12 @@ function WakeStep() {
   return (
     <div className="space-y-3">
       <h2 className="text-xl font-semibold">Waking BEV</h2>
-      <p className="text-slate-300">Two ways to get BEV's attention:</p>
-      <ul className="space-y-2 text-sm text-slate-300">
+      <p className="text-ink-2">Two ways to get BEV's attention:</p>
+      <ul className="space-y-2 text-sm text-ink-2">
         <li>⌨ <b>Ctrl + Alt + B</b> — works right now, no setup.</li>
         <li>🎙 <b>Say “BEV”</b> — works straight away using speech recognition. For a fully on-device wake word, train a “hey BEV” model later in Voice &amp; Audio.</li>
       </ul>
-      <p className="text-sm text-slate-500">
+      <p className="text-sm text-ink-3">
         With the on-device wake word, listening for “hey BEV” happens entirely on your PC.
       </p>
     </div>
@@ -205,7 +207,7 @@ function ProviderStep({ provider, onProvider }: { provider: ProviderId; onProvid
           </Button>
         </div>
       ) : (
-        <p className="text-sm text-slate-400">
+        <p className="text-sm text-ink-2">
           Ollama runs fully offline. Install it from ollama.com and run <span className="font-mono">ollama pull llama3.1</span>.
         </p>
       )}
@@ -236,7 +238,7 @@ function VoiceStep({ voiceId, onVoice }: { voiceId: string; onVoice: (id: string
       <Button variant="ghost" onClick={() => new WebSpeechSynthesizer({ voiceId: voiceId || undefined }).speak("Hi, I'm BEV. Everything's ready when you are.").catch(() => {})}>
         Test voice
       </Button>
-      <p className="text-sm text-slate-500">
+      <p className="text-sm text-ink-3">
         More natural voices appear here if you install Windows neural voices (Settings → Time & language → Speech).
       </p>
     </div>
@@ -247,14 +249,14 @@ function PermissionsStep() {
   return (
     <div className="space-y-3">
       <h2 className="text-xl font-semibold">What BEV can do</h2>
-      <ul className="space-y-2 text-sm text-slate-300">
+      <ul className="space-y-2 text-sm text-ink-2">
         <li>✓ Open and close apps, set volume, read system stats, manage windows.</li>
         <li>✓ Run multi-step routines you create.</li>
         <li>🔒 Destructive actions (closing apps, shutdown) always ask for approval first.</li>
         <li>🔒 API keys are stored in Windows Credential Manager, never in plain files.</li>
         <li>🔒 You can revoke any capability, or hit Privacy mode to kill the mic, in Security.</li>
       </ul>
-      <p className="text-sm text-slate-500">BEV runs as a normal app — no administrator rights required.</p>
+      <p className="text-sm text-ink-3">BEV runs as a normal app — no administrator rights required.</p>
     </div>
   );
 }
@@ -262,11 +264,11 @@ function PermissionsStep() {
 function FinishStep() {
   return (
     <div className="space-y-3">
-      <div className="text-2xl font-semibold text-glow">You're set</div>
-      <p className="text-slate-300">
+      <div className="text-2xl font-semibold">You're set</div>
+      <p className="text-ink-2">
         Press <b>Ctrl + Alt + B</b> (or say “BEV” once the wake word is set up) and try:
       </p>
-      <ul className="space-y-1 text-sm text-slate-400">
+      <ul className="space-y-1 text-sm text-ink-2">
         <li>“What's my CPU doing?”</li>
         <li>“Open Notepad.”</li>
         <li>“Set my volume to 30%.”</li>

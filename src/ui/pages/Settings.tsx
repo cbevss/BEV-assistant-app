@@ -7,7 +7,7 @@ import { ConfirmDialog } from "../components/ConfirmDialog";
 import { AppsIndex } from "../components/AppsIndex";
 import { applyAppearance } from "@/lib/appearance";
 
-export function Settings() {
+export function Settings({ part = "general" }: { part?: "general" | "apps" | "advanced" }) {
   const { settings, update, reset } = useSettings();
   const [version, setVersion] = useState("");
   const [autostart, setAutostart] = useState<boolean | null>(null);
@@ -32,9 +32,15 @@ export function Settings() {
 
   return (
     <div>
-      <PageHeader title="Settings" subtitle="Startup, personality, performance and diagnostics." />
-
-      <AppsIndex />
+      {part === "apps" && (
+        <>
+          <PageHeader title="Apps" subtitle="The installed apps BEV knows how to open. It rescans by itself when you ask for something new." />
+          <AppsIndex />
+        </>
+      )}
+      {part === "general" && (
+        <>
+      <PageHeader title="General" subtitle="Startup, BEV's personality, keeping an eye on the PC and your daily briefing." />
 
       <Section title="Startup & background">
         <Field label="Start BEV with Windows" hint="Launches minimised to the tray on sign-in.">
@@ -139,16 +145,23 @@ export function Settings() {
         </Field>
       </Section>
 
+        </>
+      )}
+      {part === "advanced" && (
+        <>
+      <PageHeader title="Advanced" subtitle="Version information and resetting BEV." />
       <Section title="Diagnostics">
         <Field label="Version">
-          <span className="font-mono text-sm text-slate-300">BEV {version}</span>
+          <span className="font-mono text-sm text-ink-2">BEV {version}</span>
         </Field>
-        <div className="flex justify-end">
+        <Field label="Reset all settings" hint="Puts every setting back to its default. Memories, routines and API keys are kept.">
           <Button variant="danger" onClick={() => setConfirmReset(true)}>
-            Reset all settings
+            Reset settings
           </Button>
-        </div>
+        </Field>
       </Section>
+        </>
+      )}
 
       {confirmReset && (
         <ConfirmDialog

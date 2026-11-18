@@ -31,7 +31,7 @@ function useHasSecret(name: string, bump = 0) {
 
 function Result({ r }: { r: { ok: boolean; text: string } | null }) {
   if (!r) return null;
-  return <p className={`text-sm ${r.ok ? "text-bev-ok" : "text-bev-danger"}`}>{r.text}</p>;
+  return <p className={`text-sm ${r.ok ? "text-ok" : "text-danger"}`}>{r.text}</p>;
 }
 
 async function run(fn: () => Promise<string>, set: (r: { ok: boolean; text: string }) => void) {
@@ -63,7 +63,7 @@ export function HomeAssistantCard() {
     }, setR);
   return (
     <Section title="Home Assistant" aside={i.homeassistant.enabled ? <StatusPill ok={has} label={has ? "connected" : "no token"} /> : undefined}>
-      <p className="text-sm text-slate-400">Control lights, heating, plugs and anything else in Home Assistant, and check sensors. Locks, alarms and garage doors always ask first.</p>
+      <p className="text-sm text-ink-2">Control lights, heating, plugs and anything else in Home Assistant, and check sensors. Locks, alarms and garage doors always ask first.</p>
       <Field label="Address" hint="Your Home Assistant URL, as you open it in a browser.">
         <TextInput placeholder="http://homeassistant.local:8123" value={i.homeassistant.url} onChange={(e) => patch("homeassistant", { url: e.target.value })} />
       </Field>
@@ -99,7 +99,7 @@ export function GitHubCard() {
     }, setR);
   return (
     <Section title="GitHub" aside={i.github.enabled ? <StatusPill ok={has} label={has ? "connected" : "no token"} /> : undefined}>
-      <p className="text-sm text-slate-400">Notifications, issues, pull request checks. Opening an issue always asks first.</p>
+      <p className="text-sm text-ink-2">Notifications, issues, pull request checks. Opening an issue always asks first.</p>
       <Field label="Personal access token" hint="github.com → Settings → Developer settings → Fine-grained tokens. Give it read access to the repos you want (and Issues: write to open issues).">
         <TextInput type="password" placeholder={has ? "saved (paste to replace)" : "github_pat_…"} value={token} onChange={(e) => setToken(e.target.value)} />
       </Field>
@@ -142,7 +142,7 @@ function OAuthCard({ id, title, blurb, setupHint, secretName }: { id: "spotify" 
   };
   return (
     <Section title={title} aside={cfg.enabled ? <StatusPill ok={signedIn} label={signedIn ? "signed in" : "not signed in"} /> : undefined}>
-      <p className="text-sm text-slate-400">{blurb}</p>
+      <p className="text-sm text-ink-2">{blurb}</p>
       <Field label="Client ID" hint={setupHint}>
         <TextInput value={cfg.clientId} onChange={(e) => patch(id, { clientId: e.target.value })} />
       </Field>
@@ -227,19 +227,19 @@ export function McpCard() {
 
   return (
     <Section title="MCP servers">
-      <p className="text-sm text-slate-400">
+      <p className="text-sm text-ink-2">
         Add tools from MCP servers, the standard many apps use to plug into AI assistants. Only add servers you trust: a local server runs as a program on this PC. Each action asks first unless you turn that off.
       </p>
-      <ul className="divide-y divide-white/5">
+      <ul className="divide-y divide-line-subtle">
         {i.mcp.map((m) => {
           const st = mcpClient(m.id)?.status ?? { state: "off" as const };
           return (
             <li key={m.id} className="space-y-2 py-3">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
-                  <div className="text-sm text-slate-100">{m.name}</div>
-                  <div className="truncate font-mono text-xs text-slate-500">{m.transport === "stdio" ? [m.command, ...(m.args ?? [])].join(" ") : m.url}</div>
-                  <div className={`text-xs ${st.state === "error" ? "text-bev-danger" : "text-slate-400"}`}>
+                  <div className="text-sm text-ink">{m.name}</div>
+                  <div className="truncate font-mono text-xs text-ink-3">{m.transport === "stdio" ? [m.command, ...(m.args ?? [])].join(" ") : m.url}</div>
+                  <div className={`text-xs ${st.state === "error" ? "text-danger" : "text-ink-2"}`}>
                     {st.state === "ready" ? `${st.tools.length} tools` : st.state === "error" ? st.message : st.state === "connecting" ? "Connecting…" : "Not connected"}
                   </div>
                 </div>
@@ -260,11 +260,11 @@ export function McpCard() {
                 </div>
               </div>
               <div className="flex flex-wrap gap-6 text-sm">
-                <label className="flex items-center gap-2 text-slate-300">
+                <label className="flex items-center gap-2 text-ink-2">
                   <Toggle label={`Enable ${m.name}`} checked={m.enabled} onChange={(enabled) => (update(m, { enabled }), enabled ? connectMcp({ ...m, enabled }).catch(() => {}) : disconnectMcp(m.id))} />
                   On
                 </label>
-                <label className="flex items-center gap-2 text-slate-300">
+                <label className="flex items-center gap-2 text-ink-2">
                   <Toggle label={`Ask before ${m.name} actions`} checked={m.confirmActions} onChange={(confirmActions) => update(m, { confirmActions })} />
                   Ask before each action (read-only tools don't ask)
                 </label>
@@ -273,7 +273,7 @@ export function McpCard() {
           );
         })}
       </ul>
-      <div className="space-y-2 rounded-lg border border-white/10 p-3">
+      <div className="space-y-2 rounded-lg border border-line p-3">
         <div className="flex gap-2">
           <TextInput placeholder="Name, e.g. Files" value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} />
           <div className="w-56">
@@ -316,7 +316,7 @@ export function WebSearchCard() {
   const viaClaude = settings.provider === "anthropic";
   return (
     <Section title="Web search" aside={<StatusPill ok={viaClaude || has ? true : null} label={viaClaude ? "via Claude" : has ? "Brave" : "not set up"} />}>
-      <p className="text-sm text-slate-400">
+      <p className="text-sm text-ink-2">
         Lets BEV look things up and read web pages for research.{" "}
         {viaClaude ? "With Claude as the AI it uses Claude's built-in web search, so there's nothing to set up." : "With this AI provider it needs a Brave Search key (free tier available)."}
       </p>
@@ -364,7 +364,7 @@ export function DiscordCard() {
   const [r, setR] = useState<{ ok: boolean; text: string } | null>(null);
   return (
     <Section title="Discord" aside={enabled ? <StatusPill ok={has} label={has ? "connected" : "no token"} /> : undefined}>
-      <p className="text-sm text-slate-400">Read channels in your servers through your own bot, and post as the bot after you confirm. BEV can't read your personal DMs.</p>
+      <p className="text-sm text-ink-2">Read channels in your servers through your own bot, and post as the bot after you confirm. BEV can't read your personal DMs.</p>
       <Field label="Bot token" hint="discord.com/developers → New Application → Bot → Reset Token (turn on Message Content Intent). Invite it with OAuth2 → URL Generator → bot, Read Messages and Send Messages. See docs/INTEGRATIONS.md.">
         <TextInput type="password" placeholder={has ? "saved (paste to replace)" : "paste token"} value={token} onChange={(e) => setToken(e.target.value)} />
       </Field>

@@ -6,24 +6,26 @@
 import type { AssistantState } from "@/state/assistant";
 
 export const color = {
-  void: "#05070d",
-  carbon: "#0a0e17",
-  cyan: "#22d3ee",
-  blue: "#3b82f6",
-  violet: "#8b5cf6",
-  ok: "#34d399",
-  warn: "#fbbf24",
-  danger: "#f43f5e",
+  canvas: "#0E1014",
+  accent: "#4ECDDE",
+  accentStrong: "#84E0EC",
+  ink3: "#6D7786",
+  ok: "#3DC98A",
+  warn: "#E8B04B",
+  danger: "#EF5B5B",
 } as const;
 
-/** How each assistant state looks and reads. Words are plain, present tense. */
+/**
+ * How each assistant state looks and reads. BEV has one signal colour; states
+ * differ by motion and words (see Core.tsx), not by a rainbow of hues.
+ */
 export const stateMeta: Record<AssistantState, { color: string; label: string }> = {
-  idle: { color: color.cyan, label: "Ready" },
-  activating: { color: "#38e8ff", label: "Waking up" },
-  listening: { color: color.cyan, label: "Listening" },
-  thinking: { color: color.violet, label: "Thinking" },
-  speaking: { color: color.blue, label: "Speaking" },
-  executing: { color: color.ok, label: "Working" },
+  idle: { color: color.ink3, label: "Ready" },
+  activating: { color: color.accentStrong, label: "Waking up" },
+  listening: { color: color.accent, label: "Listening" },
+  thinking: { color: color.accent, label: "Thinking" },
+  speaking: { color: color.accent, label: "Speaking" },
+  executing: { color: color.accent, label: "Working" },
   completed: { color: color.ok, label: "Done" },
   error: { color: color.danger, label: "Something went wrong" },
 };

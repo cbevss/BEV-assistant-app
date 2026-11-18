@@ -166,7 +166,7 @@ export const defaultSettings: Settings = {
   interfaceSounds: true,
   builtInWakeModel: true,
   gamePopup: "auto",
-  accent: "#22d3ee",
+  accent: "#4ecdde",
   overlayCorner: "top-right",
   overlayScale: 1,
   reducedMotion: false,

@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { listen } from "@tauri-apps/api/event";
 import { Orb } from "./Orb";
+import { Core } from "@/ui/components/Core";
 import { useAssistant, AssistantState } from "@/state/assistant";
 import { native } from "@/lib/native";
 import { useSettings } from "@/state/settings";
@@ -67,21 +68,17 @@ export function Overlay() {
             className="relative"
           >
             {/* Small idle indicator — subtle breathing dot. */}
-            <motion.div
-              className="h-5 w-5 rounded-full"
-              style={{ background: accent, boxShadow: `0 0 24px ${accent}88` }}
-              animate={reducedMotion ? { opacity: 0.8 } : { opacity: [0.4, 1, 0.4], scale: [0.9, 1.05, 0.9] }}
-              transition={{ repeat: Infinity, duration: 2.6, ease: "easeInOut" }}
-            />
+            <div className="grid h-9 w-9 place-items-center rounded-full border border-line" style={{ background: "rgb(var(--canvas) / 0.94)" }}>
+              <Core state="idle" size={24} />
+            </div>
           </motion.div>
         ) : (
           <motion.div
             key="expanded"
-            initial={{ opacity: 0, scale: 0.85 }}
-            // Translucent: the desktop shows through the orb.
-            animate={{ opacity: 0.9, scale: 1 }}
+            initial={{ opacity: 0, scale: 0.94 }}
+            animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.85 }}
-            transition={{ type: "spring", stiffness: 180, damping: 22 }}
+            transition={{ duration: 0.16, ease: [0.2, 0.8, 0.2, 1] }}
             className="relative grid place-items-center"
             title={statusText || stateLabel[state]}
           >
@@ -92,12 +89,7 @@ export function Overlay() {
               <motion.p
                 initial={{ opacity: 0, y: 4 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="absolute top-full mt-1 max-w-[380px] text-center text-sm font-semibold text-rose-100"
-                // A dark outline keeps it readable over any wallpaper or window, without a panel.
-                style={{
-                  textShadow:
-                    "0 0 2px #000, 0 0 2px #000, 0 1px 3px rgba(0,0,0,0.95), 0 0 14px rgba(0,0,0,0.75)",
-                }}
+                className="absolute top-full mt-1 max-w-[380px] rounded-md border border-line bg-canvas/95 px-3 py-1.5 text-center text-sm text-ink"
               >
                 {statusText || stateLabel.error}
               </motion.p>

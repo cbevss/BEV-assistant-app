@@ -3,7 +3,9 @@ import { useRoutines } from "@/routines/store";
 import { runRoutine, cancelRoutine, summariseRun } from "@/routines/engine";
 import type { Routine, StepResult } from "@/routines/types";
 import { useAssistant } from "@/state/assistant";
-import { PageHeader, Section, Button, Toggle } from "../components/Form";
+import clsx from "clsx";
+import { ChevronRight, Pencil, Play, Plus, Square, Trash2, Workflow } from "lucide-react";
+import { PageHeader, Button, Toggle, IconButton, Card, EmptyState } from "../components/Form";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { RoutineEditor } from "../components/RoutineEditor";
 
@@ -14,6 +16,7 @@ export function Automation() {
   const [editing, setEditing] = useState<Routine | null>(null);
   const [creating, setCreating] = useState(false);
   const [confirm, setConfirm] = useState<{ text: string; run: () => void } | null>(null);
+  const [open, setOpen] = useState<string | null>(null);
 
   useEffect(() => {
     if (!useRoutines.getState().loaded) init();
@@ -34,93 +37,81 @@ export function Automation() {
   return (
     <div>
       <PageHeader
-        title="Automation Centre"
-        subtitle="Multi-step routines you can trigger by voice, by button, or on a schedule. Say the trigger phrase to run one hands-free."
+        title="Automations"
+        subtitle="Routines BEV runs from a phrase, a button or a schedule. Say the phrase to run one hands-free."
+        actions={
+          <Button variant="primary" icon={Plus} onClick={() => setCreating(true)}>
+            New routine
+          </Button>
+        }
       />
 
-      <div className="mb-5 flex justify-end">
-        <Button onClick={() => setCreating(true)}>+ New routine</Button>
-      </div>
-
-      <div className="space-y-4">
-        {routines.map((r) => {
-          const steps = progress[r.id] ?? [];
-          const isRunning = running === r.id;
-          return (
-            <Section
-              key={r.id}
-              title={r.name}
-              aside={
-                <div className="flex items-center gap-2">
-                  <Toggle
-                    label={`Enable ${r.name}`}
-                    checked={r.enabled}
-                    onChange={(enabled) => save({ ...r, enabled })}
-                  />
+      {routines.length === 0 ? (
+        <Card>
+          <EmptyState icon={Workflow} title="No routines yet" action={<Button icon={Plus} onClick={() => setCreating(true)}>New routine</Button>}>
+            Group several actions under one phrase, like “gaming mode”. You can also say “BEV, create a routine…”.
+          </EmptyState>
+        </Card>
+      ) : (
+        <ul className="divide-y divide-line-subtle rounded-lg border border-line-subtle bg-surface-1">
+          {routines.map((r) => {
+            const steps = progress[r.id] ?? [];
+            const isRunning = running === r.id;
+            const isOpen = open === r.id || isRunning;
+            return (
+              <li key={r.id} className={clsx(!r.enabled && "opacity-60")}>
+                <div className="flex items-center gap-3 px-4 py-3">
+                  <button className="group flex min-w-0 flex-1 items-center gap-3 text-left" onClick={() => setOpen(isOpen ? null : r.id)} aria-expanded={isOpen}>
+                    <ChevronRight className={clsx("h-3.5 w-3.5 shrink-0 text-ink-4 transition-transform duration-fast", isOpen && "rotate-90")} aria-hidden />
+                    <span className="min-w-0">
+                      <span className="block truncate text-sm font-medium text-ink">{r.name}</span>
+                      <span className="block truncate text-xs text-ink-3">
+                        {r.triggers.length ? r.triggers.map((t) => `“${t}”`).join(", ") : "No phrase"}
+                        {r.schedule ? ` · daily at ${r.schedule.time}` : ""} · {r.steps.length} step{r.steps.length === 1 ? "" : "s"}
+                      </span>
+                    </span>
+                  </button>
+                  <Toggle label={`Enable ${r.name}`} checked={r.enabled} onChange={(enabled) => save({ ...r, enabled })} />
                   {isRunning ? (
-                    <Button variant="danger" onClick={() => cancelRoutine()}>
+                    <Button variant="danger" size="sm" icon={Square} onClick={() => cancelRoutine()}>
                       Stop
                     </Button>
                   ) : (
-                    <Button onClick={() => run(r)} disabled={!r.enabled || running !== null}>
+                    <Button size="sm" icon={Play} onClick={() => run(r)} disabled={!r.enabled || running !== null}>
                       Run
                     </Button>
                   )}
+                  <IconButton icon={Pencil} label={`Edit ${r.name}`} size="sm" onClick={() => setEditing(r)} />
+                  <IconButton
+                    icon={Trash2}
+                    label={`Delete ${r.name}`}
+                    size="sm"
+                    className="hover:!bg-danger/10 hover:!text-danger"
+                    onClick={() => setConfirm({ text: `Delete the routine "${r.name}"? This can't be undone.`, run: () => remove(r.id) })}
+                  />
                 </div>
-              }
-            >
-              {r.description && <p className="text-sm text-slate-400">{r.description}</p>}
-              <div className="flex flex-wrap gap-2 text-[11px]">
-                {r.triggers.map((t) => (
-                  <span key={t} className="rounded-full bg-bev-cyan/10 px-2 py-0.5 text-bev-cyan">
-                    “{t}”
-                  </span>
-                ))}
-                {r.schedule && (
-                  <span className="rounded-full bg-bev-violet/15 px-2 py-0.5 text-bev-violet">
-                    ⏰ {r.schedule.time}
-                  </span>
+                {isOpen && (
+                  <div className="border-t border-line-subtle px-4 py-3 pl-10 animate-fade-in">
+                    {r.description && <p className="mb-2 text-sm text-ink-2">{r.description}</p>}
+                    <ol className="space-y-1">
+                      {r.steps.map((st, i) => {
+                        const res = steps[i];
+                        return (
+                          <li key={st.id} className="flex items-center gap-2.5 text-sm">
+                            <StepDot status={res?.status} running={isRunning && steps.length === i} />
+                            <span className="text-ink-2">{stepLabel(st.tool, st.args)}</span>
+                            {res && res.status !== "ok" && <span className="text-xs text-ink-3">{res.message}</span>}
+                          </li>
+                        );
+                      })}
+                    </ol>
+                  </div>
                 )}
-              </div>
-
-              <ol className="mt-1 space-y-1">
-                {r.steps.map((s, i) => {
-                  const res = steps[i];
-                  return (
-                    <li key={s.id} className="flex items-center gap-2 text-sm">
-                      <StepDot status={res?.status} running={isRunning && steps.length === i} />
-                      <span className="text-slate-300">{stepLabel(s.tool, s.args)}</span>
-                      {res && res.status !== "ok" && (
-                        <span className="text-xs text-slate-500">— {res.message}</span>
-                      )}
-                    </li>
-                  );
-                })}
-              </ol>
-
-              <div className="flex justify-end gap-1 pt-1">
-                <Button variant="ghost" onClick={() => setEditing(r)}>
-                  Edit
-                </Button>
-                <Button
-                  variant="danger"
-                  onClick={() =>
-                    setConfirm({
-                      text: `Delete the routine "${r.name}"?`,
-                      run: () => remove(r.id),
-                    })
-                  }
-                >
-                  Delete
-                </Button>
-              </div>
-            </Section>
-          );
-        })}
-        {routines.length === 0 && (
-          <p className="text-sm text-slate-500">No routines yet. Create one, or say “BEV, create a routine…”.</p>
-        )}
-      </div>
+              </li>
+            );
+          })}
+        </ul>
+      )}
 
       {(editing || creating) && (
         <RoutineEditor
@@ -154,14 +145,14 @@ export function Automation() {
 function StepDot({ status, running }: { status?: string; running?: boolean }) {
   const color =
     status === "ok"
-      ? "bg-bev-ok"
+      ? "bg-ok"
       : status === "failed"
-        ? "bg-bev-danger"
+        ? "bg-danger"
         : status === "skipped" || status === "declined"
           ? "bg-slate-500"
           : running
-            ? "bg-bev-cyan animate-pulse"
-            : "bg-white/20";
+            ? "bg-accent animate-pulse"
+            : "bg-ink-4";
   return <span className={`h-2 w-2 rounded-full ${color}`} />;
 }
 

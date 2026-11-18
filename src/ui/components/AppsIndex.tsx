@@ -78,26 +78,26 @@ export function AppsIndex() {
           </Button>
         </div>
       </Field>
-      {(err || status?.last_error) && <p className="text-sm text-bev-danger">{err ?? status?.last_error}</p>}
+      {(err || status?.last_error) && <p className="text-sm text-danger">{err ?? status?.last_error}</p>}
       <TextInput value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search installed apps…" aria-label="Search installed apps" />
       {rows.length === 0 ? (
-        <p className="text-sm text-slate-500">{scanning ? "Looking at what's installed…" : "No apps indexed yet. Press Rescan now."}</p>
+        <p className="text-sm text-ink-3">{scanning ? "Looking at what's installed…" : "No apps indexed yet. Press Rescan now."}</p>
       ) : (
-        <ul className="max-h-72 divide-y divide-white/5 overflow-y-auto rounded-lg border border-white/5" aria-label="Installed apps">
+        <ul className="max-h-72 divide-y divide-line-subtle overflow-y-auto rounded-lg border border-line-subtle" aria-label="Installed apps">
           {shown.map((r) => (
             <li key={`${r.name}|${r.exe_name ?? r.kind}`} className="flex items-center justify-between gap-3 px-3 py-1.5">
               <div className="min-w-0">
-                <div className="truncate text-sm text-slate-200">{r.name}</div>
+                <div className="truncate text-sm text-ink">{r.name}</div>
                 {(r.exe_name || r.aliases.length > 0) && (
-                  <div className="truncate text-xs text-slate-500">
+                  <div className="truncate text-xs text-ink-3">
                     {[r.exe_name, r.aliases.length ? `also: ${r.aliases.slice(0, 3).join(", ")}` : ""].filter(Boolean).join(" · ")}
                   </div>
                 )}
               </div>
-              <span className="shrink-0 text-xs text-slate-500">{KIND_LABEL[r.kind]}</span>
+              <span className="shrink-0 text-xs text-ink-3">{KIND_LABEL[r.kind]}</span>
             </li>
           ))}
-          {shown.length === 0 && <li className="px-3 py-2 text-sm text-slate-500">Nothing installed matches “{q}”.</li>}
+          {shown.length === 0 && <li className="px-3 py-2 text-sm text-ink-3">Nothing installed matches “{q}”.</li>}
         </ul>
       )}
     </Section>

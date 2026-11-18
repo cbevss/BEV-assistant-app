@@ -49,11 +49,11 @@ export function HotkeyInput({
           className={clsx(
             "min-w-[11rem] rounded-lg border px-3 py-1.5 text-left text-sm",
             recording
-              ? "border-bev-cyan/60 bg-bev-cyan/10 text-bev-cyan"
-              : "border-white/10 bg-white/5 text-slate-200 hover:border-white/20"
+              ? "border-accent/60 bg-accent/10 text-accent"
+              : "border-line bg-surface-2 text-ink hover:border-line-strong"
           )}
         >
-          {recording ? "Press keys… (Esc to cancel)" : prettyAccelerator(value) || <span className="text-slate-500">{placeholder}</span>}
+          {recording ? "Press keys… (Esc to cancel)" : prettyAccelerator(value) || <span className="text-ink-3">{placeholder}</span>}
         </button>
         {value && !recording && (
           <Button variant="ghost" onClick={() => commit("")}>
@@ -61,7 +61,7 @@ export function HotkeyInput({
           </Button>
         )}
       </div>
-      {err && <p className="text-xs text-bev-danger">{err}</p>}
+      {err && <p className="text-xs text-danger">{err}</p>}
     </div>
   );
 }

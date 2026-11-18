@@ -2,8 +2,40 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ------------------------------------------------------------------------
+   BEV design tokens (see docs/DESIGN.md). RGB triplets so Tailwind can
+   apply opacity: bg-surface-2/60, border-accent/40 …
+   ------------------------------------------------------------------------ */
 :root {
   color-scheme: dark;
+
+  /* Canvas and surfaces: a cool graphite family, darkest at the edges. */
+  --rail: 10 11 14;
+  --canvas: 14 16 20;
+  --surface-1: 20 23 28;
+  --surface-2: 27 31 38;
+  --surface-3: 36 41 49;
+
+  /* Lines */
+  --line-subtle: 30 34 41;
+  --line: 42 48 57;
+  --line-strong: 62 70 82;
+
+  /* Text */
+  --ink: 232 236 241;
+  --ink-2: 160 169 182;
+  --ink-3: 109 119 134;
+  --ink-4: 76 84 97;
+
+  /* Signal: BEV's one accent (Appearance can change it). */
+  --accent: 78 205 222;
+  --accent-strong: 132 224 236;
+  --accent-ink: 4 20 23;
+
+  /* Status */
+  --ok: 61 201 138;
+  --warn: 232 176 75;
+  --danger: 239 91 91;
 }
 
 html,
@@ -14,21 +46,25 @@ body,
 
 body {
   margin: 0;
-  background: radial-gradient(1200px 800px at 70% -10%, #0c1424 0%, #05070d 60%);
+  background: rgb(var(--canvas));
+  color: rgb(var(--ink));
+  font-family: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  font-size: 13px;
+  line-height: 20px;
   overflow: hidden;
   user-select: none;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  font-feature-settings: "ss01", "ss02";
 }
 
-/* The overlay window is transparent: no page background behind the orb.
-   (The body gradient above is for the main window only.) */
+/* The overlay window is transparent: no page background behind the orb. */
 html.overlay,
 html.overlay body {
   background: transparent;
 }
 
-/* Form controls must stay selectable/editable: user-select:none on an input
-   blocks the caret and native dropdowns in WebView2. Also keep them out of any
-   window-drag region so clicks/focus reach them. */
+/* Form controls stay selectable and outside window-drag regions. */
 input,
 textarea,
 select,
@@ -38,32 +74,11 @@ button,
   -webkit-user-select: text;
   -webkit-app-region: no-drag;
 }
-
-/* Thin futuristic scrollbars */
-::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
-}
-::-webkit-scrollbar-thumb {
-  background: rgba(56, 232, 255, 0.25);
-  border-radius: 8px;
-}
-::-webkit-scrollbar-thumb:hover {
-  background: rgba(56, 232, 255, 0.45);
+::selection {
+  background: rgb(var(--accent) / 0.28);
 }
 
-/* Glass panel utility */
-.glass {
-  background: rgba(17, 24, 38, 0.6);
-  border: 1px solid rgba(56, 232, 255, 0.12);
-  backdrop-filter: blur(16px);
-}
-
-.text-glow {
-  text-shadow: 0 0 12px rgba(56, 232, 255, 0.5);
-}
-
-/* Draggable top chrome region for the frameless main window */
+/* Window dragging (custom title bar) */
 .drag {
   -webkit-app-region: drag;
 }
@@ -71,13 +86,84 @@ button,
   -webkit-app-region: no-drag;
 }
 
-/* Keyboard focus is always visible, in BEV cyan. */
-:focus-visible {
-  outline: 2px solid #22d3ee;
-  outline-offset: 2px;
+/* Scrollbars: quiet, appear on hover */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgb(var(--line) / 0.0);
+  border: 3px solid transparent;
+  background-clip: padding-box;
+  border-radius: 10px;
+}
+:hover::-webkit-scrollbar-thumb {
+  background-color: rgb(var(--line-strong) / 0.7);
+}
+::-webkit-scrollbar-thumb:hover {
+  background-color: rgb(var(--ink-3));
 }
 
-/* Respect the Windows "show animations" setting. */
+/* Legacy utilities, now flat and quiet. */
+.glass {
+  background: rgb(var(--surface-1));
+  border: 1px solid rgb(var(--line-subtle));
+}
+.text-glow {
+  text-shadow: none;
+}
+
+/* Tabular figures wherever numbers change live */
+.tnum {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Keyboard focus is always visible, in the accent colour. */
+:focus-visible {
+  outline: 2px solid rgb(var(--accent));
+  outline-offset: 2px;
+}
+:focus:not(:focus-visible) {
+  outline: none;
+}
+
+/* Range inputs (Slider) */
+input[type="range"].bev-range {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 20px;
+  background: transparent;
+}
+input[type="range"].bev-range::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 4px;
+  background: linear-gradient(to right, rgb(var(--accent)) var(--fill, 0%), rgb(var(--surface-3)) var(--fill, 0%));
+}
+input[type="range"].bev-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 14px;
+  height: 14px;
+  margin-top: -5px;
+  border-radius: 50%;
+  background: rgb(var(--ink));
+  box-shadow: 0 0 0 3px rgb(var(--canvas));
+  transition: transform 120ms;
+}
+input[type="range"].bev-range:hover::-webkit-slider-thumb {
+  transform: scale(1.12);
+}
+
+/* Respect the Windows "show animations" setting (and BEV's own switch). */
+html[data-reduced-motion="true"] *,
+html[data-reduced-motion="true"] *::before,
+html[data-reduced-motion="true"] *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+}
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

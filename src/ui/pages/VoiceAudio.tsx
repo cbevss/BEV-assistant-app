@@ -59,10 +59,10 @@ export function VoiceAudio() {
 
   return (
     <div>
-      <PageHeader title="Voice & Audio" subtitle="Microphone, output device, wake word and BEV's voice." />
+      <PageHeader title="Voice & microphone" subtitle="Your microphone, the wake word, how BEV listens and how it sounds." />
 
       <Section title="Microphone">
-        {micErr && <p className="text-sm text-bev-danger">Microphone unavailable: {micErr}</p>}
+        {micErr && <p className="text-sm text-danger">Microphone unavailable: {micErr}</p>}
         <Field label="Input device" hint="Switches straight away. If it's unplugged BEV uses the Windows default, and switches back when it returns.">
           <Select
             ariaLabel="Microphone"
@@ -202,7 +202,7 @@ function OutputDeviceSection() {
 
   return (
     <Section title="Output">
-      {err && <p className="text-sm text-bev-danger">Couldn't change output: {err}</p>}
+      {err && <p className="text-sm text-danger">Couldn't change output: {err}</p>}
       <Field
         label="Output device"
         hint="Where BEV's voice plays. This switches the Windows default output, so other apps' sound moves with it."
@@ -311,8 +311,8 @@ function VoiceSection({ voices }: { voices: { id: string; name: string }[] }) {
       <Field label="Voice volume">
         <Slider ariaLabel="Voice volume" min={0} max={1} step={0.05} value={settings.speakVolume} onChange={(speakVolume) => update({ speakVolume })} format={(v) => `${Math.round(v * 100)}%`} />
       </Field>
-      {voiceNote && <p className="text-sm text-amber-400">{voiceNote}</p>}
-      {testErr && <p className="text-sm text-bev-danger">Voice failed: {testErr}</p>}
+      {voiceNote && <p className="text-sm text-warn">{voiceNote}</p>}
+      {testErr && <p className="text-sm text-danger">Voice failed: {testErr}</p>}
       <div className="flex justify-end">
         <Button variant="ghost" onClick={test} disabled={testing}>
           {testing ? "Speaking…" : "Test voice"}
@@ -509,19 +509,19 @@ function ElevenLabsOptions({ onChange }: { onChange: (p: Partial<ReturnType<type
           hint={`${usage.tier} plan${usage.resetsAt ? `, resets ${usage.resetsAt.toLocaleDateString("en-GB", { day: "numeric", month: "short" })}` : ""}. BEV uses the Flash model: half a credit per character. When credits run out it switches to the free voice.`}
         >
           <div className="flex items-center gap-3">
-            <div className="h-2 flex-1 overflow-hidden rounded bg-white/5">
+            <div className="h-2 flex-1 overflow-hidden rounded bg-surface-2">
               <div
-                className={`h-full rounded ${usage.used / usage.limit > 0.9 ? "bg-bev-danger" : "bg-gradient-to-r from-bev-cyan to-bev-violet"}`}
+                className={`h-full rounded ${usage.used / usage.limit > 0.9 ? "bg-danger" : "bg-accent"}`}
                 style={{ width: `${Math.min(100, (usage.used / Math.max(1, usage.limit)) * 100)}%` }}
               />
             </div>
-            <span className="font-mono text-xs text-slate-400">
+            <span className="font-mono text-xs text-ink-2">
               {fmt(usage.used)} / {fmt(usage.limit)}
             </span>
           </div>
         </Field>
       )}
-      {err && <p className="text-sm text-bev-danger">{err}</p>}
+      {err && <p className="text-sm text-danger">{err}</p>}
     </>
   );
 }
@@ -640,7 +640,7 @@ function WakeWordSection() {
           ]}
         />
       </Field>
-      {wake?.note && <p className="text-sm text-amber-400">{wake.note}</p>}
+      {wake?.note && <p className="text-sm text-warn">{wake.note}</p>}
 
       {settings.wakeEngine === "on-device" && (
         <>
@@ -672,13 +672,13 @@ function WakeWordSection() {
               </Button>
             </div>
           </Field>
-          <ul className="divide-y divide-white/5 rounded-lg border border-white/5">
+          <ul className="divide-y divide-line-subtle rounded-lg border border-line-subtle">
             <li className="flex items-center justify-between gap-3 px-3 py-2">
               <div className="min-w-0">
-                <div className={clsx("text-sm", settings.builtInWakeModel ? "text-slate-200" : "text-slate-500 line-through")}>
+                <div className={clsx("text-sm", settings.builtInWakeModel ? "text-ink" : "text-ink-3 line-through")}>
                   “{BUILT_IN_PHRASE}”
                 </div>
-                <div className="text-xs text-slate-500">Built in</div>
+                <div className="text-xs text-ink-3">Built in</div>
               </div>
               <Button
                 variant={settings.builtInWakeModel ? "danger" : "ghost"}
@@ -691,8 +691,8 @@ function WakeWordSection() {
             {models.map((m) => (
               <li key={m.name} className="flex items-center justify-between gap-3 px-3 py-2">
                 <div className="min-w-0">
-                  <div className="text-sm text-slate-200">“{phraseFromFile(m.name)}”</div>
-                  <div className="truncate text-xs text-slate-500">
+                  <div className="text-sm text-ink">“{phraseFromFile(m.name)}”</div>
+                  <div className="truncate text-xs text-ink-3">
                     {m.name}, added {new Date(m.addedAt).toLocaleDateString("en-GB")}
                   </div>
                 </div>
@@ -713,7 +713,7 @@ function WakeWordSection() {
         </>
       )}
 
-      {msg && <p className={`text-sm ${msg.ok ? "text-bev-ok" : "text-bev-danger"}`}>{msg.text}</p>}
+      {msg && <p className={`text-sm ${msg.ok ? "text-ok" : "text-danger"}`}>{msg.text}</p>}
       {!isDefault && (
         <Field
           label="Revert to default"
@@ -811,12 +811,12 @@ function WakeTest({
       }
     >
       <div className="flex items-center gap-3">
-        <div className="relative h-2 flex-1 overflow-hidden rounded bg-white/5">
+        <div className="relative h-2 flex-1 overflow-hidden rounded bg-surface-2">
           <div
-            className={`h-full rounded transition-[width] duration-75 ${score >= threshold ? "bg-bev-ok" : "bg-gradient-to-r from-bev-cyan to-bev-violet"}`}
+            className={`h-full rounded transition-[width] duration-75 ${score >= threshold ? "bg-ok" : "bg-accent"}`}
             style={{ width: `${Math.round(score * 100)}%` }}
           />
-          <div className="absolute top-0 h-full w-0.5 bg-white/60" style={{ left: `${threshold * 100}%` }} />
+          <div className="absolute top-0 h-full w-0.5 bg-ink-2" style={{ left: `${threshold * 100}%` }} />
         </div>
         <Button variant="ghost" onClick={() => setOn((v) => !v)}>
           {on ? "Stop" : "Test"}
@@ -851,9 +851,9 @@ function MicTest({ deviceId }: { deviceId: string }) {
   return (
     <Field label="Test input" hint={err ?? "Speak — the bar should move."}>
       <div className="flex items-center gap-3">
-        <div className="h-2 flex-1 overflow-hidden rounded bg-white/5">
+        <div className="h-2 flex-1 overflow-hidden rounded bg-surface-2">
           <div
-            className="h-full rounded bg-gradient-to-r from-bev-cyan to-bev-violet transition-[width] duration-75"
+            className="h-full rounded bg-accent transition-[width] duration-75"
             style={{ width: `${Math.round(level * 100)}%` }}
           />
         </div>

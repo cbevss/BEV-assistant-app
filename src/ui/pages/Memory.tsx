@@ -1,7 +1,8 @@
+import { Download, Pencil, Plus, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { native, MemoryRow } from "@/lib/native";
 import { looksSensitive } from "@/lib/sensitive";
-import { PageHeader, Section, TextInput, Button } from "../components/Form";
+import { PageHeader, Section, TextInput, Button, IconButton, Badge } from "../components/Form";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { NotesPanel, HistoryPanel, SemanticSearchSettings } from "../components/BrainPanels";
 import { remember, forgetMemory, searchMemories } from "@/brain/memory";
@@ -100,16 +101,16 @@ export function Memory() {
         title="Memory"
         subtitle="Everything BEV remembers (facts, notes and past conversations) lives in a local database on this PC. Inspect, edit, export or permanently delete it."
       />
-      {err && <p className="mb-4 text-sm text-bev-danger">{err}</p>}
+      {err && <p className="mb-4 text-sm text-danger">{err}</p>}
 
-      <div className="mb-4 flex gap-1" role="tablist">
+      <div className="mb-6 flex gap-5 border-b border-line-subtle" role="tablist">
         {(["memories", "notes", "history"] as const).map((t) => (
           <button
             key={t}
             role="tab"
             aria-selected={tab === t}
             onClick={() => setTab(t)}
-            className={`rounded-lg px-3 py-1.5 text-sm capitalize ${tab === t ? "bg-white/10 text-white" : "text-slate-400 hover:text-slate-200"}`}
+            className={`-mb-px border-b-2 pb-2.5 text-sm capitalize transition-colors duration-fast ${tab === t ? "border-accent text-ink" : "border-transparent text-ink-3 hover:text-ink"}`}
           >
             {t === "memories" ? "Facts & preferences" : t}
           </button>
@@ -120,11 +121,11 @@ export function Memory() {
       {tab === "memories" && (
         <>
 
-      <Section title="Add a memory">
+      <Section title="Add a memory" description="Something BEV should always know, as a name and a value.">
         <div className="flex flex-col gap-2 md:flex-row">
-          <TextInput placeholder="e.g. gaming mode apps" value={newKey} onChange={(e) => setNewKey(e.target.value)} />
-          <TextInput placeholder="e.g. Discord, Spotify, Steam" value={newVal} onChange={(e) => setNewVal(e.target.value)} />
-          <Button onClick={add} disabled={!newKey.trim() || !newVal.trim()}>
+          <TextInput aria-label="Name" placeholder="Name, e.g. gaming apps" value={newKey} onChange={(e) => setNewKey(e.target.value)} />
+          <TextInput aria-label="Value" placeholder="Value, e.g. Discord, Spotify, Steam" value={newVal} onChange={(e) => setNewVal(e.target.value)} onKeyDown={(e) => e.key === "Enter" && add()} />
+          <Button variant="primary" icon={Plus} onClick={add} disabled={!newKey.trim() || !newVal.trim()}>
             Add
           </Button>
         </div>
@@ -132,13 +133,15 @@ export function Memory() {
 
       <Section
         title={`Stored (${rows.length})`}
+        flush
         aside={
           <div className="flex gap-2">
-            <Button variant="ghost" onClick={exportJson} disabled={rows.length === 0}>
+            <Button variant="ghost" size="sm" icon={Download} onClick={exportJson} disabled={rows.length === 0}>
               Export
             </Button>
             <Button
               variant="danger"
+              size="sm"
               disabled={rows.length === 0}
               onClick={() =>
                 setConfirm({
@@ -155,43 +158,46 @@ export function Memory() {
           </div>
         }
       >
-        <TextInput placeholder="Search memories…" value={q} onChange={(e) => setQ(e.target.value)} />
-        <ul className="divide-y divide-white/5">
+        <div className="border-b border-line-subtle px-4 py-3">
+          <TextInput aria-label="Search memories" placeholder="Search by meaning or words" value={q} onChange={(e) => setQ(e.target.value)} />
+        </div>
+        <ul className="divide-y divide-line-subtle">
           {filtered.map((r) => (
-            <li key={r.id} className="flex items-start gap-4 py-3">
+            <li key={r.id} className="group flex items-start gap-4 px-4 py-3">
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
-                  <span className="text-sm font-medium text-slate-100">{r.key}</span>
-                  <span className="rounded bg-white/5 px-1.5 text-[11px] text-slate-500">
-                    {r.category}
-                  </span>
+                  <span className="text-sm font-medium text-ink">{r.key}</span>
+                  <Badge>{r.category}</Badge>
                 </div>
                 {editing === r.id ? (
                   <div className="mt-2 flex gap-2">
                     <TextInput autoFocus value={editVal} onChange={(e) => setEditVal(e.target.value)} onKeyDown={(e) => e.key === "Enter" && saveEdit(r)} />
-                    <Button onClick={() => saveEdit(r)}>Save</Button>
+                    <Button variant="primary" onClick={() => saveEdit(r)}>Save</Button>
                     <Button variant="ghost" onClick={() => setEditing(null)}>
                       Cancel
                     </Button>
                   </div>
                 ) : (
-                  <p className="mt-0.5 text-sm text-slate-400">{r.value}</p>
+                  <p className="mt-0.5 text-sm text-ink-2">{r.value}</p>
                 )}
-                <p className="mt-1 text-[11px] text-slate-600">updated {new Date(r.updated_at * 1000).toLocaleString("en-GB")}</p>
+                <p className="mt-1 text-2xs text-ink-4">Updated {new Date(r.updated_at * 1000).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}</p>
               </div>
               {editing !== r.id && (
-                <div className="flex gap-1">
-                  <Button
-                    variant="ghost"
+                <div className="flex gap-0.5 opacity-60 transition-opacity duration-fast group-hover:opacity-100 focus-within:opacity-100">
+                  <IconButton
+                    icon={Pencil}
+                    size="sm"
+                    label={`Edit ${r.key}`}
                     onClick={() => {
                       setEditing(r.id);
                       setEditVal(r.value);
                     }}
-                  >
-                    Edit
-                  </Button>
-                  <Button
-                    variant="danger"
+                  />
+                  <IconButton
+                    icon={Trash2}
+                    size="sm"
+                    label={`Delete ${r.key}`}
+                    className="hover:!bg-danger/10 hover:!text-danger"
                     onClick={() =>
                       setConfirm({
                         text: `Delete the memory "${r.key}"? This can't be undone.`,
@@ -201,15 +207,13 @@ export function Memory() {
                         },
                       })
                     }
-                  >
-                    Delete
-                  </Button>
+                  />
                 </div>
               )}
             </li>
           ))}
           {filtered.length === 0 && (
-            <li className="py-6 text-center text-sm text-slate-500">
+            <li className="px-4 py-8 text-center text-sm text-ink-3">
               {rows.length === 0 ? 'Nothing stored yet. Try: "BEV, remember that my main browser is Chrome."' : "No matches."}
             </li>
           )}
