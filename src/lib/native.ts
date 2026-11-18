@@ -112,6 +112,10 @@ export const native = {
   captureScreen: (target?: "current" | "primary" | "all") =>
     invoke<ScreenCapture>("capture_screen", { target }),
   foregroundWindow: () => invoke<ForegroundWindow | null>("foreground_window"),
+  // Screen replay: the last few seconds of the display the mouse is on, in RAM only.
+  replayConfigure: (enabled: boolean, keepSecs?: number) => invoke<ReplayStatus>("replay_configure", { enabled, keepSecs }),
+  replayStatus: () => invoke<ReplayStatus>("replay_status"),
+  replayClip: (seconds: number, maxFrames?: number) => invoke<ReplayClip>("replay_clip", { seconds, maxFrames }),
   takeScreenshot: (monitor?: number) => invoke<string>("take_screenshot", { monitor }),
   deleteTempFile: (path: string) => invoke<void>("delete_temp_file", { path }),
   openSettingsPage: (page: string) => invoke<string>("open_settings_page", { page }),
@@ -281,6 +285,29 @@ export interface TaskRun {
   result: string | null;
   started_at: number;
   ended_at: number | null;
+}
+
+export interface ReplayStatus {
+  enabled: boolean;
+  keep_secs: number;
+  /** How far back the buffer currently reaches. */
+  buffered_secs: number;
+}
+
+export interface ReplayFrame {
+  /** Base64 JPEG. */
+  data: string;
+  width: number;
+  height: number;
+  /** Seconds before the request this frame was taken. */
+  ago_secs: number;
+  label: string;
+}
+
+export interface ReplayClip {
+  frames: ReplayFrame[];
+  covered_secs: number;
+  keep_secs: number;
 }
 
 export interface ScreenCapture {

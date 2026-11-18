@@ -38,6 +38,8 @@ const data: Record<string, unknown> = {
   fullscreen_state: "none",
   action_log_list: [],
   foreground_window: { title: "Visual Studio Code", process: "Code.exe" },
+  replay_configure: { enabled: false, keep_secs: 30, buffered_secs: 0 },
+  replay_status: { enabled: false, keep_secs: 30, buffered_secs: 0 },
   input_target: null,
   embeddings_list: [],
   apps_status: { count: 214, scanned_at: Date.now() - 600_000, scanning: false, last_error: null },

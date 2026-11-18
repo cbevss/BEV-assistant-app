@@ -1,5 +1,6 @@
 /** How tool activity reads in the conversation: a plain label and an icon. */
 import {
+  History,
   AppWindow, Brain, Calendar, Cpu, Globe, GitBranch, House, Keyboard, ListChecks, Mail, MessageCircle, MousePointerClick, Music, Puzzle, ScanEye, Settings2, Stethoscope, Volume2, Wrench, type LucideIcon,
 } from "lucide-react";
 
@@ -15,6 +16,7 @@ const LABELS: Record<string, string> = {
   web_search: "Searched the web",
   read_web_page: "Read a web page",
   look_at_screen: "Looked at the screen",
+  look_back: "Looked back at the screen",
   read_screen_text: "Read the screen",
   read_app_controls: "Read the app's controls",
   use_control: "Used a control",
@@ -75,6 +77,7 @@ export function toolLabel(name: string): string {
 export function toolIcon(name: string): LucideIcon {
   if (/^(launch_app|close_app|focus_window|find_apps|refresh_app_list|launch_game|open_path|list_windows)$/.test(name)) return AppWindow;
   if (/^(web_search|read_web_page|open_website)$/.test(name)) return Globe;
+  if (name === "look_back") return History;
   if (/^(look_at_screen|read_screen_text|read_app_controls)$/.test(name)) return ScanEye;
   if (/^(use_control|click_on_screen)$/.test(name)) return MousePointerClick;
   if (/^(press_keys|type_text)$/.test(name)) return Keyboard;

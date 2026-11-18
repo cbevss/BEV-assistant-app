@@ -26,6 +26,7 @@ export interface OrchestratorOptions {
 /** Tools a background task may not use: nobody is watching the screen. */
 export const BACKGROUND_FORBIDDEN = new Set([
   "look_at_screen",
+  "look_back",
   "use_control",
   "click_on_screen",
   "press_keys",

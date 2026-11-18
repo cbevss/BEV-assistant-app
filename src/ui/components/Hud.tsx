@@ -2,7 +2,7 @@
  * HUD primitives: the technical layer that gives BEV its instrument feel.
  * Flat lines and real readouts only — no glow, no gradients, no fake data.
  */
-import { ReactNode } from "react";
+import { ReactNode, useEffect, useState } from "react";
 import clsx from "clsx";
 
 /** Thin corner brackets around content, like a targeting frame. */
@@ -45,13 +45,19 @@ export function Readout({ label, value, tone, className }: { label: string; valu
 /** A horizontal measurement scale: ticks every 10%, a filled run for the value. */
 export function Scale({ value, tone = "accent", label }: { value: number; tone?: "accent" | "warn"; label: string }) {
   const v = Math.max(0, Math.min(100, value));
+  // Fill from zero when the meter first appears, then follow the live value.
+  const [shown, setShown] = useState(0);
+  useEffect(() => {
+    const id = requestAnimationFrame(() => setShown(v));
+    return () => cancelAnimationFrame(id);
+  }, [v]);
   return (
     <div className="relative h-2.5" role="meter" aria-label={label} aria-valuenow={Math.round(v)} aria-valuemin={0} aria-valuemax={100}>
       <div className="absolute inset-x-0 bottom-0 h-px bg-line" />
       {Array.from({ length: 11 }, (_, i) => (
         <div key={i} className="absolute bottom-0 w-px bg-line-strong" style={{ left: `${i * 10}%`, height: i % 5 === 0 ? 6 : 3 }} />
       ))}
-      <div className={clsx("absolute bottom-0 left-0 h-[3px] transition-[width] duration-base", tone === "warn" ? "bg-warn" : "bg-accent")} style={{ width: `${v}%` }} />
+      <div className={clsx("absolute bottom-0 left-0 h-[3px] transition-[width] duration-[600ms] ease-[cubic-bezier(0.2,0.8,0.2,1)]", tone === "warn" ? "bg-warn" : "bg-accent")} style={{ width: `${shown}%` }} />
     </div>
   );
 }

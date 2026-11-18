@@ -99,11 +99,11 @@ export function Assistant() {
             <ol className="space-y-5" aria-live="polite" aria-label="Conversation">
               {groups.map((g) =>
                 g.kind === "tools" ? (
-                  <li key={g.id}>
+                  <li key={g.id} className="animate-msg-in">
                     <ToolRun items={g.items} />
                   </li>
                 ) : (
-                  <li key={g.msg.id}>
+                  <li key={g.msg.id} className="animate-msg-in">
                     <Message m={g.msg} />
                   </li>
                 )
@@ -114,7 +114,7 @@ export function Assistant() {
                 </li>
               )}
               {busy && (
-                <li>
+                <li className="animate-msg-in">
                   <Working text={statusText} />
                 </li>
               )}
@@ -175,19 +175,19 @@ function Welcome({ onPick, level, listening, state, status }: { onPick: (s: stri
   return (
     <div className="flex flex-1 flex-col items-center justify-center py-4">
       <Emblem state={idle ? (listening ? "idle" : "off") : state} level={level} size={228} />
-      <h1 className="mt-6 text-[30px] font-light leading-9 tracking-[-0.01em] text-ink">{idle ? greeting() : stateMeta[state].label}</h1>
+      <h1 key={idle ? "idle" : state} className="mt-6 animate-page-in text-[30px] font-light leading-9 tracking-[-0.01em] text-ink">{idle ? greeting() : stateMeta[state].label}</h1>
       <p className={clsx("mt-2 max-w-[520px] text-center", idle || !status?.trim() ? "font-mono text-[11px] uppercase tracking-[0.18em] text-ink-3" : state === "error" ? "text-sm text-danger" : "text-sm text-ink-2")}>
         {idle ? (listening ? "Say “Hey BEV” or type below" : "Microphone off · type below") : status?.trim() || ""}
       </p>
       <ul className={clsx("mt-8 w-full max-w-[480px]", !idle && "invisible")}>
-        {SUGGESTIONS.slice(0, 3).map((s) => (
-          <li key={s}>
+        {SUGGESTIONS.slice(0, 3).map((s, i) => (
+          <li key={s} className="animate-msg-in" style={{ animationDelay: `${520 + i * 70}ms` }}>
             <button
               className="group flex w-full items-center justify-between gap-3 border-b border-line-subtle py-2.5 text-left text-sm text-ink-3 transition-colors duration-fast hover:text-ink"
               onClick={() => onPick(s)}
             >
               <span className="truncate">{s}</span>
-              <ArrowRight className="h-3.5 w-3.5 shrink-0 text-ink-4 transition-colors duration-fast group-hover:text-accent" aria-hidden />
+              <ArrowRight className="h-3.5 w-3.5 shrink-0 text-ink-4 transition-[color,transform] duration-fast group-hover:translate-x-0.5 group-hover:text-accent" aria-hidden />
             </button>
           </li>
         ))}
