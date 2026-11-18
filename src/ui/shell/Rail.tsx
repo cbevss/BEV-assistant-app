@@ -37,7 +37,10 @@ export function Rail() {
     <aside className="flex w-[212px] shrink-0 flex-col border-r border-line-subtle bg-rail max-[1080px]:w-[60px]" aria-label="Main">
       <div className="drag flex h-12 shrink-0 items-center gap-2.5 px-4 max-[1080px]:justify-center max-[1080px]:px-0">
         <Core state={state === "idle" && off ? "off" : state} level={audioLevel} progress={p && p.total ? p.done / p.total : null} size={22} />
-        <span className="text-[15px] font-semibold tracking-[0.14em] text-ink max-[1080px]:hidden">BEV</span>
+        <span className="leading-none max-[1080px]:hidden">
+          <span className="block text-[15px] font-semibold tracking-[0.18em] text-ink">BEV</span>
+          <span className="mt-1 block font-mono text-[9px] uppercase tracking-[0.16em] text-ink-4">Personal AI</span>
+        </span>
       </div>
 
       <nav className="flex flex-1 flex-col gap-0.5 px-2 pt-2">

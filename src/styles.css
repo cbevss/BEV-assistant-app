@@ -174,3 +174,9 @@ html[data-reduced-motion="true"] *::after {
     scroll-behavior: auto !important;
   }
 }
+
+/* HUD texture: a faint measurement grid behind content (flat lines, no gradient). */
+.hud-grid {
+  background-color: rgb(var(--canvas));
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32'%3E%3Cpath d='M32 0H0V32' fill='none' stroke='%23ffffff' stroke-opacity='0.028' stroke-width='1'/%3E%3C/svg%3E");
+}

@@ -5,6 +5,7 @@ import { BackgroundTasks } from "../components/BackgroundTasks";
 import { Noticed } from "../components/Noticed";
 import { RecentTasks } from "../components/RecentTasks";
 import { PageHeader, Notice } from "../components/Form";
+import { HudFrame, HudLabel, Scale } from "../components/Hud";
 
 export function Dashboard() {
   const [stats, setStats] = useState<SystemStats | null>(null);
@@ -43,12 +44,14 @@ export function Dashboard() {
         </div>
       )}
 
-      <div className="mb-8 grid grid-cols-4 divide-x divide-line-subtle rounded-lg border border-line-subtle bg-surface-1 max-[900px]:grid-cols-2 max-[900px]:divide-x-0">
+      <HudFrame className="mb-8" size={10}>
+      <div className="grid grid-cols-4 divide-x divide-line-subtle border border-line-subtle bg-surface-1 max-[900px]:grid-cols-2 max-[900px]:divide-x-0">
         <Stat label="CPU" value={stats ? `${stats.cpu_usage.toFixed(0)}%` : "—"} detail={stats ? `${stats.cpu_cores} cores` : ""} pct={stats?.cpu_usage} />
         <Stat label="Memory" value={stats ? `${memGb.toFixed(1)} GB` : "—"} detail={stats ? `of ${(stats.mem_total_mb / 1024).toFixed(0)} GB` : ""} pct={stats?.mem_percent} />
         <Stat label="Graphics" value={stats?.gpu_usage != null ? `${stats.gpu_usage.toFixed(0)}%` : "—"} detail={stats?.gpu_usage == null ? "No sensor available" : stats.gpu_name ?? ""} pct={stats?.gpu_usage ?? undefined} />
         <Stat label="Uptime" value={stats ? fmtUptime(stats.uptime_secs) : "—"} detail="Since last restart" />
       </div>
+      </HudFrame>
 
       <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-x-8 max-[1000px]:grid-cols-1">
         <div>
@@ -59,7 +62,10 @@ export function Dashboard() {
           <Noticed />
           <section className="mb-8">
             <div className="mb-2 px-1">
-              <h2 className="text-sm font-semibold text-ink">Using the most memory</h2>
+              <h2 className="flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.14em] text-ink-2">
+                <span className="h-px w-3 bg-accent" aria-hidden />
+                Using the most memory
+              </h2>
             </div>
             <ul className="divide-y divide-line-subtle rounded-lg border border-line-subtle bg-surface-1">
               {apps.map((a) => (
@@ -81,14 +87,10 @@ function Stat({ label, value, detail, pct }: { label: string; value: string; det
   const hot = pct != null && pct >= 90;
   return (
     <div className="px-4 py-3.5">
-      <div className="text-xs text-ink-3">{label}</div>
-      <div className={`tnum mt-1 text-xl font-semibold ${hot ? "text-warn" : "text-ink"}`}>{value}</div>
+      <HudLabel>{label}</HudLabel>
+      <div className={`tnum mt-1.5 font-mono text-xl ${hot ? "text-warn" : "text-ink"}`}>{value}</div>
       <div className="mt-0.5 truncate text-2xs text-ink-4">{detail}</div>
-      {pct != null && (
-        <div className="mt-2.5 h-[3px] w-full overflow-hidden rounded-full bg-surface-3" role="meter" aria-label={label} aria-valuenow={Math.round(pct)} aria-valuemin={0} aria-valuemax={100}>
-          <div className={`h-full rounded-full transition-[width] duration-base ${hot ? "bg-warn" : "bg-accent"}`} style={{ width: `${Math.min(100, pct)}%` }} />
-        </div>
-      )}
+      <div className="mt-3">{pct != null ? <Scale value={pct} tone={hot ? "warn" : "accent"} label={label} /> : <div className="h-2.5" />}</div>
     </div>
   );
 }

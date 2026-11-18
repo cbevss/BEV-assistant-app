@@ -32,8 +32,11 @@ export function Section({ title, description, children, aside, flush }: { title:
     <section className="mb-8">
       <div className="mb-2 flex min-h-[28px] items-end justify-between gap-4 px-1">
         <div className="min-w-0">
-          <h2 className="text-sm font-semibold text-ink">{title}</h2>
-          {description && <p className="mt-0.5 max-w-[72ch] text-xs text-ink-3">{description}</p>}
+          <h2 className="flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.14em] text-ink-2">
+            <span className="h-px w-3 bg-accent" aria-hidden />
+            {title}
+          </h2>
+          {description && <p className="mt-1 max-w-[72ch] text-xs text-ink-3">{description}</p>}
         </div>
         {aside && <div className="flex shrink-0 items-center gap-2">{aside}</div>}
       </div>

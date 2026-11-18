@@ -17,6 +17,7 @@ import { SettingsHub } from "./pages/SettingsHub";
 import { Rail } from "./shell/Rail";
 import { Core } from "./components/Core";
 import { CommandPalette } from "./shell/CommandPalette";
+import { SystemBar } from "./shell/SystemBar";
 import { pruneHistory, startBrain } from "@/brain/memory";
 import { configureBackground } from "@/ai/background";
 import { startIntegrations } from "@/integrations/registry";
@@ -154,7 +155,7 @@ export function App() {
       <Rail />
       <main className="flex min-w-0 flex-1 flex-col overflow-hidden">
         <TitleBar onSearch={() => setPalette(true)} />
-        <div className="min-h-0 flex-1">
+        <div className="hud-grid min-h-0 flex-1">
           <Routes>
             <Route path="/" element={<Navigate to="/assistant" replace />} />
             <Route path="/assistant" element={<Assistant />} />
@@ -174,6 +175,7 @@ export function App() {
             <Route path="*" element={<Navigate to="/assistant" replace />} />
           </Routes>
         </div>
+        <SystemBar />
       </main>
 
       <CommandPalette open={palette} onClose={() => setPalette(false)} />
