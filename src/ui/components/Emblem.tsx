@@ -3,6 +3,10 @@
  * a fine instrument collar. The overlay and the welcome screen both render this
  * component, so the symbol people see on the desktop is the one they see when
  * they open the app.
+ *
+ * Motion: on first appearance the collar draws itself in, the plate settles
+ * and the Core's rings draw in; after that the Core's ambient scan runs every
+ * few seconds while BEV is resting.
  */
 import clsx from "clsx";
 import type { AssistantState } from "@/state/assistant";
@@ -28,21 +32,23 @@ export function Emblem({ state, level = 0, progress = null, size = 240, floating
     <div className={clsx("relative grid shrink-0 place-items-center", className)} style={{ width: size, height: size }}>
       {/* collar: hairline ring with cardinal marks and short bracket arcs */}
       <svg aria-hidden className="absolute inset-0" width={size} height={size} viewBox="0 0 100 100" fill="none">
-        <circle cx="50" cy="50" r="46" stroke={`rgb(${tone})`} strokeOpacity={collarOp * 0.6} strokeWidth="0.25" />
-        {[0, 90, 180, 270].map((a) => (
-          <g key={a} transform={`rotate(${a} 50 50)`}>
+        <circle cx="50" cy="50" r="46" stroke={`rgb(${tone})`} strokeOpacity={collarOp * 0.6} strokeWidth="0.25" pathLength={1} className="boot-draw" transform="rotate(-90 50 50)" />
+        {[0, 90, 180, 270].map((a, i) => (
+          <g key={a} transform={`rotate(${a} 50 50)`} className="boot-fade" style={{ animationDelay: `${380 + i * 70}ms` }}>
             <line x1="50" y1="1.5" x2="50" y2="5.5" stroke={`rgb(${tone})`} strokeOpacity={collarOp * 1.4} strokeWidth="0.5" />
             <path d={arcPath(48.5, -14, -4)} stroke={`rgb(${tone})`} strokeOpacity={collarOp} strokeWidth="0.5" />
             <path d={arcPath(48.5, 4, 14)} stroke={`rgb(${tone})`} strokeOpacity={collarOp} strokeWidth="0.5" />
           </g>
         ))}
-        {[45, 135, 225, 315].map((a) => (
-          <line key={a} transform={`rotate(${a} 50 50)`} x1="50" y1="3" x2="50" y2="4.6" stroke={`rgb(${tone})`} strokeOpacity={collarOp} strokeWidth="0.35" />
-        ))}
+        <g className="boot-fade" style={{ animationDelay: "650ms" }}>
+          {[45, 135, 225, 315].map((a) => (
+            <line key={a} transform={`rotate(${a} 50 50)`} x1="50" y1="3" x2="50" y2="4.6" stroke={`rgb(${tone})`} strokeOpacity={collarOp} strokeWidth="0.35" />
+          ))}
+        </g>
       </svg>
       {/* plate */}
       <div
-        className="relative grid place-items-center rounded-full border border-line"
+        className="boot-in relative grid place-items-center rounded-full border border-line"
         style={{
           width: plate,
           height: plate,
@@ -50,7 +56,7 @@ export function Emblem({ state, level = 0, progress = null, size = 240, floating
           boxShadow: floating ? "0 10px 30px rgb(0 0 0 / 0.45)" : "inset 0 0 0 4px rgb(var(--surface-1))",
         }}
       >
-        <Core state={state} level={level} progress={progress} size={Math.round(plate * 0.94)} />
+        <Core state={state} level={level} progress={progress} size={Math.round(plate * 0.94)} ambient intro />
       </div>
     </div>
   );

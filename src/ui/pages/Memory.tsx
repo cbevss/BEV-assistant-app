@@ -1,5 +1,6 @@
 import { Download, Pencil, Plus, Trash2 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { SlidingUnderline, useActiveRect } from "../components/Motion";
 import { native, MemoryRow } from "@/lib/native";
 import { looksSensitive } from "@/lib/sensitive";
 import { PageHeader, Section, TextInput, Button, IconButton, Badge } from "../components/Form";
@@ -17,6 +18,8 @@ export function Memory() {
   const [editVal, setEditVal] = useState("");
   const [confirm, setConfirm] = useState<{ text: string; run: () => Promise<void> } | null>(null);
   const [tab, setTab] = useState<"memories" | "notes" | "history">("memories");
+  const tabsRef = useRef<HTMLDivElement>(null);
+  const tabRect = useActiveRect(tabsRef, tab);
   const [ranked, setRanked] = useState<MemoryRow[] | null>(null);
 
   const refresh = useCallback(async () => {
@@ -103,19 +106,22 @@ export function Memory() {
       />
       {err && <p className="mb-4 text-sm text-danger">{err}</p>}
 
-      <div className="mb-6 flex gap-5 border-b border-line-subtle" role="tablist">
+      <div ref={tabsRef} className="relative mb-6 flex gap-5 border-b border-line-subtle" role="tablist">
+        <SlidingUnderline rect={tabRect.rect} ready={tabRect.ready} />
         {(["memories", "notes", "history"] as const).map((t) => (
           <button
             key={t}
             role="tab"
             aria-selected={tab === t}
+            data-active={tab === t ? "true" : undefined}
             onClick={() => setTab(t)}
-            className={`-mb-px border-b-2 pb-2.5 text-sm capitalize transition-colors duration-fast ${tab === t ? "border-accent text-ink" : "border-transparent text-ink-3 hover:text-ink"}`}
+            className={`pb-2.5 text-sm capitalize transition-colors duration-fast ${tab === t ? "text-ink" : "text-ink-3 hover:text-ink"}`}
           >
             {t === "memories" ? "Facts & preferences" : t}
           </button>
         ))}
       </div>
+      <div key={tab} className="animate-page-in">
       {tab === "notes" && <NotesPanel />}
       {tab === "history" && <HistoryPanel />}
       {tab === "memories" && (
@@ -223,6 +229,7 @@ export function Memory() {
           <SemanticSearchSettings />
         </>
       )}
+      </div>
 
       {confirm && (
         <ConfirmDialog

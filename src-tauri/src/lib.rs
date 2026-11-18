@@ -17,6 +17,7 @@ mod files;
 mod journal;
 mod games;
 mod overlay;
+mod replay;
 mod screen;
 mod secrets;
 mod sysmon;
@@ -163,6 +164,9 @@ pub fn run() {
             system::power_action,
             system::take_screenshot,
             screen::capture_screen,
+            replay::replay_configure,
+            replay::replay_status,
+            replay::replay_clip,
             screen::foreground_window,
             control::ui_read,
             control::ui_act,

@@ -119,6 +119,11 @@ export interface Settings {
   briefingSpoken: boolean;
   cpuAlertPercent: number;
   ramAlertPercent: number;
+  /** Keep the last few seconds of the screen the mouse is on, in memory only,
+   *  so the user can ask BEV to look back. Off until the user turns it on. */
+  screenReplay: boolean;
+  /** How many seconds screen replay keeps (10–120). */
+  screenReplaySecs: number;
   // Permissions: tool name → allowed
   toolPermissions: Record<string, boolean>;
   /** When true, a spoken/typed request is itself the approval — sensitive tools
@@ -181,6 +186,8 @@ export const defaultSettings: Settings = {
   briefingSpoken: true,
   cpuAlertPercent: 90,
   ramAlertPercent: 90,
+  screenReplay: false,
+  screenReplaySecs: 30,
   toolPermissions: {},
   autoApproveActions: false,
 };

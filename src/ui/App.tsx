@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Routes, Route, Navigate } from "react-router-dom";
+import { Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useAssistant } from "@/state/assistant";
 import { useSettings } from "@/state/settings";
@@ -46,6 +46,16 @@ export function App() {
   const [approvals, setApprovals] = useState<PendingApproval[]>([]);
   const pendingApproval = approvals[0] ?? null;
   const [palette, setPalette] = useState(false);
+  const privacyMode = useAssistant((a) => a.privacyMode);
+  // Pages fade in when you switch area; settings animates its own sections.
+  const section = useLocation().pathname.split("/")[1] || "assistant";
+
+  // Screen replay runs only while the user has it on, BEV may look at the
+  // screen, and privacy mode is off. Turning it off clears what was kept.
+  const replayOn = loaded && settings.screenReplay && settings.toolPermissions.look_back !== false && !privacyMode;
+  useEffect(() => {
+    native.replayConfigure(replayOn, settings.screenReplaySecs).catch(() => {});
+  }, [replayOn, settings.screenReplaySecs]);
 
   // Ctrl+K anywhere opens search and commands.
   useEffect(() => {
@@ -156,6 +166,7 @@ export function App() {
       <main className="flex min-w-0 flex-1 flex-col overflow-hidden">
         <TitleBar onSearch={() => setPalette(true)} />
         <div className="min-h-0 flex-1">
+          <div key={section} className="h-full animate-page-in">
           <Routes>
             <Route path="/" element={<Navigate to="/assistant" replace />} />
             <Route path="/assistant" element={<Assistant />} />
@@ -174,6 +185,7 @@ export function App() {
             <Route path="/security" element={<Navigate to="/settings/privacy" replace />} />
             <Route path="*" element={<Navigate to="/assistant" replace />} />
           </Routes>
+          </div>
         </div>
         <SystemBar />
       </main>

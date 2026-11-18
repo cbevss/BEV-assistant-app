@@ -9,6 +9,9 @@
  *   working    ticks fill clockwise with plan progress (orbit if no plan)
  *   done       full bezel in green, briefly
  *   error      red ticks at the bottom
+ * With `ambient`, a resting Core (idle or mic off) runs a short scan every 7s
+ * (a sweep round the bezel, a centre blip, one turn of the hero ring) so the
+ * logo reads as alive. It stops the moment BEV has real work to show.
  */
 import clsx from "clsx";
 import type { AssistantState } from "@/state/assistant";
@@ -24,9 +27,13 @@ export interface CoreProps {
   size?: number;
   className?: string;
   title?: string;
+  /** A small idle animation every few seconds (the rail logo and the emblem). */
+  ambient?: boolean;
+  /** Draw the rings in when it first appears (the emblem). */
+  intro?: boolean;
 }
 
-export function Core({ state, level = 0, progress = null, size = 32, className, title }: CoreProps) {
+export function Core({ state, level = 0, progress = null, size = 32, className, title, ambient = false, intro = false }: CoreProps) {
   const lv = Math.max(0, Math.min(1, level));
   const orbiting = state === "thinking" || state === "activating" || (state === "executing" && progress == null);
   const tone = state === "error" ? "rgb(var(--danger))" : state === "completed" ? "rgb(var(--ok))" : "rgb(var(--accent))";
@@ -35,6 +42,9 @@ export function Core({ state, level = 0, progress = null, size = 32, className, 
   // Mid-size Cores (56px+) leave room for the scale; large ones become the reactor.
   const hud = size >= 56;
   const active = state !== "idle" && state !== "off" && state !== "completed";
+  const resting = ambient && (state === "idle" || state === "off");
+  const draw = intro ? "boot-draw" : undefined;
+  const delay = (ms: number) => (intro ? { animationDelay: `${ms}ms` } : undefined);
 
   const lit = (i: number): number => {
     // Returns 0 (off) .. 1 (fully lit) for tick i (0 = top, clockwise).
@@ -80,20 +90,22 @@ export function Core({ state, level = 0, progress = null, size = 32, className, 
       {hero && (
         <g aria-hidden fill="none">
           {/* outer frame: two long arcs with gaps at the poles */}
-          <path d={arc(49, 8, 172)} stroke={ringTone} strokeOpacity={ringOp * 0.5} strokeWidth="0.5" />
-          <path d={arc(49, 188, 352)} stroke={ringTone} strokeOpacity={ringOp * 0.5} strokeWidth="0.5" />
+          <path d={arc(49, 8, 172)} stroke={ringTone} strokeOpacity={ringOp * 0.5} strokeWidth="0.5" pathLength={1} className={draw} style={delay(120)} />
+          <path d={arc(49, 188, 352)} stroke={ringTone} strokeOpacity={ringOp * 0.5} strokeWidth="0.5" pathLength={1} className={draw} style={delay(120)} />
           {/* degree scale */}
+          <g className={intro ? "boot-fade" : undefined} style={delay(260)}>
           {Array.from({ length: 90 }, (_, i) => {
             const a = (i / 90) * Math.PI * 2 - Math.PI / 2;
             const r1 = i % 15 === 0 ? 42 : i % 5 === 0 ? 43.2 : 44;
             return <line key={i} x1={50 + Math.cos(a) * r1} y1={50 + Math.sin(a) * r1} x2={50 + Math.cos(a) * 45.5} y2={50 + Math.sin(a) * 45.5} stroke={ringTone} strokeOpacity={i % 15 === 0 ? ringOp : ringOp * 0.55} strokeWidth={i % 15 === 0 ? 0.7 : 0.4} />;
           })}
-          <circle cx="50" cy="50" r="39.5" stroke={ringTone} strokeOpacity={ringOp * 0.6} strokeWidth="0.4" />
+          </g>
+          <circle cx="50" cy="50" r="39.5" stroke={ringTone} strokeOpacity={ringOp * 0.6} strokeWidth="0.4" pathLength={1} className={draw} style={delay(200)} />
           {/* segmented ring: turns only while BEV is working */}
-          <g className={active ? "animate-orbit" : undefined} style={{ transformBox: "view-box", transformOrigin: "50px 50px", animationDuration: state === "thinking" || state === "activating" ? "2.6s" : "8s" }}>
-            <path d={arc(35, 0, 74)} stroke={ringTone} strokeOpacity={ringOp} strokeWidth="1.4" strokeLinecap="round" />
-            <path d={arc(35, 104, 148)} stroke={ringTone} strokeOpacity={ringOp} strokeWidth="1.4" strokeLinecap="round" />
-            <path d={arc(35, 178, 300)} stroke={ringTone} strokeOpacity={ringOp} strokeWidth="1.4" strokeLinecap="round" />
+          <g className={active ? "animate-orbit" : resting ? "core-ambient-turn" : undefined} style={{ transformBox: "view-box", transformOrigin: "50px 50px", ...(active ? { animationDuration: state === "thinking" || state === "activating" ? "2.6s" : "8s" } : {}) }}>
+            <path d={arc(35, 0, 74)} stroke={ringTone} strokeOpacity={ringOp} strokeWidth="1.4" strokeLinecap="round" pathLength={1} className={draw} style={delay(320)} />
+            <path d={arc(35, 104, 148)} stroke={ringTone} strokeOpacity={ringOp} strokeWidth="1.4" strokeLinecap="round" pathLength={1} className={draw} style={delay(380)} />
+            <path d={arc(35, 178, 300)} stroke={ringTone} strokeOpacity={ringOp} strokeWidth="1.4" strokeLinecap="round" pathLength={1} className={draw} style={delay(440)} />
           </g>
           <g className={active ? "animate-orbit" : undefined} style={{ transformBox: "view-box", transformOrigin: "50px 50px", animationDuration: "14s", animationDirection: "reverse" }}>
             <circle cx="50" cy="50" r="31.5" stroke={ringTone} strokeOpacity={ringOp * 0.7} strokeWidth="0.5" strokeDasharray="1 3" />
@@ -123,6 +135,12 @@ export function Core({ state, level = 0, progress = null, size = 32, className, 
             />
           );
         })}
+        {/* ambient scan: one sweep around the bezel every few seconds while resting */}
+        {resting && (
+          <g className="core-ambient-sweep">
+            <path d="M 50 3 A 47 47 0 0 1 82.2 15.8" fill="none" stroke={state === "off" ? dim : "rgb(var(--accent))"} strokeOpacity={state === "off" ? 0.9 : 0.85} strokeWidth={detail ? 3.4 : 5} strokeLinecap="round" />
+          </g>
+        )}
         {/* orbiting arc for thinking / working without a plan */}
         {orbiting && (
           <g className="animate-orbit" style={{ transformBox: "view-box", transformOrigin: "50px 50px" }}>
@@ -132,7 +150,7 @@ export function Core({ state, level = 0, progress = null, size = 32, className, 
         {/* inner ring */}
         {detail && <circle cx="50" cy="50" r="27" fill="none" stroke={state === "idle" || state === "off" ? (hero && state === "idle" ? tone : dim) : tone} strokeOpacity={state === "idle" || state === "off" ? 0.5 : 0.35} strokeWidth="1.6" />}
         {/* centre */}
-        <circle cx="50" cy="50" r={centreR} fill={hero && state === "idle" ? tone : centreFill} style={{ transition: "r 80ms linear, fill 160ms" }} />
+        <circle cx="50" cy="50" r={centreR} fill={hero && state === "idle" ? tone : centreFill} className={resting ? "core-ambient-blip" : undefined} style={{ transition: "r 80ms linear, fill 160ms" }} />
       </g>
     </svg>
   );

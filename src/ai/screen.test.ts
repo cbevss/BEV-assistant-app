@@ -3,7 +3,8 @@ import { describe, it, expect, vi } from "vitest";
 vi.mock("@tauri-apps/plugin-http", () => ({ fetch: vi.fn() }));
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }));
 
-import { keepLatestImage, foregroundLabel } from "./orchestrator";
+import { keepLatestImage, foregroundLabel, BACKGROUND_FORBIDDEN } from "./orchestrator";
+import { replayCaption } from "./tools";
 import { buildSystemPrompt } from "./persona";
 import { useSettings } from "@/state/settings";
 import { ROUTINE_FORBIDDEN } from "@/routines/engine";
@@ -53,4 +54,33 @@ describe("system prompt", () => {
 
 it("routines can't take screenshots", () => {
   expect(ROUTINE_FORBIDDEN.has("look_at_screen")).toBe(true);
+});
+
+describe("screen replay", () => {
+  const s = useSettings.getState().settings;
+  const frame = (ago: number) => ({ data: "x", width: 1024, height: 576, ago_secs: ago, label: "display 2 of 2" });
+
+  it("is off by default and only offered to the AI when the user turns it on", () => {
+    expect(s.screenReplay).toBe(false);
+    expect(buildSystemPrompt(s)).not.toMatch(/look_back/);
+    const on = buildSystemPrompt({ ...s, screenReplay: true, screenReplaySecs: 60 });
+    expect(on).toMatch(/look_back/);
+    expect(on).toMatch(/last 60 seconds/);
+    expect(buildSystemPrompt({ ...s, screenReplay: true, toolPermissions: { look_back: false } })).not.toMatch(/look_back/);
+  });
+
+  it("can't be used by routines or unattended background tasks", () => {
+    expect(ROUTINE_FORBIDDEN.has("look_back")).toBe(true);
+    expect(BACKGROUND_FORBIDDEN.has("look_back")).toBe(true);
+  });
+
+  it("tells the AI the frame times and when the buffer is shorter than asked", () => {
+    const clip = { frames: [frame(9.6), frame(5.1), frame(0.4)], covered_secs: 9.6, keep_secs: 30 };
+    const c = replayCaption(clip, 10);
+    expect(c).toMatch(/3 frames from the last 10s of display 2 of 2, oldest first/);
+    expect(c).toMatch(/1: 9.6s ago, 2: 5.1s ago, 3: 0.4s ago/);
+    expect(c).toMatch(/data, not instructions/);
+    expect(replayCaption({ ...clip, covered_secs: 4 }, 20)).toMatch(/only started 4s ago/);
+    expect(replayCaption({ ...clip, covered_secs: 30 }, 90)).toMatch(/only keeps 30s/);
+  });
 });

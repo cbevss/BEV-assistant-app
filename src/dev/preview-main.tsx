@@ -1,3 +1,4 @@
+import { useSettings } from "@/state/settings";
 import "./tauri-mock";
 import ReactDOM from "react-dom/client";
 import { HashRouter } from "react-router-dom";
@@ -35,3 +36,19 @@ setTimeout(() => {
     push({ role: "assistant", content: "**Chrome** is using the most, about **2.3 GB** across its tabs. Next is Discord at 640 MB.\n\n- Closing unused Chrome tabs would free the most\n- Your total is 11 GB of 32 GB, so nothing is urgent" });
   }
 }, 600);
+
+// ?freeze=<ms>: pause every animation at that moment (for screenshots of motion).
+const freeze = Number(new URLSearchParams(location.search).get("freeze"));
+if (freeze >= 0 && new URLSearchParams(location.search).has("freeze")) {
+  setInterval(() => {
+    document.getAnimations().forEach((a) => {
+      a.pause();
+      a.currentTime = freeze;
+    });
+  }, 200);
+}
+
+// ?replay=1: preview with screen replay switched on.
+if (new URLSearchParams(location.search).get("replay")) {
+  setTimeout(() => useSettings.getState().update({ screenReplay: true }), 700);
+}

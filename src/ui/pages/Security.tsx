@@ -4,7 +4,7 @@ import { useSettings } from "@/state/settings";
 import { useAssistant } from "@/state/assistant";
 import { setPrivacy } from "@/voice/bootstrap";
 import { allTools, getTool, isSensitive } from "@/ai/tools";
-import { PageHeader, Section, Field, Toggle, Button, StatusPill } from "../components/Form";
+import { PageHeader, Section, Field, Toggle, Button, StatusPill, Segmented } from "../components/Form";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 
 export function Security() {
@@ -36,6 +36,28 @@ export function Security() {
         <Field label="Privacy mode" hint="Stops all wake-word and microphone processing at once, until you turn it back off.">
           <Toggle label="Privacy mode" checked={privacyMode} onChange={setPrivacy} />
         </Field>
+      </Section>
+
+      <Section
+        title="Screen replay"
+        aside={settings.screenReplay ? <StatusPill ok={!privacyMode} label={privacyMode ? "paused" : "keeping"} /> : undefined}
+      >
+        <Field
+          label="Keep the last few seconds of my screen"
+          hint="So you can say “look at the last 20 seconds”. BEV keeps the display your mouse is on, in memory only, and drops it as it ages. Nothing is saved to disk, and frames are only sent to your AI provider when you ask BEV to look back. Paused in privacy mode."
+        >
+          <Toggle label="Screen replay" checked={settings.screenReplay} onChange={(screenReplay) => update({ screenReplay })} />
+        </Field>
+        {settings.screenReplay && (
+          <Field label="How far back" hint="Longer uses more memory (about 15 MB per minute).">
+            <Segmented
+              ariaLabel="How far back screen replay keeps"
+              value={String(settings.screenReplaySecs)}
+              onChange={(v) => update({ screenReplaySecs: Number(v) })}
+              options={[15, 30, 60, 120].map((n) => ({ value: String(n), label: n < 60 ? `${n}s` : `${n / 60} min` }))}
+            />
+          </Field>
+        )}
       </Section>
 
       <Section title="Approvals">

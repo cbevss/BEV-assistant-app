@@ -236,7 +236,7 @@ export function Button({
       disabled={disabled || loading}
       aria-busy={loading || undefined}
       className={clsx(
-        "no-drag inline-flex shrink-0 select-none items-center justify-center gap-1.5 whitespace-nowrap rounded font-medium transition-colors duration-fast disabled:cursor-not-allowed disabled:opacity-40",
+        "no-drag inline-flex shrink-0 select-none items-center justify-center gap-1.5 whitespace-nowrap rounded font-medium transition-[color,background-color,border-color,transform] duration-fast enabled:active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-40",
         size === "md" ? "h-8 px-3 text-sm" : "h-7 px-2.5 text-xs",
         variant === "primary" && "bg-accent text-accent-ink hover:bg-accent-strong active:brightness-95",
         variant === "secondary" && "border border-line bg-surface-2 text-ink hover:border-line-strong hover:bg-surface-3",
@@ -260,7 +260,7 @@ export function IconButton({ icon: Icon, label, active, className, size = "md", 
       title={label}
       {...rest}
       className={clsx(
-        "no-drag grid shrink-0 place-items-center rounded transition-colors duration-fast disabled:cursor-not-allowed disabled:opacity-40",
+        "no-drag grid shrink-0 place-items-center rounded transition-[color,background-color,transform] duration-fast enabled:active:scale-[0.94] disabled:cursor-not-allowed disabled:opacity-40",
         size === "md" ? "h-8 w-8" : "h-7 w-7",
         active ? "bg-accent/15 text-accent" : "text-ink-3 hover:bg-surface-2 hover:text-ink",
         className
