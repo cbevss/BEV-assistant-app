@@ -19,6 +19,10 @@ export const controlCache = {
   setOcr(r: OcrResult) {
     lastOcr = r;
   },
+  /** After scrolling, remembered text positions no longer match the screen. */
+  forgetOcr() {
+    lastOcr = null;
+  },
   ui: () => lastUi,
   ocr: () => lastOcr,
   element: (id: number): UiElement | undefined => lastUi?.elements.find((e) => e.id === id),

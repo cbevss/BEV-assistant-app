@@ -50,6 +50,8 @@ export interface Settings {
   ollamaHost: string;
   personality: Personality;
   customPersonality: string;
+  /** What BEV calls the user now and then ("sir", a name). Empty: nothing. */
+  addressAs: string;
   responseLength: "short" | "normal" | "detailed";
   // Voice
   micDeviceId: string;
@@ -83,6 +85,9 @@ export interface Settings {
   wakeEngine: WakeEngine;
   wakeSensitivity: number; // 0..1
   conversationTimeoutMs: number;
+  /** After a reply: "smart" listens properly only when BEV asked something and
+   *  ignores talk meant for other people; "always" keeps listening; "off" stops. */
+  followUpMode: "smart" | "always" | "off";
   pushToTalkShortcut: string;
   /** BEV Cloud (Telegram, task tracking, calls) address; "" = not connected. Key is in the keyring. */
   bevCloudUrl: string;
@@ -143,6 +148,7 @@ export const defaultSettings: Settings = {
   ollamaFastModel: "",
   ollamaHost: "http://localhost:11434",
   personality: "casual",
+  addressAs: "sir",
   customPersonality: "",
   responseLength: "short",
   micDeviceId: "",
@@ -165,6 +171,7 @@ export const defaultSettings: Settings = {
   wakeEngine: "on-device",
   wakeSensitivity: 0.6,
   conversationTimeoutMs: 8000,
+  followUpMode: "smart",
   pushToTalkShortcut: "CommandOrControl+Alt+B",
   muteShortcut: "",
   bevCloudUrl: "",

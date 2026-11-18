@@ -22,6 +22,8 @@ import type { SpeechRecognizer } from "./types";
 import { WhisperRecognizer } from "./stt/whisper";
 import { effectiveMic } from "./mic";
 import { listenForBargeIn } from "./bargein";
+import { followUpPlan, type FollowUpPlan } from "./turns";
+import { isForBev } from "./addressee";
 
 /** Below this Windows-recogniser confidence, a short request is checked with the user. */
 const LOW_CONFIDENCE = 0.35;
@@ -265,7 +267,12 @@ export class VoiceController {
 
   /** Manual activation (push-to-talk / shortcut) without the wake word. */
   async onWake() {
-    if (this.active) return;
+    // Pressed again mid-conversation: "I'm done", so end it now and free the mic.
+    if (this.active) {
+      this.closeQuietly = true;
+      this.interrupt();
+      return;
+    }
     this.active = true;
     // Free the mic for the conversation recogniser (only one at a time).
     this.wake?.pauseListening();
@@ -274,7 +281,8 @@ export class VoiceController {
     this.setState("activating");
     playChime("wake");
     if (!settings().gamingQuietMode) {
-      await this.tts.speak("Yeah?").catch(() => {});
+      const sir = settings().addressAs.trim();
+      await this.tts.speak(sir ? `Yes, ${sir}?` : "Yeah?").catch(() => {});
       await pause(ECHO_GAP_MS);
     }
     await this.conversationTurn();
@@ -285,14 +293,11 @@ export class VoiceController {
    * is silent: the first partial transcript cancels it, so long sentences are
    * never cut off. On timeout the recogniser is aborted (not left running).
    */
-  private async listenWithTimeout(signal: AbortSignal): Promise<string> {
+  private async listenWithTimeout(signal: AbortSignal, windowMs = settings().conversationTimeoutMs): Promise<string> {
     const ctl = new AbortController();
     const onOuterAbort = () => ctl.abort();
     signal.addEventListener("abort", onOuterAbort, { once: true });
-    let timer: ReturnType<typeof setTimeout> | undefined = setTimeout(
-      () => ctl.abort(),
-      settings().conversationTimeoutMs
-    );
+    let timer: ReturnType<typeof setTimeout> | undefined = setTimeout(() => ctl.abort(), windowMs);
     try {
       return await this.recognizer().listenOnce({
         signal: ctl.signal,
@@ -312,13 +317,17 @@ export class VoiceController {
 
   private async conversationTurn() {
     let askedRepeat = false;
+    // null on the first turn (the user just woke BEV, so whatever they say is
+    // for it); after a reply, how long to listen and whether to check it's for BEV.
+    let followUp: FollowUpPlan | null = null;
+    let lastReply = "";
     try {
       while (this.active) {
         this.setState("listening", "");
         this.abort = new AbortController();
         let utterance: string;
         try {
-          utterance = (await this.listenWithTimeout(this.abort.signal)).trim();
+          utterance = (await this.listenWithTimeout(this.abort.signal, followUp?.windowMs)).trim();
         } catch (e) {
           // Show real recogniser failures (no internet, mic blocked) instead of
           // quietly ending; a timeout/abort is just silence.
@@ -363,6 +372,18 @@ export class VoiceController {
           break;
         }
 
+        // A follow-up without the wake word: make sure it was meant for BEV and
+        // not for friends in a call, or BEV would answer their conversation.
+        if (followUp && settings().followUpMode === "smart") {
+          this.setState("thinking", "");
+          const forBev = await isForBev(utterance, lastReply, followUp.expectAnswer, settings());
+          if (!forBev) {
+            this.setState("idle", "Stopped listening: that sounded like it was for someone else.");
+            this.closeQuietly = true;
+            break;
+          }
+        }
+
         useAssistant.getState().pushMessage({ role: "user", content: utterance });
 
         // Fast path: if the whole utterance IS a routine trigger ("gaming mode"),
@@ -379,6 +400,7 @@ export class VoiceController {
           reply = await this.orchestrator.send(utterance, this.abort.signal);
         }
 
+        let interruptedTurn = false;
         if (reply) {
           this.setState("speaking");
           // Barge-in: talking over BEV stops it and goes straight to listening.
@@ -401,8 +423,14 @@ export class VoiceController {
             await watching;
           }
           if (!interrupted) await pause(ECHO_GAP_MS);
+          interruptedTurn = interrupted;
         }
-        // loop: follow-up window without repeating the wake word
+        // Follow-up without repeating the wake word, if this reply calls for one.
+        lastReply = reply;
+        followUp = followUpPlan(reply, settings());
+        // They talked over BEV: they're mid-conversation with it, so listen properly.
+        if (interruptedTurn) followUp = { listen: true, windowMs: settings().conversationTimeoutMs, expectAnswer: true };
+        if (!followUp.listen) break;
       }
     } catch (e) {
       if (!(e instanceof DOMException && e.name === "AbortError")) {

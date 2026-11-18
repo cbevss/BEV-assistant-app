@@ -132,6 +132,86 @@ pub async fn input_click(x: f64, y: f64, space: Option<String>, button: Option<S
     .await
 }
 
+/// A point in "screen" (desktop pixels) or "screenshot" (last look_at_screen image) space.
+fn resolve_point(x: f64, y: f64, space: Option<&str>) -> Result<(i32, i32), String> {
+    if space == Some("screenshot") {
+        let g = crate::screen::LAST_SHOT.lock().ok().and_then(|g| *g).ok_or("Look at the screen first, then pick a point on that screenshot.")?;
+        guard::shot_to_screen(&g, x, y).ok_or_else(|| "That point is outside the last screenshot.".to_string())
+    } else {
+        Ok((x.round() as i32, y.round() as i32))
+    }
+}
+
+/// Refuse points on BEV's own windows and input into fullscreen games.
+fn pointer_allowed(sx: i32, sy: i32) -> Result<Option<uia::PointInfo>, String> {
+    if let Some(why) = guard::game_blocks_input(crate::overlay::fullscreen_state()) {
+        return Err(why.into());
+    }
+    let target = uia::element_at(sx, sy).ok().flatten();
+    let me = std::env::current_exe().ok().and_then(|p| p.file_name().map(|n| n.to_string_lossy().into_owned())).unwrap_or_default();
+    if target.as_ref().is_some_and(|t| t.process.eq_ignore_ascii_case(&me)) {
+        return Err("That point is on BEV's own window.".into());
+    }
+    Ok(target)
+}
+
+/// Scroll the mouse wheel over a point. `amount` is wheel notches (1–30);
+/// direction "up" | "down" | "left" | "right".
+#[tauri::command]
+pub async fn input_scroll(x: Option<f64>, y: Option<f64>, space: Option<String>, direction: String, amount: Option<i32>) -> BevResult<ClickResult> {
+    blocking(move || {
+        // No point given: the middle of what BEV last looked at, else wherever the pointer is.
+        let (sx, sy) = match (x, y) {
+            (Some(x), Some(y)) => resolve_point(x, y, space.as_deref())?,
+            _ => crate::screen::LAST_SHOT
+                .lock()
+                .ok()
+                .and_then(|g| *g)
+                .map(|g| (g.origin_x + g.src_w as i32 / 2, g.origin_y + g.src_h as i32 / 2))
+                .or_else(input::cursor_pos)
+                .ok_or("Say where to scroll: look at the screen first, or give x and y.")?,
+        };
+        let target = pointer_allowed(sx, sy)?;
+        let n = amount.unwrap_or(5).clamp(1, 30);
+        let (notches, horizontal) = match direction.as_str() {
+            "up" => (n, false),
+            "down" => (-n, false),
+            "right" => (n, true),
+            "left" => (-n, true),
+            other => return Err(format!("unknown scroll direction \"{other}\" (up, down, left or right)")),
+        };
+        input::scroll(sx, sy, notches, horizontal)?;
+        Ok(ClickResult { x: sx, y: sy, target })
+    })
+    .await
+}
+
+/// Rest the pointer on a point (hover menus, tooltips).
+#[tauri::command]
+pub async fn input_hover(x: f64, y: f64, space: Option<String>) -> BevResult<ClickResult> {
+    blocking(move || {
+        let (sx, sy) = resolve_point(x, y, space.as_deref())?;
+        let target = pointer_allowed(sx, sy)?;
+        input::hover(sx, sy)?;
+        Ok(ClickResult { x: sx, y: sy, target })
+    })
+    .await
+}
+
+/// Drag from one point to another with the left button (sliders, drag and drop).
+#[tauri::command]
+pub async fn input_drag(from_x: f64, from_y: f64, to_x: f64, to_y: f64, space: Option<String>) -> BevResult<ClickResult> {
+    blocking(move || {
+        let from = resolve_point(from_x, from_y, space.as_deref())?;
+        let to = resolve_point(to_x, to_y, space.as_deref())?;
+        let target = pointer_allowed(from.0, from.1)?;
+        pointer_allowed(to.0, to.1)?;
+        input::drag(from, to)?;
+        Ok(ClickResult { x: to.0, y: to.1, target })
+    })
+    .await
+}
+
 /// What's under a point, so the app can ask before clicking something risky.
 #[tauri::command]
 pub async fn point_info(x: f64, y: f64, space: Option<String>) -> BevResult<Option<uia::PointInfo>> {

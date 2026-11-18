@@ -79,6 +79,16 @@ export function Settings({ part = "general" }: { part?: "general" | "apps" | "ad
             onChange={(e) => update({ customPersonality: e.target.value })}
           />
         )}
+        <Field label="Call me" hint="What BEV calls you now and then, e.g. “Done, sir.” Leave empty for nothing.">
+          <TextInput
+            aria-label="What BEV calls you"
+            className="w-48"
+            maxLength={40}
+            placeholder="sir"
+            value={settings.addressAs}
+            onChange={(e) => update({ addressAs: e.target.value })}
+          />
+        </Field>
         <Field label="Response length">
           <Select
             ariaLabel="Response length"
