@@ -1,5 +1,5 @@
 /** Integrations: connect BEV to your smart home, GitHub, Spotify, Google and MCP servers. */
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { native } from "@/lib/native";
 import { useSettings, type IntegrationSettings, type McpServerConfig } from "@/state/settings";
 import { HA_TOKEN, testHomeAssistant } from "@/integrations/homeassistant";
@@ -128,8 +128,13 @@ function OAuthCard({ id, title, blurb, setupHint, secretName }: { id: "spotify" 
   useEffect(() => {
     isSignedIn(id).then(setSignedIn);
   }, [id]);
+  // Only the latest attempt reports back: starting again cancels the one
+  // waiting on the sign-in port, and that one shouldn't show as an error.
+  const attempt = useRef(0);
   const go = async () => {
+    const mine = ++attempt.current;
     setBusy(true);
+    setR(null);
     await run(async () => {
       if (secretName && secret.trim()) await native.storeSecret(secretName, secret.trim());
       setSecret("");
@@ -137,8 +142,10 @@ function OAuthCard({ id, title, blurb, setupHint, secretName }: { id: "spotify" 
       await patch(id, { enabled: true });
       setSignedIn(true);
       return "Signed in.";
-    }, setR);
-    setBusy(false);
+    }, (res) => {
+      if (mine === attempt.current) setR(res);
+    });
+    if (mine === attempt.current) setBusy(false);
   };
   return (
     <Section title={title} aside={cfg.enabled ? <StatusPill ok={signedIn} label={signedIn ? "signed in" : "not signed in"} /> : undefined}>
@@ -164,10 +171,11 @@ function OAuthCard({ id, title, blurb, setupHint, secretName }: { id: "spotify" 
             Sign out
           </Button>
         )}
-        <Button onClick={go} disabled={busy || !cfg.clientId.trim()}>
-          {busy ? "Waiting for the browser…" : signedIn ? "Sign in again" : "Sign in"}
+        <Button onClick={go} disabled={!cfg.clientId.trim()}>
+          {busy ? "Restart sign-in" : signedIn ? "Sign in again" : "Sign in"}
         </Button>
       </div>
+      {busy && <p className="text-sm text-ink-3">Waiting for you to finish signing in in your browser.</p>}
       <Result r={r} />
     </Section>
   );

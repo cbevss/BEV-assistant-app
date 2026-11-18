@@ -133,11 +133,42 @@ fn listeners() -> &'static Mutex<HashMap<u16, std::net::TcpListener>> {
     S.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
+/// Cancel flags for sign-ins that are waiting on a port.
+fn waits() -> &'static Mutex<HashMap<u16, std::sync::Arc<std::sync::atomic::AtomicBool>>> {
+    static S: OnceLock<Mutex<HashMap<u16, std::sync::Arc<std::sync::atomic::AtomicBool>>>> = OnceLock::new();
+    S.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
 /// Open a one-shot listener (a fixed port if the service needs one); returns the port.
+/// Starting a sign-in again replaces BEV's own earlier attempt on that port
+/// (one left waiting, or one whose browser never opened) instead of failing.
 #[tauri::command]
 pub fn oauth_listen(port: Option<u16>) -> BevResult<u16> {
-    let l = std::net::TcpListener::bind(("127.0.0.1", port.unwrap_or(0)))
-        .map_err(|e| BevError::Message(format!("couldn't open the sign-in port{}: {e}", port.map(|p| format!(" {p}")).unwrap_or_default())))?;
+    if let Some(p) = port {
+        listeners().lock().unwrap().remove(&p); // dropping it frees the port
+        if let Some(flag) = waits().lock().unwrap().remove(&p) {
+            flag.store(true, std::sync::atomic::Ordering::SeqCst);
+        }
+    }
+    // A cancelled wait notices within ~150ms and drops its listener; give it a moment.
+    let mut tries = 0;
+    let l = loop {
+        match std::net::TcpListener::bind(("127.0.0.1", port.unwrap_or(0))) {
+            Ok(l) => break l,
+            Err(e) if port.is_some() && e.kind() == std::io::ErrorKind::AddrInUse && tries < 15 => {
+                tries += 1;
+                std::thread::sleep(Duration::from_millis(100));
+            }
+            Err(e) => {
+                let busy = e.kind() == std::io::ErrorKind::AddrInUse;
+                return Err(BevError::Message(format!(
+                    "couldn't open the sign-in port{}: {}",
+                    port.map(|p| format!(" {p}")).unwrap_or_default(),
+                    if busy { "another program is using it. Close it (or restart BEV) and try again".to_string() } else { e.to_string() }
+                )));
+            }
+        }
+    };
     let port = l.local_addr().map_err(|e| BevError::Os(e.to_string()))?.port();
     listeners().lock().unwrap().insert(port, l);
     Ok(port)
@@ -155,7 +186,10 @@ pub fn parse_callback(request: &str) -> Option<String> {
 pub async fn oauth_wait(port: u16, timeout_secs: Option<u64>) -> BevResult<String> {
     let l = listeners().lock().unwrap().remove(&port).ok_or_else(|| BevError::Invalid("no sign-in in progress".into()))?;
     let secs = timeout_secs.unwrap_or(300).min(900);
-    tauri::async_runtime::spawn_blocking(move || -> BevResult<String> {
+    let cancel = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    waits().lock().unwrap().insert(port, cancel.clone());
+    let done = cancel.clone();
+    let result = tauri::async_runtime::spawn_blocking(move || -> BevResult<String> {
         use std::io::{Read, Write};
         l.set_nonblocking(true).ok();
         let deadline = std::time::Instant::now() + Duration::from_secs(secs);
@@ -176,6 +210,9 @@ pub async fn oauth_wait(port: u16, timeout_secs: Option<u64>) -> BevResult<Strin
                     return Ok(q);
                 }
                 Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                    if cancel.load(std::sync::atomic::Ordering::SeqCst) {
+                        return Err(BevError::Message("sign-in was restarted".into()));
+                    }
                     if std::time::Instant::now() > deadline {
                         return Err(BevError::Message("sign-in timed out".into()));
                     }
@@ -186,7 +223,13 @@ pub async fn oauth_wait(port: u16, timeout_secs: Option<u64>) -> BevResult<Strin
         }
     })
     .await
-    .map_err(|e| BevError::Os(e.to_string()))?
+    .map_err(|e| BevError::Os(e.to_string()))?;
+    // Forget our cancel flag unless a newer sign-in has already replaced it.
+    let mut w = waits().lock().unwrap();
+    if w.get(&port).is_some_and(|f| std::sync::Arc::ptr_eq(f, &done)) {
+        w.remove(&port);
+    }
+    result
 }
 
 // ---------------------------------------------------------------------------
@@ -308,6 +351,21 @@ mod tests {
         assert_eq!(parse_callback("GET /callback?code=abc&state=xyz HTTP/1.1\r\nHost: 127.0.0.1\r\n").as_deref(), Some("code=abc&state=xyz"));
         assert_eq!(parse_callback("GET /favicon.ico HTTP/1.1\r\n"), None);
         assert_eq!(parse_callback(""), None);
+    }
+
+    #[test]
+    fn sign_in_can_restart_on_a_fixed_port() {
+        // A first attempt left open (browser never opened) must not block the next one.
+        let p = oauth_listen(None).unwrap();
+        listeners().lock().unwrap().remove(&p);
+        let first = oauth_listen(Some(p)).unwrap();
+        assert_eq!(oauth_listen(Some(first)).unwrap(), first);
+        // A wait in progress is cancelled and its port handed over.
+        let flag = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        waits().lock().unwrap().insert(first, flag.clone());
+        assert_eq!(oauth_listen(Some(first)).unwrap(), first);
+        assert!(flag.load(std::sync::atomic::Ordering::SeqCst));
+        listeners().lock().unwrap().remove(&first);
     }
 
     #[test]
