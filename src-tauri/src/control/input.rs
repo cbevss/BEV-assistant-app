@@ -14,7 +14,7 @@ mod imp {
     use windows::Win32::Foundation::POINT;
     use windows::Win32::UI::Input::KeyboardAndMouse::{
         SendInput, INPUT, INPUT_0, INPUT_KEYBOARD, INPUT_MOUSE, KEYBDINPUT, KEYBD_EVENT_FLAGS, KEYEVENTF_EXTENDEDKEY, KEYEVENTF_KEYUP,
-        KEYEVENTF_UNICODE, MOUSEEVENTF_LEFTDOWN, MOUSEEVENTF_LEFTUP, MOUSEEVENTF_RIGHTDOWN, MOUSEEVENTF_RIGHTUP, MOUSEINPUT, MOUSE_EVENT_FLAGS,
+        KEYEVENTF_UNICODE, MOUSEEVENTF_HWHEEL, MOUSEEVENTF_LEFTDOWN, MOUSEEVENTF_LEFTUP, MOUSEEVENTF_RIGHTDOWN, MOUSEEVENTF_RIGHTUP, MOUSEEVENTF_WHEEL, MOUSEINPUT, MOUSE_EVENT_FLAGS,
         VIRTUAL_KEY,
     };
     use windows::Win32::UI::WindowsAndMessaging::{GetCursorPos, SetCursorPos};
@@ -103,6 +103,73 @@ mod imp {
         INPUT { r#type: INPUT_MOUSE, Anonymous: INPUT_0 { mi: MOUSEINPUT { dx: 0, dy: 0, mouseData: 0, dwFlags: flags, time: 0, dwExtraInfo: 0 } } }
     }
 
+    fn wheel(flags: MOUSE_EVENT_FLAGS, delta: i32) -> INPUT {
+        INPUT { r#type: INPUT_MOUSE, Anonymous: INPUT_0 { mi: MOUSEINPUT { dx: 0, dy: 0, mouseData: delta as _, dwFlags: flags, time: 0, dwExtraInfo: 0 } } }
+    }
+
+    fn cursor() -> Option<POINT> {
+        let mut p = POINT::default();
+        unsafe { GetCursorPos(&mut p).is_ok() }.then_some(p)
+    }
+
+    pub fn cursor_pos() -> Option<(i32, i32)> {
+        cursor().map(|p| (p.x, p.y))
+    }
+
+    /// Scroll the wheel over a point (`notches` > 0 scrolls up / right), then
+    /// put the pointer back. One notch is one wheel click (WHEEL_DELTA 120).
+    pub fn scroll(x: i32, y: i32, notches: i32, horizontal: bool) -> Result<(), String> {
+        let was = cursor();
+        unsafe { SetCursorPos(x, y) }.map_err(|e| format!("couldn't move the pointer: {e}"))?;
+        std::thread::sleep(Duration::from_millis(30));
+        let flags = if horizontal { MOUSEEVENTF_HWHEEL } else { MOUSEEVENTF_WHEEL };
+        let step = if notches >= 0 { 120 } else { -120 };
+        let r = (|| {
+            for _ in 0..notches.unsigned_abs() {
+                send(&[wheel(flags, step)])?;
+                std::thread::sleep(Duration::from_millis(25));
+            }
+            Ok(())
+        })();
+        std::thread::sleep(Duration::from_millis(40));
+        if let Some(p) = was {
+            let _ = unsafe { SetCursorPos(p.x, p.y) };
+        }
+        r
+    }
+
+    /// Rest the pointer on a point (to open a hover menu or tooltip). It stays there.
+    pub fn hover(x: i32, y: i32) -> Result<(), String> {
+        unsafe { SetCursorPos(x, y) }.map_err(|e| format!("couldn't move the pointer: {e}"))
+    }
+
+    /// Press at one point, glide to another and release (sliders, drag and drop).
+    pub fn drag(from: (i32, i32), to: (i32, i32)) -> Result<(), String> {
+        let was = cursor();
+        unsafe { SetCursorPos(from.0, from.1) }.map_err(|e| format!("couldn't move the pointer: {e}"))?;
+        std::thread::sleep(Duration::from_millis(40));
+        send(&[mouse(MOUSEEVENTF_LEFTDOWN)])?;
+        // Glide in steps so apps see a real drag, not a teleport.
+        let steps = 16;
+        let mut r = Ok(());
+        for i in 1..=steps {
+            let x = from.0 + (to.0 - from.0) * i / steps;
+            let y = from.1 + (to.1 - from.1) * i / steps;
+            if let Err(e) = unsafe { SetCursorPos(x, y) } {
+                r = Err(format!("couldn't move the pointer: {e}"));
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(15));
+        }
+        // Always release, even if a move failed, so the button isn't left held.
+        let up = send(&[mouse(MOUSEEVENTF_LEFTUP)]);
+        std::thread::sleep(Duration::from_millis(40));
+        if let Some(p) = was {
+            let _ = unsafe { SetCursorPos(p.x, p.y) };
+        }
+        r.and(up)
+    }
+
     /// Click at a desktop point, then put the pointer back where the user left it.
     pub fn click(x: i32, y: i32, right: bool, double: bool) -> Result<(), String> {
         let mut was = POINT::default();
@@ -136,6 +203,18 @@ mod imp {
         Err("keyboard control is Windows-only".into())
     }
     pub fn click(_x: i32, _y: i32, _r: bool, _d: bool) -> Result<(), String> {
+        Err("mouse control is Windows-only".into())
+    }
+    pub fn scroll(_x: i32, _y: i32, _n: i32, _h: bool) -> Result<(), String> {
+        Err("mouse control is Windows-only".into())
+    }
+    pub fn cursor_pos() -> Option<(i32, i32)> {
+        None
+    }
+    pub fn hover(_x: i32, _y: i32) -> Result<(), String> {
+        Err("mouse control is Windows-only".into())
+    }
+    pub fn drag(_f: (i32, i32), _t: (i32, i32)) -> Result<(), String> {
         Err("mouse control is Windows-only".into())
     }
 }

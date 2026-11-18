@@ -129,6 +129,11 @@ export const native = {
   inputType: (text: string) => invoke<InputTarget>("input_type", { text }),
   inputClick: (x: number, y: number, space: "screen" | "screenshot", button?: "left" | "right", double?: boolean) =>
     invoke<ClickResult>("input_click", { x, y, space, button, double }),
+  inputScroll: (direction: "up" | "down" | "left" | "right", amount?: number, x?: number, y?: number, space: "screen" | "screenshot" = "screenshot") =>
+    invoke<ClickResult>("input_scroll", { x, y, space, direction, amount }),
+  inputHover: (x: number, y: number, space: "screen" | "screenshot") => invoke<ClickResult>("input_hover", { x, y, space }),
+  inputDrag: (fromX: number, fromY: number, toX: number, toY: number, space: "screen" | "screenshot" = "screenshot") =>
+    invoke<ClickResult>("input_drag", { fromX, fromY, toX, toY, space }),
   pointInfo: (x: number, y: number, space: "screen" | "screenshot") => invoke<PointInfo | null>("point_info", { x, y, space }),
   inputTarget: () => invoke<InputTarget | null>("input_target"),
 

@@ -16,7 +16,7 @@ import {
 } from "@/voice/tts/kokoro";
 import { listElevenVoices, elevenUsage, type ElevenVoice, type ElevenUsage } from "@/voice/tts/elevenlabs";
 import { native, OutputDevice } from "@/lib/native";
-import { PageHeader, Section, Field, Select, Slider, Toggle, Button, TextInput, StatusPill } from "../components/Form";
+import { Segmented, PageHeader, Section, Field, Select, Slider, Toggle, Button, TextInput, StatusPill } from "../components/Form";
 import { useAssistant } from "@/state/assistant";
 import { restartListening, getController, bindShortcut } from "@/voice/bootstrap";
 import { HotkeyInput } from "../components/HotkeyInput";
@@ -106,7 +106,28 @@ export function VoiceAudio() {
             format={(v) => `${Math.round(v * 100)}%`}
           />
         </Field>
-        <Field label="Follow-up window" hint="How long BEV keeps listening after replying, so you don't need to say 'BEV' again.">
+        <Field
+          label="After BEV replies"
+          hint={
+            settings.followUpMode === "smart"
+              ? "Keeps listening only when BEV asked you something, otherwise for a few seconds. If you start talking to someone else (friends on a call), BEV notices and stops. Your talk shortcut ends a conversation at once."
+              : settings.followUpMode === "always"
+                ? "Keeps listening for the whole follow-up window and treats everything as meant for BEV."
+                : "Stops listening after every reply. Say “Hey BEV” again to carry on."
+          }
+        >
+          <Segmented
+            ariaLabel="After BEV replies"
+            value={settings.followUpMode}
+            onChange={(followUpMode) => update({ followUpMode: followUpMode as typeof settings.followUpMode })}
+            options={[
+              { value: "smart", label: "Smart" },
+              { value: "always", label: "Keep listening" },
+              { value: "off", label: "Stop" },
+            ]}
+          />
+        </Field>
+        <Field label="Follow-up window" hint="The longest BEV waits for you to start talking after it replies.">
           <Slider
             ariaLabel="Conversation timeout"
             min={3000}
@@ -117,7 +138,7 @@ export function VoiceAudio() {
             format={(v) => `${(v / 1000).toFixed(1)}s`}
           />
         </Field>
-        <Field label="Push-to-talk shortcut" hint="Starts a conversation without saying the wake word. Click, then press the keys.">
+        <Field label="Push-to-talk shortcut" hint="Starts a conversation without saying the wake word; press it again to end one. Click, then press the keys.">
           <HotkeyInput
             ariaLabel="Push-to-talk shortcut"
             value={settings.pushToTalkShortcut}

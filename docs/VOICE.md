@@ -26,3 +26,14 @@ The controller falls back to speech recognition if the on-device engine has no m
 
 ## Barge-in
 While BEV speaks, the controller holds an `AbortController`; calling `interrupt()` cancels the TTS and the in-flight model turn so the user can talk over it.
+
+
+## Conversation and turn-taking
+
+- **When you've finished a sentence:** BEV waits a little less after a sentence that sounds finished ("open Spotify please") and longer when you trail off ("open Spotify and…", "um"), so it neither cuts you off nor makes you wait. (Windows speech engine; the on-device Whisper engine uses a fixed pause.)
+- **After BEV replies** (Voice & microphone → After BEV replies):
+  - **Smart** (default): BEV keeps listening for the full follow-up window only when it asked you something. Otherwise it listens for about 4 seconds, and checks that what it hears is meant for it. Quick rules catch the obvious cases ("BEV…", "yeah go on", "bro did you see that"); anything unclear gets a quick yes/no from the fast model (under 2 seconds). If you've turned to friends on a call, BEV stops quietly without answering.
+  - **Keep listening:** the old behaviour; everything in the window is for BEV.
+  - **Stop:** one request per "Hey BEV".
+- **Ending it yourself:** press the talk shortcut again, or say "that's all", "stop" or "I wasn't talking to you".
+- Talking over BEV (with "Interrupt by talking" on) keeps the conversation open for your reply.

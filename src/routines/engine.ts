@@ -25,6 +25,9 @@ export const ROUTINE_FORBIDDEN = new Set([
   "use_control",
   "read_screen_text",
   "click_on_screen",
+  "scroll_screen",
+  "hover_on_screen",
+  "drag_on_screen",
   "press_keys",
   "type_text",
   // Managing tracked tasks is a conversation, not a routine step.

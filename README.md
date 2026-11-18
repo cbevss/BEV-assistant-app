@@ -24,6 +24,8 @@ Built with Tauri 2 · Rust · React · TypeScript · Tailwind.
 - **The overlay** — a transparent, always-on-top, click-through holographic orb with eight animated states (idle → activating → listening → thinking → speaking → executing → completed → error) and a **voice-reactive** waveform driven by real mic/TTS level.
 - **Voice path** — working speech-in/speech-out via the WebView2 Speech APIs out of the box (British English), with an on-device openWakeWord "hey BEV" wake word ([`docs/WAKE_WORD.md`](docs/WAKE_WORD.md)) and Whisper/ElevenLabs as upgrades.
 - **Memory** — SQLite-backed `remember` / `recall` tools the model can call; inspectable and deletable.
+- **Does tasks on screen** — opens sites in your default browser, reads and clicks controls, types into forms, scrolls, hovers and drags, checking each step; e.g. "check MrBeast's channel for anything new". Passwords, payments and captchas stay with you.
+- **Natural conversation** — knows when you've finished talking, keeps listening only when it asked you something, and stops if you turn to friends on a call.
 - **Screen replay** — opt-in: BEV keeps the last 15s–2 min of the screen your mouse is on, in memory only, so you can say "look at the last 20 seconds" and it reviews what happened.
 - **Tray + background** — close-to-tray, tray menu (Open / Toggle listening / Privacy mode / Quit), autostart plugin.
 

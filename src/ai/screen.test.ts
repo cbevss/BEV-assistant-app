@@ -84,3 +84,28 @@ describe("screen replay", () => {
     expect(replayCaption({ ...clip, covered_secs: 30 }, 90)).toMatch(/only keeps 30s/);
   });
 });
+
+describe("hands-on control and manners", () => {
+  const s = useSettings.getState().settings;
+
+  it("calls the user what they asked for, and nothing when left empty", () => {
+    expect(s.addressAs).toBe("sir");
+    expect(buildSystemPrompt(s)).toMatch(/Address the user as "sir"/);
+    expect(buildSystemPrompt({ ...s, addressAs: "  " })).not.toMatch(/Address the user as/);
+  });
+
+  it("teaches BEV to do tasks on screen, but not to submit, pay or log in for the user", () => {
+    const p = buildSystemPrompt(s);
+    expect(p).toMatch(/scroll_screen/);
+    expect(p).toMatch(/don't press the final Submit/);
+    expect(p).toMatch(/Never enter passwords or payment details/);
+    expect(p).toMatch(/youtube\.com\/@handle\/videos/);
+  });
+
+  it("keeps the new mouse tools out of routines and unattended tasks", () => {
+    for (const t of ["scroll_screen", "hover_on_screen", "drag_on_screen"]) {
+      expect(ROUTINE_FORBIDDEN.has(t)).toBe(true);
+      expect(BACKGROUND_FORBIDDEN.has(t)).toBe(true);
+    }
+  });
+});

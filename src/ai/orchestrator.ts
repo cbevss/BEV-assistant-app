@@ -29,6 +29,9 @@ export const BACKGROUND_FORBIDDEN = new Set([
   "look_back",
   "use_control",
   "click_on_screen",
+  "scroll_screen",
+  "hover_on_screen",
+  "drag_on_screen",
   "press_keys",
   "type_text",
   "start_background_task",
@@ -171,7 +174,8 @@ export class Orchestrator {
     // Only advertise tools the user hasn't revoked (and, in the background, that don't need a watcher).
     const specs = toolSpecs().filter((t) => toolAllowed(t.name) && !(bg && BACKGROUND_FORBIDDEN.has(t.name)));
     // A planned task gets room to work; a simple request stays short.
-    const limit = () => (this.plan ? 20 : 8);
+    // Hands-on tasks (forms, browsing) take many small steps; a plan earns a bigger budget.
+    const limit = () => (this.plan ? 40 : 12);
 
     for (let step = 0; step < limit(); step++) {
       if (signal?.aborted) throw new DOMException("aborted", "AbortError");
@@ -328,6 +332,8 @@ function describeCall(call: ToolCall): string {
       return `BEV wants to ${String(call.args.action ?? "use")} a control in the app in front.`;
     case "click_on_screen":
       return typeof call.args.text === "string" ? `BEV wants to click "${call.args.text}" on screen.` : "BEV wants to click on the screen.";
+    case "drag_on_screen":
+      return "BEV wants to drag something on screen onto the Recycle Bin.";
     case "press_keys":
       return `BEV wants to press ${String(call.args.keys ?? "keys")}.`;
     case "type_text":

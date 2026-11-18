@@ -1,3 +1,4 @@
+import { endOfSpeechMs } from "./turns";
 import { SpeechRecognizer, SpeechSynthesizer } from "./types";
 
 /**
@@ -133,7 +134,8 @@ export class WebSpeechRecognizer implements SpeechRecognizer {
         interim = i2;
         opts.onPartial?.(join(finalText, interim));
         clearTimeout(quiet);
-        quiet = setTimeout(stop, this.endOfSpeechMs);
+        // Shorter pause after a finished-sounding sentence, longer after "and…".
+        quiet = setTimeout(stop, endOfSpeechMs(join(finalText, interim), this.endOfSpeechMs));
       };
       rec.onerror = (e) => {
         // Silence and our own stop/abort aren't failures.
