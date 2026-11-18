@@ -72,14 +72,13 @@ It appears in the rail (22px), the assistant bar (30px), the welcome screen (84p
 
 What makes BEV feel like an instrument rather than a website. All of it is flat linework and real readouts, never glow or gradients (`src/ui/components/Hud.tsx`, `src/ui/shell/SystemBar.tsx`).
 
-- **System bar**: a 24px strip along the bottom showing BEV's state (STANDBY, LISTENING, THINKING, FAULT…), CPU, memory, GPU when available, uptime, running background tasks, the active model and the time. It's live and measured.
-- **Readouts**: `HudLabel` (10px mono, upper case, tracked) above a mono value, used for live figures such as the welcome screen's time, voice and model, and the Activity stats.
+- **System bar**: a 24px strip along the bottom showing BEV's state (STANDBY, LISTENING, THINKING, FAULT…), CPU, memory, GPU when available, running background tasks and the time. It's live and measured, and kept short on purpose.
+- **Readouts**: `HudLabel` (10px mono, upper case, tracked) above a mono value, used for live figures such as the Activity stats.
 - **Section markers**: section titles are mono upper-case labels led by a short accent rule.
 - **Measurement scales**: meters are drawn as rulers with ticks every 10%, not filled bars.
-- **Frame brackets**: `HudFrame` corner brackets mark the primary instrument on a screen (the Core on the welcome screen, the stats on Activity). Use one per screen at most.
-- **Timestamps**: messages and tool activity carry a mono HH:MM:SS stamp, like a log.
-- **Grid**: a 32px measurement grid at about 3% opacity behind page content (an SVG pattern).
-- **Core detail**: at 56px and above the Core adds a degree scale and an inner segmented ring that turns only while BEV is actively working.
+- **Timestamps**: messages show their HH:MM:SS time on hover, so the thread stays clean.
+- **The emblem** (`Emblem.tsx`): the popup symbol. The hero Core (120px and up: concentric rings, a degree scale, a segmented ring that turns only while BEV works) seated in a solid plate inside a hairline collar with cardinal marks. The overlay popup and the welcome screen, the first screen BEV opens on, both render this one component, so they always match. Only the overlay copy gets a drop shadow, because it floats over wallpapers and games.
+- No background grid and no frame brackets: the emblem is the one instrument on the welcome screen, and everything around it stays quiet.
 
 ## Components (`src/ui/components/Form.tsx`)
 

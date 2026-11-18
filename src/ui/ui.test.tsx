@@ -8,6 +8,7 @@ import { Markdown } from "./assistant/Markdown";
 import { toolLabel, summary } from "./assistant/tools";
 import { hexToRgb } from "@/lib/appearance";
 import { Core } from "./components/Core";
+import { Emblem } from "./components/Emblem";
 import type { ChatMessage } from "@/state/assistant";
 
 const msg = (role: ChatMessage["role"], content: string, i: number): ChatMessage => ({ id: String(i), role, content, at: i });
@@ -69,5 +70,14 @@ describe("Core", () => {
     const lit = (h: string) => (h.match(/stroke="rgb\(var\(--accent\)\)"/g) ?? []).length;
     expect(lit(loud)).toBeGreaterThan(lit(quiet));
     expect(renderToStaticMarkup(<Core state="off" />)).toContain("not listening");
+  });
+});
+
+describe("Emblem", () => {
+  it("wraps the hero Core so the popup and welcome screen share one symbol", () => {
+    const html = renderToStaticMarkup(<Emblem state="thinking" size={240} />);
+    expect(html).toContain('aria-label="BEV is thinking"');
+    expect(html).toContain("animate-orbit");
+    expect(renderToStaticMarkup(<Emblem state="idle" floating />)).toContain("box-shadow:0 10px 30px");
   });
 });
