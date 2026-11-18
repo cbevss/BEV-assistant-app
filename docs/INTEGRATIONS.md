@@ -30,6 +30,8 @@ Spotify needs you to register a free developer app (it takes two minutes):
 
 Playback control (play, pause, skip, volume) needs Spotify Premium; "what's playing" works on any account. Spotify must be open on some device.
 
+If sign-in says port 43117 is in use by another program, close that program (or restart BEV) and press **Sign in** again. Pressing **Restart sign-in** while BEV is waiting cancels the earlier attempt, so you never need to wait for it to time out.
+
 ## Gmail and Google Calendar
 
 Google needs a free Cloud project with an OAuth client:
