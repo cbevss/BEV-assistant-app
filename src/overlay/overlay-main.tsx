@@ -2,6 +2,7 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import { Overlay } from "./Overlay";
 import { useSettings, followSettingsBroadcasts } from "@/state/settings";
+import "@fontsource/ibm-plex-sans/latin-300.css";
 import "@fontsource/ibm-plex-sans/latin-400.css";
 import "@fontsource/ibm-plex-sans/latin-500.css";
 import "@/styles.css";

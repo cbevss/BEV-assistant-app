@@ -155,7 +155,7 @@ export function App() {
       <Rail />
       <main className="flex min-w-0 flex-1 flex-col overflow-hidden">
         <TitleBar onSearch={() => setPalette(true)} />
-        <div className="hud-grid min-h-0 flex-1">
+        <div className="min-h-0 flex-1">
           <Routes>
             <Route path="/" element={<Navigate to="/assistant" replace />} />
             <Route path="/assistant" element={<Assistant />} />

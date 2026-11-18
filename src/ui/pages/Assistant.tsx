@@ -6,17 +6,17 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import clsx from "clsx";
 import { prettyAccelerator } from "@/lib/hotkeys";
-import { ArrowUp, Check, ChevronRight, Mic, MicOff, Plus, Square, X } from "lucide-react";
-import { useAssistant, type ChatMessage } from "@/state/assistant";
+import { ArrowRight, ArrowUp, Check, Mic, MicOff, Plus, Square, X } from "lucide-react";
+import { useAssistant, type AssistantState, type ChatMessage } from "@/state/assistant";
 import { useSettings, type ProviderId } from "@/state/settings";
 import { providerLabels } from "@/ai/factory";
 import { progress as planProgress } from "@/ai/plan";
 import { getController } from "@/voice/bootstrap";
 import { stateMeta } from "../design";
 import { Core } from "../components/Core";
-import { HudFrame, HudLabel, Readout } from "../components/Hud";
+import { Emblem } from "../components/Emblem";
 import { PlanView } from "../components/PlanView";
-import { IconButton, Kbd, Select } from "../components/Form";
+import { IconButton, Select } from "../components/Form";
 import { Markdown } from "../assistant/Markdown";
 import { toolIcon, toolLabel, summary } from "../assistant/tools";
 import { sendChat, stopChat, newConversation } from "../assistant/chat";
@@ -76,7 +76,7 @@ export function Assistant() {
   const stick = useRef(true);
   useEffect(() => {
     const el = scroller.current;
-    if (el && stick.current) el.scrollTop = el.scrollHeight;
+    if (el && stick.current && messages.length) el.scrollTop = el.scrollHeight;
   }, [messages.length, plan, state]);
 
   const groups = useMemo(() => groupMessages(messages), [messages]);
@@ -92,9 +92,9 @@ export function Assistant() {
           stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
         }}
       >
-        <div className="mx-auto w-full max-w-[760px] px-6 pb-6 pt-6">
-          {messages.length === 0 && !busy ? (
-            <Welcome onPick={setDraft} level={audioLevel} listening={micEnabled && !privacyMode} />
+        <div className={clsx("mx-auto w-full max-w-[760px] px-6 pb-6 pt-6", messages.length === 0 && "flex min-h-full flex-col")}>
+          {messages.length === 0 ? (
+            <Welcome onPick={setDraft} level={audioLevel} listening={micEnabled && !privacyMode} state={state} status={statusText} />
           ) : (
             <ol className="space-y-5" aria-live="polite" aria-label="Conversation">
               {groups.map((g) =>
@@ -149,7 +149,6 @@ function AssistantBar() {
     <div className="flex h-14 shrink-0 items-center gap-3 border-b border-line-subtle px-5">
       <Core state={coreState} level={audioLevel} progress={p && p.total ? p.done / p.total : null} size={30} />
       <div className="min-w-0 flex-1">
-        <HudLabel className={clsx(state === "error" ? "text-danger" : state !== "idle" && !off && "text-accent")}>{privacyMode ? "Privacy" : state === "idle" ? (off ? "Offline" : "Standby") : state === "error" ? "Fault" : stateMeta[state].label}</HudLabel>
         <div className="truncate text-sm text-ink" aria-live="polite">
           {line}
         </div>
@@ -171,44 +170,28 @@ function AssistantBar() {
   );
 }
 
-function Welcome({ onPick, level, listening }: { onPick: (s: string) => void; level: number; listening: boolean }) {
-  const { settings } = useSettings();
-  const [now, setNow] = useState(new Date());
-  useEffect(() => {
-    const id = setInterval(() => setNow(new Date()), 1000);
-    return () => clearInterval(id);
-  }, []);
-  const model = settings.provider === "openai" ? settings.openaiModel : settings.provider === "ollama" ? settings.ollamaModel : settings.anthropicModel;
+function Welcome({ onPick, level, listening, state, status }: { onPick: (s: string) => void; level: number; listening: boolean; state: AssistantState; status?: string }) {
+  const idle = state === "idle";
   return (
-    <div className="flex min-h-[62vh] flex-col items-center justify-center py-8">
-      <div className="grid w-full max-w-[640px] grid-cols-[1fr_auto_1fr] items-center gap-8 max-[860px]:grid-cols-1 max-[860px]:justify-items-center">
-        <div className="space-y-3 text-right max-[860px]:hidden">
-          <Readout label="Local time" value={now.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", second: "2-digit" })} />
-          <Readout label="Date" value={now.toLocaleDateString("en-GB", { weekday: "short", day: "2-digit", month: "short" })} />
-        </div>
-        <HudFrame className="p-5" size={10}>
-          <Core state={listening ? "idle" : "off"} level={level} size={132} />
-        </HudFrame>
-        <div className="space-y-3 max-[860px]:hidden">
-          <Readout label="Voice" value={listening ? "Wake word armed" : "Mic off"} tone={listening ? "ok" : undefined} />
-          <Readout label="Model" value={model} />
-        </div>
-      </div>
-      <h1 className="mt-8 text-2xl font-semibold text-ink">{greeting()}</h1>
-      <p className="mt-1 text-sm text-ink-3">{listening ? "Say “Hey BEV”, or type below." : "Type below, or turn the microphone on to talk."}</p>
-      <div className="mt-8 w-full max-w-[540px]">
-        <HudLabel className="mb-2 block px-1">Try</HudLabel>
-        <ul className="divide-y divide-line-subtle overflow-hidden rounded-lg border border-line-subtle text-left">
-          {SUGGESTIONS.map((s) => (
-            <li key={s}>
-              <button className="group flex w-full items-center justify-between gap-3 bg-surface-1 px-4 py-2.5 text-sm text-ink-2 transition-colors duration-fast hover:bg-surface-2 hover:text-ink" onClick={() => onPick(s)}>
-                <span className="truncate">{s}</span>
-                <ChevronRight className="h-3.5 w-3.5 shrink-0 text-ink-4 group-hover:text-accent" aria-hidden />
-              </button>
-            </li>
-          ))}
-        </ul>
-      </div>
+    <div className="flex flex-1 flex-col items-center justify-center py-4">
+      <Emblem state={idle ? (listening ? "idle" : "off") : state} level={level} size={228} />
+      <h1 className="mt-6 text-[30px] font-light leading-9 tracking-[-0.01em] text-ink">{idle ? greeting() : stateMeta[state].label}</h1>
+      <p className={clsx("mt-2 max-w-[520px] text-center", idle || !status?.trim() ? "font-mono text-[11px] uppercase tracking-[0.18em] text-ink-3" : state === "error" ? "text-sm text-danger" : "text-sm text-ink-2")}>
+        {idle ? (listening ? "Say “Hey BEV” or type below" : "Microphone off · type below") : status?.trim() || ""}
+      </p>
+      <ul className={clsx("mt-8 w-full max-w-[480px]", !idle && "invisible")}>
+        {SUGGESTIONS.slice(0, 3).map((s) => (
+          <li key={s}>
+            <button
+              className="group flex w-full items-center justify-between gap-3 border-b border-line-subtle py-2.5 text-left text-sm text-ink-3 transition-colors duration-fast hover:text-ink"
+              onClick={() => onPick(s)}
+            >
+              <span className="truncate">{s}</span>
+              <ArrowRight className="h-3.5 w-3.5 shrink-0 text-ink-4 transition-colors duration-fast group-hover:text-accent" aria-hidden />
+            </button>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }
@@ -216,22 +199,22 @@ function Welcome({ onPick, level, listening }: { onPick: (s: string) => void; le
 function Message({ m }: { m: ChatMessage }) {
   if (m.role === "user") {
     return (
-      <div className="flex flex-col items-end">
+      <div className="group relative flex justify-end">
         <div className="max-w-[78%] whitespace-pre-wrap rounded-xl rounded-br-sm bg-surface-2 px-3.5 py-2 text-base text-ink">{m.content}</div>
-        <span className="tnum mt-1 font-mono text-[10px] tracking-[0.08em] text-ink-4">{clock(m.at)}</span>
+        <span className="tnum absolute right-0 top-full mt-1 font-mono text-[10px] tracking-[0.08em] text-ink-4 opacity-0 transition-opacity duration-fast group-hover:opacity-100">{clock(m.at)}</span>
       </div>
     );
   }
   const failed = m.ok === false;
   return (
-    <div className="flex gap-3">
+    <div className="group flex gap-3">
       <div className="mt-0.5 w-6 shrink-0">
-        <Core state={failed ? "error" : "idle"} size={22} title="BEV" />
+        <Core state={failed ? "error" : "idle"} size={20} title="BEV" />
       </div>
       <div className="min-w-0 flex-1">
-        <div className="mb-1 flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.14em]">
+        <div className="mb-1 flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.16em]">
           <span className={failed ? "text-danger" : "text-accent"}>BEV</span>
-          <span className="tnum text-ink-4">{clock(m.at)}</span>
+          <span className="tnum text-ink-4 opacity-0 transition-opacity duration-fast group-hover:opacity-100">{clock(m.at)}</span>
         </div>
         <div className={clsx("text-base leading-[24px]", failed ? "text-danger" : "text-ink")}>
           <Markdown text={m.content} />
@@ -278,14 +261,13 @@ function ToolRow({ t }: { t: ChatMessage }) {
         onClick={() => setOpen((o) => !o)}
         aria-expanded={open}
       >
-        <span className="tnum w-[52px] shrink-0 font-mono text-[10px] tracking-[0.06em] text-ink-4">{clock(t.at)}</span>
         <Icon className={clsx("h-3.5 w-3.5 shrink-0", failed ? "text-danger" : "text-ink-3")} strokeWidth={1.8} aria-hidden />
         <span className={clsx("shrink-0", failed ? "text-danger" : "text-ink-2")}>{toolLabel(t.toolName ?? "")}</span>
         {line && <span className="min-w-0 truncate text-ink-4">{line}</span>}
         <span className="ml-auto shrink-0">{failed ? <X className="h-3 w-3 text-danger" aria-label="failed" /> : <Check className="h-3 w-3 text-ink-4 group-hover:text-ok" aria-label="done" />}</span>
       </button>
       {open && (
-        <pre className="mb-1 ml-[82px] mt-0.5 max-h-60 overflow-auto whitespace-pre-wrap rounded bg-surface-1 px-3 py-2 font-mono text-2xs leading-4 text-ink-3 animate-fade-in">
+        <pre className="mb-1 ml-6 mt-0.5 max-h-60 overflow-auto whitespace-pre-wrap rounded bg-surface-1 px-3 py-2 font-mono text-2xs leading-4 text-ink-3 animate-fade-in">
           {t.content}
         </pre>
       )}
@@ -336,7 +318,7 @@ function Composer({ draft, setDraft, busy }: { draft: string; setDraft: (s: stri
   return (
     <div className="shrink-0 px-6 pb-4 pt-2">
       <div className="mx-auto w-full max-w-[760px]">
-        <div className="rounded-xl border border-line bg-surface-1 transition-colors duration-fast focus-within:border-line-strong">
+        <div className="rounded-2xl border border-line bg-surface-1 transition-colors duration-fast focus-within:border-accent/50">
           <textarea
             ref={ref}
             rows={1}
@@ -349,7 +331,7 @@ function Composer({ draft, setDraft, busy }: { draft: string; setDraft: (s: stri
               }
               if (e.key === "Escape" && busy) stopChat();
             }}
-            placeholder="Ask BEV, or give it a task"
+            placeholder="Ask BEV anything"
             aria-label="Message BEV"
             className="block max-h-[180px] w-full resize-none bg-transparent px-4 pb-1 pt-3 text-base text-ink placeholder:text-ink-4 focus:outline-none"
           />
@@ -367,9 +349,6 @@ function Composer({ draft, setDraft, busy }: { draft: string; setDraft: (s: stri
               }}
             />
             <div className="ml-auto flex items-center gap-2">
-              <span className="hidden text-2xs text-ink-4 md:inline">
-                <Kbd>Enter</Kbd> send <span className="mx-1">·</span> <Kbd>Shift</Kbd>+<Kbd>Enter</Kbd> new line
-              </span>
               {busy ? (
                 <button onClick={stopChat} className="grid h-8 w-8 place-items-center rounded-lg bg-surface-3 text-ink transition-colors hover:bg-danger/20 hover:text-danger" aria-label="Stop" title="Stop (Esc)">
                   <Square className="h-3.5 w-3.5 fill-current" aria-hidden />

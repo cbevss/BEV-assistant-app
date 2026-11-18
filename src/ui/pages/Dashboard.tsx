@@ -5,7 +5,7 @@ import { BackgroundTasks } from "../components/BackgroundTasks";
 import { Noticed } from "../components/Noticed";
 import { RecentTasks } from "../components/RecentTasks";
 import { PageHeader, Notice } from "../components/Form";
-import { HudFrame, HudLabel, Scale } from "../components/Hud";
+import { HudLabel, Scale } from "../components/Hud";
 
 export function Dashboard() {
   const [stats, setStats] = useState<SystemStats | null>(null);
@@ -44,14 +44,12 @@ export function Dashboard() {
         </div>
       )}
 
-      <HudFrame className="mb-8" size={10}>
-      <div className="grid grid-cols-4 divide-x divide-line-subtle border border-line-subtle bg-surface-1 max-[900px]:grid-cols-2 max-[900px]:divide-x-0">
+      <div className="mb-8 grid grid-cols-4 divide-x divide-line-subtle rounded-lg border border-line-subtle bg-surface-1 max-[900px]:grid-cols-2 max-[900px]:divide-x-0">
         <Stat label="CPU" value={stats ? `${stats.cpu_usage.toFixed(0)}%` : "—"} detail={stats ? `${stats.cpu_cores} cores` : ""} pct={stats?.cpu_usage} />
         <Stat label="Memory" value={stats ? `${memGb.toFixed(1)} GB` : "—"} detail={stats ? `of ${(stats.mem_total_mb / 1024).toFixed(0)} GB` : ""} pct={stats?.mem_percent} />
         <Stat label="Graphics" value={stats?.gpu_usage != null ? `${stats.gpu_usage.toFixed(0)}%` : "—"} detail={stats?.gpu_usage == null ? "No sensor available" : stats.gpu_name ?? ""} pct={stats?.gpu_usage ?? undefined} />
         <Stat label="Uptime" value={stats ? fmtUptime(stats.uptime_secs) : "—"} detail="Since last restart" />
       </div>
-      </HudFrame>
 
       <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-x-8 max-[1000px]:grid-cols-1">
         <div>

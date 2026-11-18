@@ -32,8 +32,7 @@ export function Core({ state, level = 0, progress = null, size = 32, className, 
   const tone = state === "error" ? "rgb(var(--danger))" : state === "completed" ? "rgb(var(--ok))" : "rgb(var(--accent))";
   const dim = "rgb(var(--ink-4))";
   const detail = size >= 28;
-  // Large Cores get the full instrument: a degree scale and an inner
-  // segmented ring that turns only while BEV is actively doing something.
+  // Mid-size Cores (56px+) leave room for the scale; large ones become the reactor.
   const hud = size >= 56;
   const active = state !== "idle" && state !== "off" && state !== "completed";
 
@@ -62,17 +61,47 @@ export function Core({ state, level = 0, progress = null, size = 32, className, 
   const centreR = state === "speaking" ? 5 + lv * 6 : state === "off" ? 3 : 4.5;
   const centreFill = state === "idle" || state === "off" ? "rgb(var(--ink-3))" : tone;
 
+  // Hero size (welcome screen, overlay): the reactor. The live bezel shrinks
+  // to the middle and is surrounded by concentric instrument rings.
+  const hero = size >= 120;
+  const k = hero ? 0.6 : 1;
+  const ringTone = state === "off" ? dim : tone;
+  const ringOp = state === "off" ? 0.35 : active ? 0.75 : 0.32;
+
   return (
     <svg
       width={size}
       height={size}
-      viewBox={hud ? "-5 -5 110 110" : "0 0 100 100"}
+      viewBox={hud && !hero ? "-5 -5 110 110" : "0 0 100 100"}
       className={clsx("shrink-0 overflow-visible", className)}
       role="img"
       aria-label={title ?? `BEV is ${state === "off" ? "not listening" : state}`}
     >
-      {/* bezel */}
-      <g>
+      {hero && (
+        <g aria-hidden fill="none">
+          {/* outer frame: two long arcs with gaps at the poles */}
+          <path d={arc(49, 8, 172)} stroke={ringTone} strokeOpacity={ringOp * 0.5} strokeWidth="0.5" />
+          <path d={arc(49, 188, 352)} stroke={ringTone} strokeOpacity={ringOp * 0.5} strokeWidth="0.5" />
+          {/* degree scale */}
+          {Array.from({ length: 90 }, (_, i) => {
+            const a = (i / 90) * Math.PI * 2 - Math.PI / 2;
+            const r1 = i % 15 === 0 ? 42 : i % 5 === 0 ? 43.2 : 44;
+            return <line key={i} x1={50 + Math.cos(a) * r1} y1={50 + Math.sin(a) * r1} x2={50 + Math.cos(a) * 45.5} y2={50 + Math.sin(a) * 45.5} stroke={ringTone} strokeOpacity={i % 15 === 0 ? ringOp : ringOp * 0.55} strokeWidth={i % 15 === 0 ? 0.7 : 0.4} />;
+          })}
+          <circle cx="50" cy="50" r="39.5" stroke={ringTone} strokeOpacity={ringOp * 0.6} strokeWidth="0.4" />
+          {/* segmented ring: turns only while BEV is working */}
+          <g className={active ? "animate-orbit" : undefined} style={{ transformBox: "view-box", transformOrigin: "50px 50px", animationDuration: state === "thinking" || state === "activating" ? "2.6s" : "8s" }}>
+            <path d={arc(35, 0, 74)} stroke={ringTone} strokeOpacity={ringOp} strokeWidth="1.4" strokeLinecap="round" />
+            <path d={arc(35, 104, 148)} stroke={ringTone} strokeOpacity={ringOp} strokeWidth="1.4" strokeLinecap="round" />
+            <path d={arc(35, 178, 300)} stroke={ringTone} strokeOpacity={ringOp} strokeWidth="1.4" strokeLinecap="round" />
+          </g>
+          <g className={active ? "animate-orbit" : undefined} style={{ transformBox: "view-box", transformOrigin: "50px 50px", animationDuration: "14s", animationDirection: "reverse" }}>
+            <circle cx="50" cy="50" r="31.5" stroke={ringTone} strokeOpacity={ringOp * 0.7} strokeWidth="0.5" strokeDasharray="1 3" />
+          </g>
+        </g>
+      )}
+      <g transform={hero ? `translate(50 50) scale(${k}) translate(-50 -50)` : undefined}>
+        {/* bezel */}
         {Array.from({ length: TICKS }, (_, i) => {
           const a = (i / TICKS) * Math.PI * 2 - Math.PI / 2;
           const major = i % 6 === 0;
@@ -94,29 +123,26 @@ export function Core({ state, level = 0, progress = null, size = 32, className, 
             />
           );
         })}
-      </g>
-      {/* orbiting arc for thinking / working without a plan */}
-      {orbiting && (
-        <g className="origin-center animate-orbit" style={{ transformBox: "view-box", transformOrigin: "50px 50px" }}>
-          <path d="M 50 3 A 47 47 0 0 1 82.2 15.8" fill="none" stroke={tone} strokeWidth={detail ? 3.6 : 5} strokeLinecap="round" />
-        </g>
-      )}
-      {hud && (
-        <g aria-hidden>
-          {Array.from({ length: 72 }, (_, i) => {
-            const a = (i / 72) * Math.PI * 2 - Math.PI / 2;
-            const r1 = i % 6 === 0 ? 51 : 52;
-            return <line key={i} x1={50 + Math.cos(a) * r1} y1={50 + Math.sin(a) * r1} x2={50 + Math.cos(a) * 53.5} y2={50 + Math.sin(a) * 53.5} stroke={dim} strokeOpacity={0.55} strokeWidth={0.6} />;
-          })}
-          <g className={active ? "animate-orbit" : undefined} style={{ transformBox: "view-box", transformOrigin: "50px 50px", animationDuration: state === "thinking" || state === "activating" ? "3s" : "9s", animationDirection: "reverse" }}>
-            <circle cx="50" cy="50" r="33" fill="none" stroke={active ? tone : dim} strokeOpacity={active ? 0.55 : 0.4} strokeWidth="1" strokeDasharray="14 6 2 6" />
+        {/* orbiting arc for thinking / working without a plan */}
+        {orbiting && (
+          <g className="animate-orbit" style={{ transformBox: "view-box", transformOrigin: "50px 50px" }}>
+            <path d="M 50 3 A 47 47 0 0 1 82.2 15.8" fill="none" stroke={tone} strokeWidth={detail ? 3.6 : 5} strokeLinecap="round" />
           </g>
-        </g>
-      )}
-      {/* inner ring */}
-      {detail && <circle cx="50" cy="50" r="27" fill="none" stroke={state === "idle" || state === "off" ? dim : tone} strokeOpacity={state === "idle" || state === "off" ? 0.5 : 0.35} strokeWidth="1.6" />}
-      {/* centre */}
-      <circle cx="50" cy="50" r={centreR} fill={centreFill} style={{ transition: "r 80ms linear, fill 160ms" }} />
+        )}
+        {/* inner ring */}
+        {detail && <circle cx="50" cy="50" r="27" fill="none" stroke={state === "idle" || state === "off" ? (hero && state === "idle" ? tone : dim) : tone} strokeOpacity={state === "idle" || state === "off" ? 0.5 : 0.35} strokeWidth="1.6" />}
+        {/* centre */}
+        <circle cx="50" cy="50" r={centreR} fill={hero && state === "idle" ? tone : centreFill} style={{ transition: "r 80ms linear, fill 160ms" }} />
+      </g>
     </svg>
   );
+}
+
+/** SVG arc path on the Core's 100×100 grid, angles in degrees clockwise from 12 o'clock. */
+function arc(r: number, a0: number, a1: number): string {
+  const p = (d: number) => {
+    const t = ((d - 90) * Math.PI) / 180;
+    return `${(50 + Math.cos(t) * r).toFixed(2)} ${(50 + Math.sin(t) * r).toFixed(2)}`;
+  };
+  return `M ${p(a0)} A ${r} ${r} 0 ${a1 - a0 > 180 ? 1 : 0} 1 ${p(a1)}`;
 }
