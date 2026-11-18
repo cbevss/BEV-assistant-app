@@ -74,28 +74,28 @@ export function RoutineEditor({
   };
 
   return (
-    <div className="fixed inset-0 z-50 grid place-items-center bg-black/60 p-6 backdrop-blur-sm" role="dialog" aria-modal="true">
+    <div className="fixed inset-0 z-50 grid place-items-center bg-black/60 p-6" role="dialog" aria-modal="true">
       <motion.div
         initial={{ scale: 0.95, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
-        className="glass max-h-[85vh] w-[560px] overflow-y-auto rounded-2xl p-6"
+        className="glass max-h-[85vh] w-[560px] overflow-y-auto rounded-xl p-6"
       >
-        <h2 className="mb-4 text-lg font-semibold text-glow">{routine ? "Edit routine" : "New routine"}</h2>
+        <h2 className="mb-4 text-lg font-semibold">{routine ? "Edit routine" : "New routine"}</h2>
 
-        <label className="mb-1 block text-xs text-slate-400">Name</label>
+        <label className="mb-1 block text-xs text-ink-2">Name</label>
         <TextInput value={name} onChange={(e) => setName(e.target.value)} placeholder="Gaming Mode" />
 
-        <label className="mb-1 mt-4 block text-xs text-slate-400">
+        <label className="mb-1 mt-4 block text-xs text-ink-2">
           Voice triggers (comma-separated)
         </label>
         <TextInput value={triggers} onChange={(e) => setTriggers(e.target.value)} placeholder="gaming mode, game time" />
 
-        <label className="mb-2 mt-4 block text-xs text-slate-400">Steps</label>
+        <label className="mb-2 mt-4 block text-xs text-ink-2">Steps</label>
         <div className="space-y-2">
           {steps.map((s, i) => (
-            <div key={s.id} className="rounded-lg border border-white/10 bg-white/5 p-3">
+            <div key={s.id} className="rounded-lg border border-line bg-surface-2 p-3">
               <div className="flex items-center gap-2">
-                <span className="w-5 text-center text-xs text-slate-500">{i + 1}</span>
+                <span className="w-5 text-center text-xs text-ink-3">{i + 1}</span>
                 <div className="flex-1">
                   <Select
                     ariaLabel={`Step ${i + 1} action`}
@@ -104,13 +104,13 @@ export function RoutineEditor({
                     options={TOOL_OPTIONS}
                   />
                 </div>
-                <button className="px-1 text-slate-400 hover:text-white disabled:opacity-30" onClick={() => move(i, -1)} disabled={i === 0} aria-label="Move up">
+                <button className="px-1 text-ink-2 hover:text-white disabled:opacity-30" onClick={() => move(i, -1)} disabled={i === 0} aria-label="Move up">
                   ↑
                 </button>
-                <button className="px-1 text-slate-400 hover:text-white disabled:opacity-30" onClick={() => move(i, 1)} disabled={i === steps.length - 1} aria-label="Move down">
+                <button className="px-1 text-ink-2 hover:text-white disabled:opacity-30" onClick={() => move(i, 1)} disabled={i === steps.length - 1} aria-label="Move down">
                   ↓
                 </button>
-                <button className="px-1 text-bev-danger hover:opacity-80" onClick={() => setSteps((st) => st.filter((_, idx) => idx !== i))} aria-label="Remove step">
+                <button className="px-1 text-danger hover:opacity-80" onClick={() => setSteps((st) => st.filter((_, idx) => idx !== i))} aria-label="Remove step">
                   ✕
                 </button>
               </div>
@@ -124,23 +124,23 @@ export function RoutineEditor({
           + Add step
         </Button>
 
-        <label className="mb-1 mt-5 block text-xs text-slate-400">
+        <label className="mb-1 mt-5 block text-xs text-ink-2">
           Schedule (optional)
         </label>
         <div className="flex items-center gap-3">
           <input
             type="time"
-            className="no-drag rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-slate-100"
+            className="no-drag rounded-lg border border-line bg-surface-2 px-3 py-2 text-sm text-ink"
             value={scheduleTime}
             onChange={(e) => setScheduleTime(e.target.value)}
           />
-          <span className="text-xs text-slate-500">
+          <span className="text-xs text-ink-3">
             {scheduleTime ? "fires at this time" : "no schedule"}
           </span>
         </div>
         {scheduleTime && (
           <div className="mt-2">
-            <div className="mb-1 text-xs text-slate-500">
+            <div className="mb-1 text-xs text-ink-3">
               On these days {days.length === 0 && "(every day)"}
             </div>
             <div className="flex gap-1">
@@ -152,7 +152,7 @@ export function RoutineEditor({
                     type="button"
                     onClick={() => setDays((ds) => (on ? ds.filter((x) => x !== i) : [...ds, i].sort()))}
                     className={`no-drag h-8 w-9 rounded text-xs transition ${
-                      on ? "bg-bev-cyan/25 text-bev-cyan shadow-glow" : "bg-white/5 text-slate-400 hover:bg-white/10"
+                      on ? "bg-accent/25 text-accent" : "bg-surface-2 text-ink-2 hover:bg-surface-3"
                     }`}
                   >
                     {d}
@@ -209,14 +209,14 @@ function ArgEditor({ step, onArgs, onDelay }: { step: RoutineStep; onArgs: (p: R
       type="number"
       min={0}
       step={0.5}
-      className="no-drag ml-2 w-20 rounded border border-white/10 bg-white/5 px-2 py-1 text-xs"
+      className="no-drag ml-2 w-20 rounded border border-line bg-surface-2 px-2 py-1 text-xs"
       value={(step.delayMs ?? 0) / 1000}
       onChange={(e) => onDelay(Math.max(0, Number(e.target.value)) * 1000)}
       aria-label="Delay before step (seconds)"
     />
   );
   const delay = (
-    <div className="mt-2 flex items-center text-xs text-slate-500">
+    <div className="mt-2 flex items-center text-xs text-ink-3">
       wait before{common}s
     </div>
   );
@@ -265,7 +265,7 @@ function ArgEditor({ step, onArgs, onDelay }: { step: RoutineStep; onArgs: (p: R
             </Button>
           </div>
           {opensProgram(String(a.path ?? "")) && (
-            <p className="mt-1 text-xs text-amber-400">This runs a program, so BEV will ask before opening it (unless auto-approve is on).</p>
+            <p className="mt-1 text-xs text-warn">This runs a program, so BEV will ask before opening it (unless auto-approve is on).</p>
           )}
           {delay}
         </>
@@ -282,14 +282,14 @@ function ArgEditor({ step, onArgs, onDelay }: { step: RoutineStep; onArgs: (p: R
       );
     case "set_muted":
       return (
-        <div className="flex items-center gap-2 text-sm text-slate-300">
+        <div className="flex items-center gap-2 text-sm text-ink-2">
           <Toggle label="Mute" checked={Boolean(a.muted)} onChange={(muted) => onArgs({ muted })} /> {a.muted ? "Mute" : "Unmute"}
           {delay}
         </div>
       );
     case "set_quiet_mode":
       return (
-        <div className="flex items-center gap-2 text-sm text-slate-300">
+        <div className="flex items-center gap-2 text-sm text-ink-2">
           <Toggle label="Quiet mode" checked={Boolean(a.enabled)} onChange={(enabled) => onArgs({ enabled })} /> {a.enabled ? "On" : "Off"}
           {delay}
         </div>

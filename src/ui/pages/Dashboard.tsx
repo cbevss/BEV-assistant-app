@@ -1,9 +1,10 @@
+/** Activity: the PC right now, what BEV noticed, and its tasks. */
 import { useEffect, useState } from "react";
 import { native, SystemStats, RunningApp } from "@/lib/native";
 import { BackgroundTasks } from "../components/BackgroundTasks";
-import { StatusHud } from "../components/StatusHud";
 import { Noticed } from "../components/Noticed";
 import { RecentTasks } from "../components/RecentTasks";
+import { PageHeader, Notice } from "../components/Form";
 
 export function Dashboard() {
   const [stats, setStats] = useState<SystemStats | null>(null);
@@ -32,91 +33,69 @@ export function Dashboard() {
     };
   }, []);
 
+  const memGb = stats ? stats.mem_used_mb / 1024 : 0;
   return (
-    <div className="space-y-6">
-      <header>
-        <h1 className="text-2xl font-semibold text-glow">Dashboard</h1>
-        {stats?.host && <p className="text-sm text-slate-400">{stats.host}</p>}
-      </header>
-
-      <StatusHud />
-      <Noticed />
-
+    <div>
+      <PageHeader title="Activity" subtitle={stats?.host ? `${stats.host}, live` : "Your PC and BEV's work, live."} />
       {err && (
-        <div className="glass rounded-xl border border-bev-danger/30 p-4 text-sm text-bev-danger">
-          Telemetry unavailable: {err}
+        <div className="mb-6">
+          <Notice tone="danger">System readings aren't available: {err}</Notice>
         </div>
       )}
 
-      <section className="grid grid-cols-2 gap-4 md:grid-cols-4">
-        <Metric label="CPU" value={stats ? `${stats.cpu_usage.toFixed(0)}%` : "—"} sub={stats ? `${stats.cpu_cores} cores` : ""} pct={stats?.cpu_usage} />
-        <Metric
-          label="RAM"
-          value={stats ? `${(stats.mem_used_mb / 1024).toFixed(1)} GB` : "—"}
-          sub={stats ? `of ${(stats.mem_total_mb / 1024).toFixed(0)} GB` : ""}
-          pct={stats?.mem_percent}
-        />
-        <Metric
-          label="GPU"
-          value={stats?.gpu_usage != null ? `${stats.gpu_usage.toFixed(0)}%` : "n/a"}
-          sub={stats?.gpu_usage == null ? "no sensor bridge" : stats.gpu_name ?? ""}
-        />
-        <Metric
-          label="Uptime"
-          value={stats ? fmtUptime(stats.uptime_secs) : "—"}
-          sub="since boot"
-        />
-      </section>
+      <div className="mb-8 grid grid-cols-4 divide-x divide-line-subtle rounded-lg border border-line-subtle bg-surface-1 max-[900px]:grid-cols-2 max-[900px]:divide-x-0">
+        <Stat label="CPU" value={stats ? `${stats.cpu_usage.toFixed(0)}%` : "—"} detail={stats ? `${stats.cpu_cores} cores` : ""} pct={stats?.cpu_usage} />
+        <Stat label="Memory" value={stats ? `${memGb.toFixed(1)} GB` : "—"} detail={stats ? `of ${(stats.mem_total_mb / 1024).toFixed(0)} GB` : ""} pct={stats?.mem_percent} />
+        <Stat label="Graphics" value={stats?.gpu_usage != null ? `${stats.gpu_usage.toFixed(0)}%` : "—"} detail={stats?.gpu_usage == null ? "No sensor available" : stats.gpu_name ?? ""} pct={stats?.gpu_usage ?? undefined} />
+        <Stat label="Uptime" value={stats ? fmtUptime(stats.uptime_secs) : "—"} detail="Since last restart" />
+      </div>
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <Panel title="Top processes">
-          <ul className="space-y-2 text-sm">
-            {apps.map((a) => (
-              <li key={a.pid} className="flex items-center justify-between">
-                <span className="truncate text-slate-200">{a.name}</span>
-                <span className="font-mono text-xs text-slate-400">{a.mem_mb} MB</span>
-              </li>
-            ))}
-            {apps.length === 0 && <li className="text-slate-500">—</li>}
-          </ul>
-        </Panel>
-
-        <RecentTasks />
-        <BackgroundTasks />
+      <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-x-8 max-[1000px]:grid-cols-1">
+        <div>
+          <BackgroundTasks />
+          <RecentTasks />
+        </div>
+        <div>
+          <Noticed />
+          <section className="mb-8">
+            <div className="mb-2 px-1">
+              <h2 className="text-sm font-semibold text-ink">Using the most memory</h2>
+            </div>
+            <ul className="divide-y divide-line-subtle rounded-lg border border-line-subtle bg-surface-1">
+              {apps.map((a) => (
+                <li key={a.pid} className="flex items-center justify-between gap-4 px-4 py-2.5 text-sm">
+                  <span className="truncate text-ink">{a.name.replace(/\.exe$/i, "")}</span>
+                  <span className="tnum shrink-0 font-mono text-xs text-ink-3">{a.mem_mb >= 1024 ? `${(a.mem_mb / 1024).toFixed(1)} GB` : `${a.mem_mb} MB`}</span>
+                </li>
+              ))}
+              {apps.length === 0 && <li className="px-4 py-3 text-sm text-ink-3">No readings yet.</li>}
+            </ul>
+          </section>
+        </div>
       </div>
     </div>
   );
 }
 
-function Metric({ label, value, sub, pct }: { label: string; value: string; sub?: string; pct?: number }) {
+function Stat({ label, value, detail, pct }: { label: string; value: string; detail?: string; pct?: number }) {
+  const hot = pct != null && pct >= 90;
   return (
-    <div className="glass rounded-xl p-4">
-      <div className="text-sm text-slate-400">{label}</div>
-      <div className="mt-1 text-2xl font-semibold tabular-nums text-glow">{value}</div>
-      {sub && <div className="text-[11px] text-slate-500">{sub}</div>}
+    <div className="px-4 py-3.5">
+      <div className="text-xs text-ink-3">{label}</div>
+      <div className={`tnum mt-1 text-xl font-semibold ${hot ? "text-warn" : "text-ink"}`}>{value}</div>
+      <div className="mt-0.5 truncate text-2xs text-ink-4">{detail}</div>
       {pct != null && (
-        <div className="mt-2 h-1 w-full overflow-hidden rounded bg-white/5">
-          <div
-            className="h-full rounded bg-gradient-to-r from-bev-cyan to-bev-violet transition-all"
-            style={{ width: `${Math.min(100, pct)}%` }}
-          />
+        <div className="mt-2.5 h-[3px] w-full overflow-hidden rounded-full bg-surface-3" role="meter" aria-label={label} aria-valuenow={Math.round(pct)} aria-valuemin={0} aria-valuemax={100}>
+          <div className={`h-full rounded-full transition-[width] duration-base ${hot ? "bg-warn" : "bg-accent"}`} style={{ width: `${Math.min(100, pct)}%` }} />
         </div>
       )}
     </div>
   );
 }
 
-function Panel({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <div className="glass rounded-xl p-5">
-      <h2 className="mb-3 text-sm font-medium text-slate-300">{title}</h2>
-      {children}
-    </div>
-  );
-}
-
 function fmtUptime(s: number): string {
-  const h = Math.floor(s / 3600);
+  const d = Math.floor(s / 86400);
+  const h = Math.floor((s % 86400) / 3600);
   const m = Math.floor((s % 3600) / 60);
-  return h > 0 ? `${h}h ${m}m` : `${m}m`;
+  return d > 0 ? `${d}d ${h}h` : h > 0 ? `${h}h ${m}m` : `${m}m`;
 }

@@ -1,9 +1,9 @@
 {
   "name": "bev-assistant",
   "private": true,
-  "version": "1.1.17",
+  "version": "1.2.0",
   "type": "module",
-  "description": "BEV — futuristic always-available AI voice assistant for Windows 11",
+  "description": "BEV \u2014 futuristic always-available AI voice assistant for Windows 11",
   "author": "cbevss",
   "license": "MIT",
   "scripts": {
@@ -15,9 +15,12 @@
     "tauri:build": "tauri build",
     "lint": "eslint . --ext ts,tsx --max-warnings 0",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "ui:preview": "vite --open /ui-preview.html"
   },
   "dependencies": {
+    "@fontsource/ibm-plex-mono": "^5.3.0",
+    "@fontsource/ibm-plex-sans": "^5.3.0",
     "@tauri-apps/api": "^2.1.1",
     "@tauri-apps/plugin-autostart": "^2.0.0",
     "@tauri-apps/plugin-dialog": "^2.8.4",
@@ -31,6 +34,7 @@
     "clsx": "^2.1.1",
     "framer-motion": "^11.11.17",
     "kokoro-js": "^1.2.1",
+    "lucide-react": "^1.74.0",
     "onnxruntime-web": "^1.31.1",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",

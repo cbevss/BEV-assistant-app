@@ -66,9 +66,9 @@ export function NotesPanel() {
         </Button>
       }
     >
-      <p className="text-sm text-slate-400">Things BEV saved for later, each with where it came from. Ask “BEV, what did I save about…?”</p>
+      <p className="text-sm text-ink-2">Things BEV saved for later, each with where it came from. Ask “BEV, what did I save about…?”</p>
       {draft && (
-        <div className="space-y-2 rounded-lg border border-white/10 p-3">
+        <div className="space-y-2 rounded-lg border border-line p-3">
           <TextInput placeholder="Title" value={draft.title} onChange={(e) => setDraft({ ...draft, title: e.target.value })} />
           <TextArea rows={6} placeholder="Note" value={draft.body} onChange={(e) => setDraft({ ...draft, body: e.target.value })} />
           <div className="flex gap-2">
@@ -86,13 +86,13 @@ export function NotesPanel() {
         </div>
       )}
       <TextInput placeholder="Search notes by meaning or words…" value={q} onChange={(e) => setQ(e.target.value)} />
-      <ul className="divide-y divide-white/5">
+      <ul className="divide-y divide-line-subtle">
         {list.map((n) => (
           <li key={n.id} className="flex items-start gap-4 py-3">
             <button className="min-w-0 flex-1 text-left" onClick={() => native.noteGet(n.id).then(setOpen)}>
-              <div className="text-sm font-medium text-slate-100">{n.title}</div>
-              <p className="mt-0.5 line-clamp-2 text-sm text-slate-400">{n.text}</p>
-              <p className="mt-1 text-[11px] text-slate-600">
+              <div className="text-sm font-medium text-ink">{n.title}</div>
+              <p className="mt-0.5 line-clamp-2 text-sm text-ink-2">{n.text}</p>
+              <p className="mt-1 text-[11px] text-ink-4">
                 {n.source ? `${n.source} · ` : ""}
                 {date(n.at)}
               </p>
@@ -114,17 +114,17 @@ export function NotesPanel() {
             </Button>
           </li>
         ))}
-        {list.length === 0 && <li className="py-6 text-center text-sm text-slate-500">{hits ? "No matches." : 'No notes yet. Try: "BEV, save a note about…"'}</li>}
+        {list.length === 0 && <li className="py-6 text-center text-sm text-ink-3">{hits ? "No matches." : 'No notes yet. Try: "BEV, save a note about…"'}</li>}
       </ul>
       {open && (
-        <div className="space-y-2 rounded-lg border border-white/10 p-4">
+        <div className="space-y-2 rounded-lg border border-line p-4">
           <div className="flex items-start justify-between gap-3">
             <div>
               <div className="text-base font-medium text-white">{open.title}</div>
-              <div className="text-xs text-slate-500">
+              <div className="text-xs text-ink-3">
                 Source:{" "}
                 {isUrl(open.source) ? (
-                  <a className="text-bev-cyan underline" href={open.source} target="_blank" rel="noreferrer">
+                  <a className="text-accent underline" href={open.source} target="_blank" rel="noreferrer">
                     {open.source}
                   </a>
                 ) : (
@@ -143,7 +143,7 @@ export function NotesPanel() {
               </Button>
             </div>
           </div>
-          <p className="whitespace-pre-wrap text-sm text-slate-300">{open.body}</p>
+          <p className="whitespace-pre-wrap text-sm text-ink-2">{open.body}</p>
         </div>
       )}
       {dialog}
@@ -215,30 +215,30 @@ export function HistoryPanel() {
         />
       </Field>
       <TextInput placeholder="Search past conversations…" value={q} onChange={(e) => setQ(e.target.value)} />
-      <ul className="divide-y divide-white/5">
+      <ul className="divide-y divide-line-subtle">
         {hits
           ? hits.map((h) => (
               <li key={h.id} className="py-2">
                 <button className="w-full text-left" onClick={() => openSession(h.session)}>
-                  <span className="text-xs text-slate-500">{date(h.at)} · {h.role === "user" ? "You" : "BEV"}</span>
-                  <p className="text-sm text-slate-300">{h.snippet.replace(/\[|\]/g, "")}</p>
+                  <span className="text-xs text-ink-3">{date(h.at)} · {h.role === "user" ? "You" : "BEV"}</span>
+                  <p className="text-sm text-ink-2">{h.snippet.replace(/\[|\]/g, "")}</p>
                 </button>
               </li>
             ))
           : sessions.map((s) => (
               <li key={s.session} className="py-2">
                 <button className="w-full text-left" onClick={() => openSession(s.session)}>
-                  <span className="text-xs text-slate-500">
+                  <span className="text-xs text-ink-3">
                     {date(s.started)} · {s.count} messages
                   </span>
-                  <p className="line-clamp-1 text-sm text-slate-300">{s.first}</p>
+                  <p className="line-clamp-1 text-sm text-ink-2">{s.first}</p>
                 </button>
               </li>
             ))}
-        {(hits ?? sessions).length === 0 && <li className="py-6 text-center text-sm text-slate-500">{hits ? "No matches." : "No conversations saved yet."}</li>}
+        {(hits ?? sessions).length === 0 && <li className="py-6 text-center text-sm text-ink-3">{hits ? "No matches." : "No conversations saved yet."}</li>}
       </ul>
       {view && (
-        <div className="max-h-96 space-y-2 overflow-y-auto rounded-lg border border-white/10 p-3">
+        <div className="max-h-96 space-y-2 overflow-y-auto rounded-lg border border-line p-3">
           <div className="flex justify-end">
             <Button variant="ghost" onClick={() => setView(null)}>
               Close
@@ -246,8 +246,8 @@ export function HistoryPanel() {
           </div>
           {view.messages.map((m, i) => (
             <div key={i} className={m.role === "user" ? "text-right" : ""}>
-              <span className="text-[11px] text-slate-600">{date(m.at)}</span>
-              <p className={`inline-block max-w-[85%] rounded-lg px-3 py-1.5 text-sm ${m.role === "user" ? "bg-bev-cyan/10 text-slate-100" : "bg-white/5 text-slate-300"}`}>{m.text}</p>
+              <span className="text-[11px] text-ink-4">{date(m.at)}</span>
+              <p className={`inline-block max-w-[85%] rounded-lg px-3 py-1.5 text-sm ${m.role === "user" ? "bg-accent/10 text-ink" : "bg-surface-2 text-ink-2"}`}>{m.text}</p>
             </div>
           ))}
         </div>
@@ -282,7 +282,7 @@ export function SemanticSearchSettings() {
           }}
         />
       </Field>
-      {st.state === "error" && settings.semanticSearch && <p className="text-xs text-slate-500">Couldn't load the model ({st.message}). Keyword search still works.</p>}
+      {st.state === "error" && settings.semanticSearch && <p className="text-xs text-ink-3">Couldn't load the model ({st.message}). Keyword search still works.</p>}
     </Section>
   );
 }

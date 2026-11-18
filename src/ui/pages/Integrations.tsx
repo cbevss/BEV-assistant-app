@@ -8,15 +8,14 @@ import { PageHeader, Section, Field, TextInput, Select, Button, StatusPill, Togg
 
 type Check = { ok: boolean | null; msg: string };
 
-export function Integrations() {
+export function Integrations({ part = "ai" }: { part?: "ai" | "services" }) {
   const { settings, update } = useSettings();
 
   return (
     <div>
-      <PageHeader
-        title="Integrations"
-        subtitle="AI providers and external services. Keys are stored in Windows Credential Manager, never on disk in plain text."
-      />
+      {part === "ai" && (
+        <>
+      <PageHeader title="AI & models" subtitle="Which AI BEV thinks with. Keys are stored in Windows Credential Manager, never in a file." />
 
       <Section title="Active AI provider">
         <Field label="Provider" hint="Used by voice and chat. Ollama runs fully offline.">
@@ -64,9 +63,12 @@ export function Integrations() {
         host={settings.ollamaHost}
         onHost={(ollamaHost) => update({ ollamaHost })}
       />
+        </>
+      )}
+      {part === "services" && (
+        <>
+      <PageHeader title="Connected services" subtitle="Your phone, smart home, music, email, code and other tools BEV can use. Tokens are stored in Windows Credential Manager." />
       <BevCloudCard />
-
-      <h2 className="pt-4 text-lg font-medium text-slate-100">Connected services</h2>
       <WebSearchCard />
       <HomeAssistantCard />
       <SpotifyCard />
@@ -74,6 +76,8 @@ export function Integrations() {
       <GitHubCard />
       <DiscordCard />
       <McpCard />
+        </>
+      )}
     </div>
   );
 }
@@ -250,7 +254,7 @@ function BevCloudCard() {
       title="BEV Cloud (phone, Telegram, task tracking)"
       aside={<StatusPill ok={connected ? (check.ok ?? true) : null} label={connected ? "connected" : "not connected"} />}
     >
-      <p className="text-sm text-slate-400">
+      <p className="text-sm text-ink-2">
         Lets BEV keep track of things while this PC is off, message you on Telegram and ring you when something is
         urgent. Ask BEV to “keep an eye on…” and it lands there.
       </p>
@@ -269,7 +273,7 @@ function BevCloudCard() {
         <Button onClick={save}>{connected ? "Test" : "Connect"}</Button>
       </div>
       {check.msg && (
-        <p className={`text-sm ${check.ok === false ? "text-bev-danger" : check.ok ? "text-bev-ok" : "text-slate-400"}`}>{check.msg}</p>
+        <p className={`text-sm ${check.ok === false ? "text-danger" : check.ok ? "text-ok" : "text-ink-2"}`}>{check.msg}</p>
       )}
     </Section>
   );

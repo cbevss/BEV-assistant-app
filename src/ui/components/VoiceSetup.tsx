@@ -67,14 +67,14 @@ export function MicDiagnostics() {
     <div className="space-y-2">
       {ep && (
         <Field label="Windows sees" hint={`${ep.name}${ep.is_default ? " · Windows default" : ""}`}>
-          <div className="text-right text-sm tabular-nums text-slate-300">
+          <div className="text-right text-sm tnum text-ink-2">
             {ep.muted ? "Muted" : ep.volume !== null ? `Level ${Math.round(ep.volume * 100)}%` : ""}
           </div>
         </Field>
       )}
       {problems.map((p) => (
-        <div key={p.kind} className="flex items-center justify-between gap-3 rounded-lg border border-amber-400/20 bg-amber-400/5 px-3 py-2">
-          <p className="text-sm text-amber-200">{p.message}</p>
+        <div key={p.kind} className="flex items-center justify-between gap-3 rounded-lg border border-warn/30 bg-warn/5 px-3 py-2">
+          <p className="text-sm text-warn">{p.message}</p>
           {fixLabel[p.kind] && (
             <Button variant="ghost" onClick={() => fix(p)}>
               {fixLabel[p.kind]}
@@ -82,7 +82,7 @@ export function MicDiagnostics() {
           )}
         </div>
       ))}
-      {msg && <p className="text-xs text-slate-400">{msg}</p>}
+      {msg && <p className="text-xs text-ink-2">{msg}</p>}
     </div>
   );
 }
@@ -187,13 +187,13 @@ export function Calibration() {
   const pct = Math.max(0, Math.min(100, ((level + 70) / 70) * 100));
   return (
     <Section title="Microphone check" aside={latest && <StatusPill ok={latest.report.verdict === "good" ? true : latest.report.verdict === "poor" ? false : null} label={latest.report.verdict} />}>
-      <p className="text-sm text-slate-400">
+      <p className="text-sm text-ink-2">
         Measures your mic and room, then how well BEV recognises you. Takes about 10 seconds. Run it again after changing a setting to compare.
       </p>
 
       {busy && (
-        <div className="space-y-2 rounded-lg border border-white/10 p-3">
-          <div className="text-sm text-slate-200">
+        <div className="space-y-2 rounded-lg border border-line p-3">
+          <div className="text-sm text-ink">
             {phase.step === "quiet" && "Stay quiet for 3 seconds…"}
             {phase.step === "speak" && (
               <>
@@ -203,8 +203,8 @@ export function Calibration() {
             )}
             {phase.step === "thinking" && "Checking…"}
           </div>
-          <div className="h-1.5 overflow-hidden rounded bg-white/5" aria-label="Input level">
-            <div className="h-full bg-bev-cyan transition-[width] duration-75" style={{ width: `${pct}%` }} />
+          <div className="h-1.5 overflow-hidden rounded bg-surface-2" aria-label="Input level">
+            <div className="h-full bg-accent transition-[width] duration-75" style={{ width: `${pct}%` }} />
           </div>
         </div>
       )}
@@ -217,14 +217,14 @@ export function Calibration() {
             <Stat k="Voice above background" v={`${latest.report.snrDb.toFixed(0)} dB`} />
             <Stat k="Distortion" v={`${latest.report.clippingPct.toFixed(1)}%`} />
           </dl>
-          <div className="text-xs text-slate-500">
+          <div className="text-xs text-ink-3">
             {latest.sampleRate ? `${(latest.sampleRate / 1000).toFixed(1)} kHz` : ""} · processing: {latest.processing}
             {latest.level !== null ? ` · Windows level ${Math.round(latest.level * 100)}%` : ""}
           </div>
           {latest.report.issues.map((i) => (
-            <div key={i.kind} className="rounded-lg border border-amber-400/20 bg-amber-400/5 px-3 py-2 text-sm">
-              <div className="text-amber-200">{i.message}</div>
-              <div className="flex items-center justify-between gap-3 text-slate-400">
+            <div key={i.kind} className="rounded-lg border border-warn/30 bg-warn/5 px-3 py-2 text-sm">
+              <div className="text-warn">{i.message}</div>
+              <div className="flex items-center justify-between gap-3 text-ink-2">
                 <span>{i.fix}</span>
                 {(i.kind === "too_quiet" || i.kind === "clipping") && latest.report.suggestedLevel !== undefined && (
                   <Button variant="ghost" onClick={() => applyLevel(latest.report.suggestedLevel!)}>
@@ -234,18 +234,18 @@ export function Calibration() {
               </div>
             </div>
           ))}
-          {latest.report.issues.length === 0 && <p className="text-sm text-bev-ok">Your mic and room sound good for speech recognition.</p>}
+          {latest.report.issues.length === 0 && <p className="text-sm text-ok">Your mic and room sound good for speech recognition.</p>}
           <div className="text-sm">
-            <span className="text-slate-400">{latest.engine} heard: </span>
-            <span className="text-slate-200">{latest.heard ? `“${latest.heard}”` : "nothing"}</span>
-            {latest.accuracy !== null && <span className="ml-2 tabular-nums text-slate-400">({Math.round(latest.accuracy * 100)}% of words right)</span>}
+            <span className="text-ink-2">{latest.engine} heard: </span>
+            <span className="text-ink">{latest.heard ? `“${latest.heard}”` : "nothing"}</span>
+            {latest.accuracy !== null && <span className="ml-2 tnum text-ink-2">({Math.round(latest.accuracy * 100)}% of words right)</span>}
           </div>
         </div>
       )}
 
       {results.length > 1 && (
         <table className="w-full text-left text-xs">
-          <thead className="text-slate-500">
+          <thead className="text-ink-3">
             <tr>
               <th className="py-1 font-normal">Engine</th>
               <th className="font-normal">Noise suppression</th>
@@ -253,9 +253,9 @@ export function Calibration() {
               <th className="font-normal">Words right</th>
             </tr>
           </thead>
-          <tbody className="tabular-nums text-slate-300">
+          <tbody className="tabular-nums text-ink-2">
             {results.map((r, i) => (
-              <tr key={i} className="border-t border-white/5">
+              <tr key={i} className="border-t border-line-subtle">
                 <td className="py-1">{r.engine}</td>
                 <td>{r.noiseSuppression ? "On" : "Off"}</td>
                 <td>{r.report.snrDb.toFixed(0)} dB</td>
@@ -266,7 +266,7 @@ export function Calibration() {
         </table>
       )}
 
-      {err && <p className="text-sm text-bev-danger">{err}</p>}
+      {err && <p className="text-sm text-danger">{err}</p>}
       <div className="flex justify-end gap-2">
         {busy ? (
           <Button variant="ghost" onClick={() => abort.current?.abort()}>
@@ -283,8 +283,8 @@ export function Calibration() {
 function Stat({ k, v }: { k: string; v: string }) {
   return (
     <div>
-      <dt className="text-xs text-slate-500">{k}</dt>
-      <dd className="tabular-nums text-slate-200">{v}</dd>
+      <dt className="text-xs text-ink-3">{k}</dt>
+      <dd className="tabular-nums text-ink">{v}</dd>
     </div>
   );
 }
@@ -340,7 +340,7 @@ export function RecognitionSettings() {
           />
         </Field>
       )}
-      {ws.state === "error" && settings.sttEngine === "whisper" && <p className="text-sm text-bev-danger">{ws.message}</p>}
+      {ws.state === "error" && settings.sttEngine === "whisper" && <p className="text-sm text-danger">{ws.message}</p>}
       <Field
         label="Noise suppression"
         hint="Helps in noisy rooms, but can make a clean mic sound worse. Use the microphone check to compare."

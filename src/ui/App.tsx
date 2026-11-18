@@ -1,24 +1,22 @@
 import { useEffect, useState } from "react";
-import { Routes, Route, NavLink, Navigate } from "react-router-dom";
+import { Routes, Route, Navigate } from "react-router-dom";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useAssistant } from "@/state/assistant";
-import { stateMeta } from "./design";
 import { useSettings } from "@/state/settings";
 import { useRoutines } from "@/routines/store";
 import { startScheduler } from "@/routines/scheduler";
 import { applyAppearance } from "@/lib/appearance";
 import { Dashboard } from "./pages/Dashboard";
-import { Chat } from "./pages/Chat";
+import { Assistant } from "./pages/Assistant";
 import { Automation } from "./pages/Automation";
 import { Memory } from "./pages/Memory";
-import { VoiceAudio } from "./pages/VoiceAudio";
-import { Integrations } from "./pages/Integrations";
-import { Appearance } from "./pages/Appearance";
-import { Security } from "./pages/Security";
-import { Settings } from "./pages/Settings";
 import { Onboarding } from "./pages/Onboarding";
 import { ApprovalModal } from "./components/ApprovalModal";
 import { TitleBar } from "./components/TitleBar";
+import { SettingsHub } from "./pages/SettingsHub";
+import { Rail } from "./shell/Rail";
+import { Core } from "./components/Core";
+import { CommandPalette } from "./shell/CommandPalette";
 import { pruneHistory, startBrain } from "@/brain/memory";
 import { configureBackground } from "@/ai/background";
 import { startIntegrations } from "@/integrations/registry";
@@ -29,7 +27,7 @@ import { startBriefings } from "@/proactive/briefing";
 import { Orchestrator } from "@/ai/orchestrator";
 import { makeProvider } from "@/ai/factory";
 import { notify } from "@/lib/notify";
-import { bootstrapVoice, getController, maybeStartListening, setPrivacy } from "@/voice/bootstrap";
+import { bootstrapVoice, getController, maybeStartListening } from "@/voice/bootstrap";
 import { startMonitor } from "@/lib/monitor";
 import { check } from "@tauri-apps/plugin-updater";
 
@@ -39,25 +37,26 @@ interface PendingApproval {
   resolve: (ok: boolean) => void;
 }
 
-const nav = [
-  { to: "/dashboard", label: "Dashboard", icon: "◎" },
-  { to: "/chat", label: "AI Chat", icon: "✦" },
-  { to: "/automation", label: "Automation", icon: "⚙" },
-  { to: "/memory", label: "Memory", icon: "❖" },
-  { to: "/voice", label: "Voice & Audio", icon: "🎙" },
-  { to: "/integrations", label: "Integrations", icon: "⌁" },
-  { to: "/appearance", label: "Appearance", icon: "✧" },
-  { to: "/security", label: "Security", icon: "⛉" },
-  { to: "/settings", label: "Settings", icon: "⋄" },
-];
 
 export function App() {
-  const { micEnabled, privacyMode, state } = useAssistant();
   const { loaded, settings } = useSettings();
   // Approvals can arrive from voice, chat, routines and the scheduler at once,
   // so they queue: the modal shows the oldest, and every caller gets an answer.
   const [approvals, setApprovals] = useState<PendingApproval[]>([]);
   const pendingApproval = approvals[0] ?? null;
+  const [palette, setPalette] = useState(false);
+
+  // Ctrl+K anywhere opens search and commands.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        setPalette((p) => !p);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
   const answerApproval = (ok: boolean) => {
     const current = approvals[0];
     if (!current) return;
@@ -131,7 +130,11 @@ export function App() {
 
   // Hold the UI until settings load, then gate on first-run onboarding.
   if (!loaded) {
-    return <div className="grid h-screen w-screen place-items-center text-slate-500">Loading BEV…</div>;
+    return (
+      <div className="grid h-screen w-screen place-items-center bg-canvas">
+        <Core state="thinking" size={40} title="Loading BEV" />
+      </div>
+    );
   }
   if (!settings.onboarded) {
     return (
@@ -147,85 +150,38 @@ export function App() {
   }
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden text-slate-100">
-      {/* Sidebar */}
-      <aside className="flex w-60 flex-col glass border-r border-white/5">
-        <div className="drag flex items-center gap-2 px-5 py-5">
-          <div className="grid h-9 w-9 place-items-center rounded-lg bg-gradient-to-br from-bev-cyan to-bev-violet font-bold text-black shadow-glow">
-            B
-          </div>
-          <div>
-            <div className="text-lg font-semibold tracking-wide text-glow">BEV</div>
-            <div className="flex items-center gap-1.5 text-[11px] text-slate-400" aria-live="polite">
-              <span className="h-1.5 w-1.5 rounded-full" style={{ background: stateMeta[state].color }} aria-hidden="true" />
-              {privacyMode ? "Privacy mode" : !micEnabled && state === "idle" ? "Mic off" : stateMeta[state].label}
-            </div>
-          </div>
-        </div>
-        <nav className="no-drag flex-1 space-y-1 px-3 py-2">
-          {nav.map((n) => (
-            <NavLink
-              key={n.to}
-              to={n.to}
-              className={({ isActive }) =>
-                `flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition ${
-                  isActive
-                    ? "bg-bev-cyan/15 text-bev-cyan shadow-glow"
-                    : "text-slate-300 hover:bg-white/5"
-                }`
-              }
-            >
-              <span className="w-4 text-center opacity-80">{n.icon}</span>
-              {n.label}
-            </NavLink>
-          ))}
-        </nav>
-        <button
-          className="no-drag m-3 flex items-center gap-2 rounded-lg px-2 py-2 text-left text-xs text-slate-400 transition hover:bg-white/5"
-          onClick={() => {
-            const c = getController();
-            if (!c) return;
-            if (privacyMode) {
-              setPrivacy(false);
-              c.enableListening();
-            } else if (micEnabled) c.disableListening();
-            else c.enableListening();
-          }}
-          title={micEnabled ? "Click to stop listening" : "Click to start listening for “BEV”"}
-        >
-          <StatusDot on={micEnabled && !privacyMode} />
-          <span className="flex-1">
-            {privacyMode ? "Privacy mode — mic off" : micEnabled ? "Listening for “BEV”" : "Mic off — click to listen"}
-            <span className="mt-0.5 block text-[11px] text-slate-500">
-              {state} · Ctrl+Alt+B to talk
-            </span>
-          </span>
-        </button>
-      </aside>
-
-      {/* Main */}
-      <main className="flex flex-1 flex-col overflow-hidden">
-        <TitleBar />
-        <div className="flex-1 overflow-y-auto p-6">
+    <div className="flex h-screen w-screen overflow-hidden bg-canvas text-ink">
+      <Rail />
+      <main className="flex min-w-0 flex-1 flex-col overflow-hidden">
+        <TitleBar onSearch={() => setPalette(true)} />
+        <div className="min-h-0 flex-1">
           <Routes>
-            <Route path="/" element={<Navigate to="/dashboard" replace />} />
-            <Route path="/dashboard" element={<Dashboard />} />
-            <Route path="/chat" element={<Chat />} />
-            <Route path="/automation" element={<Automation />} />
-            <Route path="/memory" element={<Memory />} />
-            <Route path="/voice" element={<VoiceAudio />} />
-            <Route path="/integrations" element={<Integrations />} />
-            <Route path="/appearance" element={<Appearance />} />
-            <Route path="/security" element={<Security />} />
-            <Route path="/settings" element={<Settings />} />
+            <Route path="/" element={<Navigate to="/assistant" replace />} />
+            <Route path="/assistant" element={<Assistant />} />
+            <Route path="/activity" element={<Page><Dashboard /></Page>} />
+            <Route path="/memory" element={<Page><Memory /></Page>} />
+            <Route path="/automations" element={<Page><Automation /></Page>} />
+            <Route path="/settings" element={<Navigate to="/settings/general" replace />} />
+            <Route path="/settings/:section" element={<SettingsHub />} />
+            {/* Old addresses still work. */}
+            <Route path="/chat" element={<Navigate to="/assistant" replace />} />
+            <Route path="/dashboard" element={<Navigate to="/activity" replace />} />
+            <Route path="/automation" element={<Navigate to="/automations" replace />} />
+            <Route path="/voice" element={<Navigate to="/settings/voice" replace />} />
+            <Route path="/integrations" element={<Navigate to="/settings/ai" replace />} />
+            <Route path="/appearance" element={<Navigate to="/settings/appearance" replace />} />
+            <Route path="/security" element={<Navigate to="/settings/privacy" replace />} />
+            <Route path="*" element={<Navigate to="/assistant" replace />} />
           </Routes>
         </div>
       </main>
 
+      <CommandPalette open={palette} onClose={() => setPalette(false)} />
       {pendingApproval && (
         <ApprovalModal
           key={pendingApproval.id}
           description={pendingApproval.description}
+          remaining={approvals.length - 1}
           onApprove={() => answerApproval(true)}
           onCancel={() => answerApproval(false)}
         />
@@ -234,13 +190,12 @@ export function App() {
   );
 }
 
-function StatusDot({ on }: { on: boolean }) {
+/** Scrolling page body with a comfortable reading width. */
+function Page({ children }: { children: React.ReactNode }) {
   return (
-    <span
-      className={`mr-2 inline-block h-2 w-2 rounded-full ${
-        on ? "bg-bev-ok shadow-glow" : "bg-slate-600"
-      }`}
-    />
+    <div className="h-full overflow-y-auto">
+      <div className="mx-auto max-w-[1080px] px-8 py-7">{children}</div>
+    </div>
   );
 }
 

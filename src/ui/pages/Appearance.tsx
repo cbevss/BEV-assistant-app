@@ -5,7 +5,15 @@ import { applyAppearance } from "@/lib/appearance";
 import { previewOverlay } from "@/lib/overlayPlacement";
 import { PageHeader, Section, Field, Select, Slider, Toggle, Button } from "../components/Form";
 
-const PRESETS = ["#22d3ee", "#3b82f6", "#8b5cf6", "#34d399", "#f43f5e", "#f59e0b"];
+/** Restrained signal colours that hold up on the graphite surfaces. */
+const PRESETS: Array<{ hex: string; name: string }> = [
+  { hex: "#4ecdde", name: "Signal cyan" },
+  { hex: "#6aa6ff", name: "Ice blue" },
+  { hex: "#5fd1a5", name: "Mint" },
+  { hex: "#e8b04b", name: "Amber" },
+  { hex: "#ef7f6a", name: "Coral" },
+  { hex: "#d6dbe2", name: "Graphite white" },
+];
 
 export function Appearance() {
   const { settings, update } = useSettings();
@@ -22,24 +30,27 @@ export function Appearance() {
 
   return (
     <div>
-      <PageHeader title="Appearance" subtitle="Accent colour, overlay placement and motion." />
+      <PageHeader title="Appearance" subtitle="BEV's accent colour, where the overlay appears and how much moves." />
 
       <Section title="Accent colour">
-        <Field label="Colour" hint="Used across highlights and the idle indicator.">
+        <Field label="Colour" hint="Used sparingly: active states, BEV's Core and the main action on a screen.">
           <div className="flex items-center gap-2">
             {PRESETS.map((c) => (
               <button
-                key={c}
-                aria-label={`Accent ${c}`}
-                onClick={() => set({ accent: c })}
-                className={`h-7 w-7 rounded-full border-2 transition ${settings.accent === c ? "border-white" : "border-transparent"}`}
-                style={{ background: c }}
+                key={c.hex}
+                aria-label={c.name}
+                title={c.name}
+                aria-pressed={settings.accent.toLowerCase() === c.hex}
+                onClick={() => set({ accent: c.hex })}
+                className={`grid h-6 w-6 place-items-center rounded-full transition-shadow duration-fast ${settings.accent.toLowerCase() === c.hex ? "shadow-[0_0_0_2px_rgb(var(--canvas)),0_0_0_3.5px_rgb(var(--ink))]" : "hover:shadow-[0_0_0_2px_rgb(var(--canvas)),0_0_0_3.5px_rgb(var(--line-strong))]"}`}
+                style={{ background: c.hex }}
               />
             ))}
             <input
               type="color"
               aria-label="Custom accent"
-              className="no-drag h-7 w-10 cursor-pointer rounded bg-transparent"
+              title="Custom colour"
+              className="no-drag ml-1 h-6 w-8 cursor-pointer rounded border border-line bg-transparent"
               value={settings.accent}
               onChange={(e) => set({ accent: e.target.value })}
             />
@@ -74,7 +85,7 @@ export function Appearance() {
           />
         </Field>
         {monitors.length > 1 && (
-          <p className="text-xs text-slate-500">
+          <p className="text-xs text-ink-3">
             {monitors.length} monitors detected. The overlay follows the primary display; multi-monitor targeting is on the roadmap.
           </p>
         )}

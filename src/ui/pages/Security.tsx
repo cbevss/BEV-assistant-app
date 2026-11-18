@@ -4,7 +4,7 @@ import { useSettings } from "@/state/settings";
 import { useAssistant } from "@/state/assistant";
 import { setPrivacy } from "@/voice/bootstrap";
 import { allTools, getTool, isSensitive } from "@/ai/tools";
-import { PageHeader, Section, Toggle, Button, StatusPill } from "../components/Form";
+import { PageHeader, Section, Field, Toggle, Button, StatusPill } from "../components/Form";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 
 export function Security() {
@@ -25,36 +25,30 @@ export function Security() {
   return (
     <div>
       <PageHeader
-        title="Security & Permissions"
-        subtitle="Control exactly what BEV may do. Nothing destructive runs without approval, and you can revoke any capability here."
+        title="Privacy & security"
+        subtitle="What BEV may do. Nothing destructive runs without your OK, and you can take any ability away here."
       />
 
       <Section
         title="Privacy"
         aside={<StatusPill ok={!privacyMode} label={privacyMode ? "mic off" : "mic available"} />}
       >
-        <div className="flex items-center justify-between">
-          <div>
-            <div className="text-sm text-slate-200">Privacy mode (microphone kill-switch)</div>
-            <div className="text-xs text-slate-500">
-              Instantly stops all wake-word and microphone processing until you turn it back on.
-            </div>
-          </div>
+        <Field label="Privacy mode" hint="Stops all wake-word and microphone processing at once, until you turn it back off.">
           <Toggle label="Privacy mode" checked={privacyMode} onChange={setPrivacy} />
-        </div>
+        </Field>
       </Section>
 
       <Section title="Approvals">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <div className="text-sm text-slate-200">Trust my requests (skip approval prompts)</div>
-            <div className="text-xs text-slate-500">
+            <div className="text-sm text-ink">Trust my requests (skip approval prompts)</div>
+            <div className="text-xs text-ink-3">
               When on, asking BEV to do something <em>is</em> the approval — sensitive actions like
               closing apps or shutting down run immediately, with no Approve/Cancel prompt. Every
               action is still recorded in the log below. Leave off if you want a confirmation each time.
             </div>
             {settings.autoApproveActions && (
-              <div className="mt-2 rounded-md border border-bev-danger/25 bg-bev-danger/10 px-3 py-1.5 text-xs text-bev-danger">
+              <div className="mt-2 rounded-md border border-danger/25 bg-danger/10 px-3 py-1.5 text-xs text-danger">
                 Approvals are off. BEV will carry out destructive actions the moment you ask.
               </div>
             )}
@@ -68,32 +62,32 @@ export function Security() {
       </Section>
 
       <Section title="Tool permissions">
-        <p className="text-xs text-slate-500">
+        <p className="text-xs text-ink-3">
           Revoked tools are hidden from BEV entirely — it can't call them by voice or chat.
           {settings.autoApproveActions
             ? " Approval prompts are currently off (see above)."
             : " Tools marked “needs approval” show an Approve/Cancel prompt before running."}
         </p>
-        <div className="divide-y divide-white/5">
+        <div className="divide-y divide-line-subtle">
           {allToolSpecs.map((t) => {
             const allowed = settings.toolPermissions[t.name] !== false;
             return (
               <div key={t.name} className="flex items-start justify-between gap-4 py-3">
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
-                    <span className="font-mono text-sm text-slate-200">{t.name}</span>
+                    <span className="font-mono text-sm text-ink">{t.name}</span>
                     {isSensitive(t.name) && (
-                      <span className="rounded bg-bev-danger/15 px-1.5 text-[11px] text-bev-danger">
+                      <span className="rounded bg-danger/15 px-1.5 text-[11px] text-danger">
                         needs approval
                       </span>
                     )}
                     {!isSensitive(t.name) && getTool(t.name)?.sensitiveCheck && (
-                      <span className="rounded bg-amber-400/15 px-1.5 text-[11px] text-amber-300">
+                      <span className="rounded bg-warn/5 px-1.5 text-[11px] text-warn">
                         asks before risky actions
                       </span>
                     )}
                   </div>
-                  <p className="text-xs text-slate-500">{t.description}</p>
+                  <p className="text-xs text-ink-3">{t.description}</p>
                 </div>
                 <Toggle
                   label={`Allow ${t.name}`}
@@ -121,19 +115,19 @@ export function Security() {
           </div>
         }
       >
-        <p className="text-xs text-slate-500">
+        <p className="text-xs text-ink-3">
           A local record of every tool BEV has run. Never leaves this PC.
         </p>
         <ul className="max-h-80 space-y-1 overflow-y-auto font-mono text-xs">
           {log.map((row) => (
             <li key={row.id} className="flex items-start gap-2 py-0.5">
-              <span className={row.ok ? "text-bev-ok" : "text-bev-danger"}>{row.ok ? "✓" : "✕"}</span>
-              <span className="text-slate-500">{new Date(row.at * 1000).toLocaleTimeString("en-GB")}</span>
-              <span className="text-slate-300">{row.tool}</span>
-              <span className="truncate text-slate-500">{row.result}</span>
+              <span className={row.ok ? "text-ok" : "text-danger"}>{row.ok ? "✓" : "✕"}</span>
+              <span className="text-ink-3">{new Date(row.at * 1000).toLocaleTimeString("en-GB")}</span>
+              <span className="text-ink-2">{row.tool}</span>
+              <span className="truncate text-ink-3">{row.result}</span>
             </li>
           ))}
-          {log.length === 0 && <li className="text-slate-500">No actions recorded yet.</li>}
+          {log.length === 0 && <li className="text-ink-3">No actions recorded yet.</li>}
         </ul>
       </Section>
 
