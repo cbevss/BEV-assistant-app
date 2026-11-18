@@ -32,6 +32,10 @@ export function Core({ state, level = 0, progress = null, size = 32, className, 
   const tone = state === "error" ? "rgb(var(--danger))" : state === "completed" ? "rgb(var(--ok))" : "rgb(var(--accent))";
   const dim = "rgb(var(--ink-4))";
   const detail = size >= 28;
+  // Large Cores get the full instrument: a degree scale and an inner
+  // segmented ring that turns only while BEV is actively doing something.
+  const hud = size >= 56;
+  const active = state !== "idle" && state !== "off" && state !== "completed";
 
   const lit = (i: number): number => {
     // Returns 0 (off) .. 1 (fully lit) for tick i (0 = top, clockwise).
@@ -62,7 +66,7 @@ export function Core({ state, level = 0, progress = null, size = 32, className, 
     <svg
       width={size}
       height={size}
-      viewBox="0 0 100 100"
+      viewBox={hud ? "-5 -5 110 110" : "0 0 100 100"}
       className={clsx("shrink-0 overflow-visible", className)}
       role="img"
       aria-label={title ?? `BEV is ${state === "off" ? "not listening" : state}`}
@@ -95,6 +99,18 @@ export function Core({ state, level = 0, progress = null, size = 32, className, 
       {orbiting && (
         <g className="origin-center animate-orbit" style={{ transformBox: "view-box", transformOrigin: "50px 50px" }}>
           <path d="M 50 3 A 47 47 0 0 1 82.2 15.8" fill="none" stroke={tone} strokeWidth={detail ? 3.6 : 5} strokeLinecap="round" />
+        </g>
+      )}
+      {hud && (
+        <g aria-hidden>
+          {Array.from({ length: 72 }, (_, i) => {
+            const a = (i / 72) * Math.PI * 2 - Math.PI / 2;
+            const r1 = i % 6 === 0 ? 51 : 52;
+            return <line key={i} x1={50 + Math.cos(a) * r1} y1={50 + Math.sin(a) * r1} x2={50 + Math.cos(a) * 53.5} y2={50 + Math.sin(a) * 53.5} stroke={dim} strokeOpacity={0.55} strokeWidth={0.6} />;
+          })}
+          <g className={active ? "animate-orbit" : undefined} style={{ transformBox: "view-box", transformOrigin: "50px 50px", animationDuration: state === "thinking" || state === "activating" ? "3s" : "9s", animationDirection: "reverse" }}>
+            <circle cx="50" cy="50" r="33" fill="none" stroke={active ? tone : dim} strokeOpacity={active ? 0.55 : 0.4} strokeWidth="1" strokeDasharray="14 6 2 6" />
+          </g>
         </g>
       )}
       {/* inner ring */}

@@ -14,6 +14,7 @@ import { progress as planProgress } from "@/ai/plan";
 import { getController } from "@/voice/bootstrap";
 import { stateMeta } from "../design";
 import { Core } from "../components/Core";
+import { HudFrame, HudLabel, Readout } from "../components/Hud";
 import { PlanView } from "../components/PlanView";
 import { IconButton, Kbd, Select } from "../components/Form";
 import { Markdown } from "../assistant/Markdown";
@@ -26,6 +27,8 @@ const SUGGESTIONS = [
   "In the background, compare the three cheapest 1440p monitors and save a note",
   "Remind me to renew the car insurance on Friday",
 ];
+
+const clock = (ms: number) => new Date(ms).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
 
 function greeting() {
   const h = new Date().getHours();
@@ -146,7 +149,8 @@ function AssistantBar() {
     <div className="flex h-14 shrink-0 items-center gap-3 border-b border-line-subtle px-5">
       <Core state={coreState} level={audioLevel} progress={p && p.total ? p.done / p.total : null} size={30} />
       <div className="min-w-0 flex-1">
-        <div className="truncate text-sm font-medium text-ink" aria-live="polite">
+        <HudLabel className={clsx(state === "error" ? "text-danger" : state !== "idle" && !off && "text-accent")}>{privacyMode ? "Privacy" : state === "idle" ? (off ? "Offline" : "Standby") : state === "error" ? "Fault" : stateMeta[state].label}</HudLabel>
+        <div className="truncate text-sm text-ink" aria-live="polite">
           {line}
         </div>
         <button className="flex max-w-full items-center gap-1 truncate text-2xs text-ink-3 hover:text-ink-2" onClick={() => nav("/settings/voice")} title="Microphone settings">
@@ -168,21 +172,43 @@ function AssistantBar() {
 }
 
 function Welcome({ onPick, level, listening }: { onPick: (s: string) => void; level: number; listening: boolean }) {
+  const { settings } = useSettings();
+  const [now, setNow] = useState(new Date());
+  useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(id);
+  }, []);
+  const model = settings.provider === "openai" ? settings.openaiModel : settings.provider === "ollama" ? settings.ollamaModel : settings.anthropicModel;
   return (
-    <div className="flex min-h-[60vh] flex-col items-center justify-center py-10 text-center">
-      <Core state={listening ? "idle" : "off"} level={level} size={84} />
-      <h1 className="mt-6 text-2xl font-semibold text-ink">{greeting()}</h1>
+    <div className="flex min-h-[62vh] flex-col items-center justify-center py-8">
+      <div className="grid w-full max-w-[640px] grid-cols-[1fr_auto_1fr] items-center gap-8 max-[860px]:grid-cols-1 max-[860px]:justify-items-center">
+        <div className="space-y-3 text-right max-[860px]:hidden">
+          <Readout label="Local time" value={now.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", second: "2-digit" })} />
+          <Readout label="Date" value={now.toLocaleDateString("en-GB", { weekday: "short", day: "2-digit", month: "short" })} />
+        </div>
+        <HudFrame className="p-5" size={10}>
+          <Core state={listening ? "idle" : "off"} level={level} size={132} />
+        </HudFrame>
+        <div className="space-y-3 max-[860px]:hidden">
+          <Readout label="Voice" value={listening ? "Wake word armed" : "Mic off"} tone={listening ? "ok" : undefined} />
+          <Readout label="Model" value={model} />
+        </div>
+      </div>
+      <h1 className="mt-8 text-2xl font-semibold text-ink">{greeting()}</h1>
       <p className="mt-1 text-sm text-ink-3">{listening ? "Say “Hey BEV”, or type below." : "Type below, or turn the microphone on to talk."}</p>
-      <ul className="mt-8 w-full max-w-[520px] divide-y divide-line-subtle overflow-hidden rounded-lg border border-line-subtle text-left">
-        {SUGGESTIONS.map((s) => (
-          <li key={s}>
-            <button className="group flex w-full items-center justify-between gap-3 bg-surface-1 px-4 py-2.5 text-sm text-ink-2 transition-colors duration-fast hover:bg-surface-2 hover:text-ink" onClick={() => onPick(s)}>
-              <span className="truncate">{s}</span>
-              <ChevronRight className="h-3.5 w-3.5 shrink-0 text-ink-4 group-hover:text-ink-2" aria-hidden />
-            </button>
-          </li>
-        ))}
-      </ul>
+      <div className="mt-8 w-full max-w-[540px]">
+        <HudLabel className="mb-2 block px-1">Try</HudLabel>
+        <ul className="divide-y divide-line-subtle overflow-hidden rounded-lg border border-line-subtle text-left">
+          {SUGGESTIONS.map((s) => (
+            <li key={s}>
+              <button className="group flex w-full items-center justify-between gap-3 bg-surface-1 px-4 py-2.5 text-sm text-ink-2 transition-colors duration-fast hover:bg-surface-2 hover:text-ink" onClick={() => onPick(s)}>
+                <span className="truncate">{s}</span>
+                <ChevronRight className="h-3.5 w-3.5 shrink-0 text-ink-4 group-hover:text-accent" aria-hidden />
+              </button>
+            </li>
+          ))}
+        </ul>
+      </div>
     </div>
   );
 }
@@ -190,8 +216,9 @@ function Welcome({ onPick, level, listening }: { onPick: (s: string) => void; le
 function Message({ m }: { m: ChatMessage }) {
   if (m.role === "user") {
     return (
-      <div className="flex justify-end">
+      <div className="flex flex-col items-end">
         <div className="max-w-[78%] whitespace-pre-wrap rounded-xl rounded-br-sm bg-surface-2 px-3.5 py-2 text-base text-ink">{m.content}</div>
+        <span className="tnum mt-1 font-mono text-[10px] tracking-[0.08em] text-ink-4">{clock(m.at)}</span>
       </div>
     );
   }
@@ -201,8 +228,14 @@ function Message({ m }: { m: ChatMessage }) {
       <div className="mt-0.5 w-6 shrink-0">
         <Core state={failed ? "error" : "idle"} size={22} title="BEV" />
       </div>
-      <div className={clsx("min-w-0 flex-1 text-base leading-[24px]", failed ? "text-danger" : "text-ink")}>
-        <Markdown text={m.content} />
+      <div className="min-w-0 flex-1">
+        <div className="mb-1 flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.14em]">
+          <span className={failed ? "text-danger" : "text-accent"}>BEV</span>
+          <span className="tnum text-ink-4">{clock(m.at)}</span>
+        </div>
+        <div className={clsx("text-base leading-[24px]", failed ? "text-danger" : "text-ink")}>
+          <Markdown text={m.content} />
+        </div>
       </div>
     </div>
   );
@@ -245,13 +278,14 @@ function ToolRow({ t }: { t: ChatMessage }) {
         onClick={() => setOpen((o) => !o)}
         aria-expanded={open}
       >
+        <span className="tnum w-[52px] shrink-0 font-mono text-[10px] tracking-[0.06em] text-ink-4">{clock(t.at)}</span>
         <Icon className={clsx("h-3.5 w-3.5 shrink-0", failed ? "text-danger" : "text-ink-3")} strokeWidth={1.8} aria-hidden />
         <span className={clsx("shrink-0", failed ? "text-danger" : "text-ink-2")}>{toolLabel(t.toolName ?? "")}</span>
         {line && <span className="min-w-0 truncate text-ink-4">{line}</span>}
         <span className="ml-auto shrink-0">{failed ? <X className="h-3 w-3 text-danger" aria-label="failed" /> : <Check className="h-3 w-3 text-ink-4 group-hover:text-ok" aria-label="done" />}</span>
       </button>
       {open && (
-        <pre className="mb-1 ml-6 mt-0.5 max-h-60 overflow-auto whitespace-pre-wrap rounded bg-surface-1 px-3 py-2 font-mono text-2xs leading-4 text-ink-3 animate-fade-in">
+        <pre className="mb-1 ml-[82px] mt-0.5 max-h-60 overflow-auto whitespace-pre-wrap rounded bg-surface-1 px-3 py-2 font-mono text-2xs leading-4 text-ink-3 animate-fade-in">
           {t.content}
         </pre>
       )}

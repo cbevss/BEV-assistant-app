@@ -10,7 +10,7 @@ Tokens live in `src/styles.css` (CSS variables) and `tailwind.config.js` (names)
 2. **One accent, used sparingly.** The signal colour marks what's active or the main action on a screen. Most of the interface is neutral.
 3. **Flat surfaces.** No gradients, glows, glass blur or floating blobs. Hierarchy comes from surface steps and hairlines.
 4. **Lists, not card walls.** Related settings sit in one panel separated by hairlines. Cards only where content is genuinely separate.
-5. **Words over chrome.** Plain, present-tense sentences; sentence case; no all-caps labels.
+5. **Words over chrome.** Plain, present-tense sentences in sentence case. Upper-case mono is reserved for the HUD layer (below).
 
 ## Colour
 
@@ -67,6 +67,19 @@ It appears in the rail (22px), the assistant bar (30px), the welcome screen (84p
 - **Assistant**: live status bar, the conversation (user right in a surface bubble; BEV left with no bubble; tool activity as a compact, expandable timeline; live plan; a working row with elapsed time), and the composer (auto-growing, talk button, send/stop, Esc stops).
 - **Settings**: one area with its own category list: General, Voice & microphone, AI & models, Connected services, Apps, Appearance, Privacy & security, Advanced. Old addresses redirect.
 - **Command palette** (Ctrl K): pages, settings categories and actions (start or stop listening, talk now, privacy mode, quiet mode, new conversation, PC health check).
+
+## The HUD layer
+
+What makes BEV feel like an instrument rather than a website. All of it is flat linework and real readouts, never glow or gradients (`src/ui/components/Hud.tsx`, `src/ui/shell/SystemBar.tsx`).
+
+- **System bar**: a 24px strip along the bottom showing BEV's state (STANDBY, LISTENING, THINKING, FAULT…), CPU, memory, GPU when available, uptime, running background tasks, the active model and the time. It's live and measured.
+- **Readouts**: `HudLabel` (10px mono, upper case, tracked) above a mono value, used for live figures such as the welcome screen's time, voice and model, and the Activity stats.
+- **Section markers**: section titles are mono upper-case labels led by a short accent rule.
+- **Measurement scales**: meters are drawn as rulers with ticks every 10%, not filled bars.
+- **Frame brackets**: `HudFrame` corner brackets mark the primary instrument on a screen (the Core on the welcome screen, the stats on Activity). Use one per screen at most.
+- **Timestamps**: messages and tool activity carry a mono HH:MM:SS stamp, like a log.
+- **Grid**: a 32px measurement grid at about 3% opacity behind page content (an SVG pattern).
+- **Core detail**: at 56px and above the Core adds a degree scale and an inner segmented ring that turns only while BEV is actively working.
 
 ## Components (`src/ui/components/Form.tsx`)
 
