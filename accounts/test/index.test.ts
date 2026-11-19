@@ -186,6 +186,25 @@ describe("devices, export and deletion", () => {
     }
   });
 
+  it("erases synced data but keeps the account, telling other devices to delete their copies", async () => {
+    const { token } = await signIn();
+    const push = (items: unknown[]) => app()(req("/sync/push", token, { method: "POST", body: JSON.stringify({ items }) }), env);
+    await push([
+      { id: "mem-aaaaaaaa", kind: "memory", iv: "i", ct: "secret1" },
+      { id: "note-bbbbbbbb", kind: "note", iv: "i", ct: "secret2" },
+    ]);
+    const erase = (kinds?: string[]) => app()(req("/data/erase", token, { method: "POST", body: JSON.stringify(kinds ? { kinds } : {}) }), env);
+    const r = (await (await erase(["memory"])).json()) as { erased: number };
+    expect(r.erased).toBe(1);
+    const pulled = (await (await app()(req("/sync/pull?since=2", token), env)).json()) as { items: unknown[] };
+    expect(pulled.items).toEqual([{ id: "mem-aaaaaaaa", kind: "memory", deleted: true }]);
+    await erase();
+    const left = await env.DB.prepare("SELECT COUNT(*) AS n FROM items WHERE ct != ''").first<{ n: number }>();
+    expect(left?.n).toBe(0);
+    expect((await app()(req("/me", token), env)).status).toBe(200);
+    expect((await erase(["passwords"])).status).toBe(400);
+  });
+
   it("answers the web version's preflight only for configured origins", async () => {
     const ok = await app()(new Request(`${BASE}/me`, { method: "OPTIONS", headers: { origin: "https://app.bev.test" } }), env);
     expect(ok.headers.get("access-control-allow-origin")).toBe("https://app.bev.test");

@@ -39,6 +39,7 @@ const data: Record<string, unknown> = {
   action_log_list: [],
   foreground_window: { title: "Visual Studio Code", process: "Code.exe" },
   replay_configure: { enabled: false, keep_secs: 30, buffered_secs: 0 },
+  data_counts: { memories: 42, notes: 7, conversation_messages: 1318, activity: 256 },
   replay_status: { enabled: false, keep_secs: 30, buffered_secs: 0 },
   input_target: null,
   embeddings_list: [],

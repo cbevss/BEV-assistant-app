@@ -70,6 +70,21 @@ GDPR): you'll want a short privacy notice saying what's stored (the list
 above), why, and how to delete it (Settings → Account → Delete account). This
 isn't legal advice.
 
+## Deleting data
+
+- **Settings → Advanced → Your data** (desktop): delete conversation history,
+  memories, notes, activity history, the screen replay buffer, or saved keys
+  and sign-ins, one at a time, or erase everything on the PC. While signed
+  in, deleting memories or notes also deletes them on the user's other
+  devices (that's what sync means); "Erase everything" signs the PC out
+  first, so other devices keep their copies.
+- **Account data** (same page, and Settings → Account): erase everything
+  synced (`POST /data/erase`: content is deleted from the server at once and
+  every device removes its copy on its next sync; the account stays), or
+  delete the account (`DELETE /account`).
+- The web version must offer the same controls; both endpoints are ready
+  for it.
+
 ## Not synced (yet)
 
 Conversation history, API keys and other secrets, connected services, app

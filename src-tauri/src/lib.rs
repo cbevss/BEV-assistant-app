@@ -159,6 +159,10 @@ pub fn run() {
             db::log_action,
             db::action_log_list,
             db::action_log_clear,
+            db::data_counts,
+            db::memories_clear,
+            db::notes_clear,
+            db::activity_clear,
             // System actions
             system::lock_pc,
             system::power_action,

@@ -86,5 +86,6 @@ export const api = {
   pull: (t: string, since: number) => call<{ items: RemoteItem[]; cursor: number; more: boolean }>(`/sync/pull?since=${since}`, t),
   push: (t: string, items: RemoteItem[]) => call<{ cursor: number }>("/sync/push", t, { method: "POST", body: { items } }),
   exportAll: (t: string) => call<unknown>("/export", t),
+  eraseSynced: (t: string, kinds?: string[]) => call<{ erased: number }>("/data/erase", t, { method: "POST", body: kinds ? { kinds } : {} }),
   deleteAccount: (t: string) => call("/account", t, { method: "DELETE" }),
 };

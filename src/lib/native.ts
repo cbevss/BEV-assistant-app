@@ -104,6 +104,10 @@ export const native = {
     invoke<void>("log_action", { tool, args, result, ok }),
   actionLogList: (limit?: number) => invoke<ActionLogRow[]>("action_log_list", { limit }),
   actionLogClear: () => invoke<void>("action_log_clear"),
+  dataCounts: () => invoke<{ memories: number; notes: number; conversation_messages: number; activity: number }>("data_counts"),
+  memoriesClear: () => invoke<void>("memories_clear"),
+  notesClear: () => invoke<void>("notes_clear"),
+  activityClear: () => invoke<void>("activity_clear"),
 
   // System actions
   lockPc: () => invoke<void>("lock_pc"),
