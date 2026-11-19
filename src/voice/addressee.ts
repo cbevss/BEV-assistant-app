@@ -1,5 +1,5 @@
 import type { Settings } from "@/state/settings";
-import { makeProvider } from "@/ai/factory";
+import { makeProvider, modelsFor } from "@/ai/factory";
 import { addresseeHeuristic } from "./turns";
 
 /**
@@ -13,7 +13,7 @@ export async function isForBev(utterance: string, lastReply: string, expectAnswe
   if (h !== "unsure") return h === "bev";
   try {
     const provider = makeProvider(s);
-    const fast = s.provider === "openai" ? s.openaiFastModel : s.provider === "ollama" ? s.ollamaFastModel : s.anthropicFastModel;
+    const fast = modelsFor(s, s.provider).fast;
     const ctl = new AbortController();
     const timer = setTimeout(() => ctl.abort(), 1800);
     try {

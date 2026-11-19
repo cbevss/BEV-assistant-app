@@ -7,7 +7,14 @@ import { emit, listen } from "@tauri-apps/api/event";
  * (settings.json in the app data dir). Secrets NEVER live here — they go to
  * the OS keyring through native.storeSecret.
  */
-export type ProviderId = "anthropic" | "openai" | "ollama";
+import type { ProviderId } from "@/ai/catalog";
+export type { ProviderId };
+
+/** The model a provider uses for real work, and for quick replies ("" = the same). */
+export interface ProviderModels {
+  model: string;
+  fast: string;
+}
 export type Personality = "professional" | "casual" | "minimal" | "technical" | "custom";
 export type WakeEngine = "speech" | "on-device";
 export type GamePopup = "auto" | "show" | "hide";
@@ -38,15 +45,14 @@ export interface IntegrationSettings {
 export interface Settings {
   onboarded: boolean;
   // AI
+  /** The main AI: tried first for everything. */
   provider: ProviderId;
-  anthropicModel: string;
-  openaiModel: string;
-  ollamaModel: string;
+  /** Chosen models per provider (missing = the provider's defaults). */
+  models: Partial<Record<ProviderId, ProviderModels>>;
+  /** Backups, in order, tried when the main AI can't answer (offline, out of credit, down). */
+  fallbacks: ProviderId[];
   /** Send quick, simple requests to a faster, cheaper model. */
   modelRouting: boolean;
-  anthropicFastModel: string;
-  openaiFastModel: string;
-  ollamaFastModel: string;
   ollamaHost: string;
   personality: Personality;
   customPersonality: string;
@@ -138,13 +144,9 @@ export interface Settings {
 export const defaultSettings: Settings = {
   onboarded: false,
   provider: "anthropic",
-  anthropicModel: "claude-sonnet-5-5",
-  openaiModel: "gpt-4.1-mini",
-  ollamaModel: "llama3.1",
+  models: {},
+  fallbacks: [],
   modelRouting: true,
-  anthropicFastModel: "claude-haiku-5-5",
-  openaiFastModel: "gpt-4.1-nano",
-  ollamaFastModel: "",
   ollamaHost: "http://localhost:11434",
   personality: "casual",
   addressAs: "sir",
@@ -217,7 +219,7 @@ export const useSettings = create<SettingsStore>((set, get) => ({
       const s = await getStore();
       const saved = (await s.get<Partial<Settings>>("settings")) ?? {};
       // Merge onto defaults so new keys added in updates get sane values.
-      const merged = { ...defaultSettings, ...saved };
+      const merged = migrateAi({ ...defaultSettings, ...saved }, saved as Record<string, unknown>);
       // 1.1.5 ships a built-in "hey BEV" model: move existing installs that
       // were on speech recognition (the old default) onto it, once.
       if (Object.keys(saved).length && !("builtInWakeModel" in saved)) merged.wakeEngine = "on-device";
@@ -271,4 +273,22 @@ export function toolAllowed(name: string): boolean {
 /** When on, the user's request itself counts as approval for sensitive tools. */
 export function autoApproveOn(): boolean {
   return useSettings.getState().settings.autoApproveActions === true;
+}
+
+/**
+ * Before 1.6 each provider had its own model fields (anthropicModel,
+ * openaiFastModel…). Carry those choices into `models`, once.
+ */
+export function migrateAi(s: Settings, saved: Record<string, unknown>): Settings {
+  if (saved.models) return s;
+  const models: Partial<Record<ProviderId, ProviderModels>> = {};
+  const str = (k: string) => (typeof saved[k] === "string" ? (saved[k] as string) : undefined);
+  for (const p of ["anthropic", "openai", "ollama"] as const) {
+    const model = str(`${p}Model`);
+    const fast = str(`${p}FastModel`);
+    if (model !== undefined || fast !== undefined) models[p] = { model: model ?? "", fast: fast ?? "" };
+  }
+  const out = { ...s, models } as Settings & Record<string, unknown>;
+  for (const k of ["anthropicModel", "openaiModel", "ollamaModel", "anthropicFastModel", "openaiFastModel", "ollamaFastModel"]) delete out[k];
+  return out;
 }

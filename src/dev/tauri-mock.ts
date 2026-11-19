@@ -5,7 +5,7 @@
  */
 const store = new Map<string, unknown>();
 const params = new URLSearchParams(location.search);
-store.set("settings.json:settings", { onboarded: params.get("onboarding") !== "1", userName: "Charlie", provider: "anthropic" });
+store.set("settings.json:settings", { onboarded: params.get("onboarding") !== "1", userName: "Charlie", provider: "anthropic", models: { anthropic: { model: "claude-sonnet-5-5", fast: "claude-haiku-5-5" } }, fallbacks: ["openai", "gemini"] });
 
 const now = Math.floor(Date.now() / 1000);
 const data: Record<string, unknown> = {
@@ -71,6 +71,7 @@ w.__TAURI_INTERNALS__ = {
     if (cmd === "plugin:store|set") return null;
     if (cmd.startsWith("plugin:event|")) return cb++;
     if (cmd === "plugin:app|version") return "1.1.17";
+    if (cmd === "get_secret") return ["anthropic_api_key", "openai_api_key", "gemini_api_key"].includes(String(args.name)) ? "sk-preview" : null;
     if (cmd in data) return structuredClone(data[cmd]);
     return null;
   },

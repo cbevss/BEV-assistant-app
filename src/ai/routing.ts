@@ -5,6 +5,7 @@
  */
 import type { Settings } from "@/state/settings";
 import type { AiMessage } from "./types";
+import { modelsFor } from "./factory";
 
 export type Workload = "quick" | "complex" | "vision";
 
@@ -27,8 +28,7 @@ export function classify(userText: string, turn: readonly AiMessage[], opts: { h
 /** The model to use, or undefined for the provider's default (main) model. */
 export function modelFor(s: Settings, w: Workload): string | undefined {
   if (!s.modelRouting || w !== "quick") return undefined;
-  const fast = s.provider === "openai" ? s.openaiFastModel : s.provider === "ollama" ? s.ollamaFastModel : s.anthropicFastModel;
-  return fast?.trim() || undefined;
+  return modelsFor(s, s.provider).fast || undefined;
 }
 
 export const maxTokensFor = (w: Workload) => (w === "quick" ? 800 : 2048);

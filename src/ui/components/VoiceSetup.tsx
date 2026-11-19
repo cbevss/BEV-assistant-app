@@ -2,6 +2,7 @@
  * Microphone diagnosis, calibration and speech-recognition settings.
  * Everything shown is measured on this PC: no made-up numbers.
  */
+import { holdListening } from "@/voice/bootstrap";
 import { useEffect, useRef, useState } from "react";
 import { useSettings } from "@/state/settings";
 import { winMics, endpointProblems, matchEndpoint, type WinInput, type MicProblem } from "@/voice/mic";
@@ -120,6 +121,9 @@ export function Calibration() {
     setErr(null);
     const ctl = new AbortController();
     abort.current = ctl;
+    // BEV mustn't listen (or answer the test sentence) while the test has the mic.
+    const resume = holdListening();
+    ctl.signal.addEventListener("abort", resume);
     const opts = { deviceId: settings.micDeviceId || undefined, noiseSuppression: settings.noiseSuppression, echoCancellation: false };
     const meter = (c: Float32Array) => setLevel(dbfs(c));
     const eps = await winMics.list().catch(() => [] as WinInput[]);
@@ -172,6 +176,7 @@ export function Calibration() {
       setPhase({ step: "idle" });
     } finally {
       setLevel(-100);
+      resume();
     }
   };
 

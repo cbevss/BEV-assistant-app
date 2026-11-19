@@ -5,7 +5,7 @@
 import { useAssistant } from "@/state/assistant";
 import { useSettings } from "@/state/settings";
 import { Orchestrator } from "@/ai/orchestrator";
-import { makeProvider } from "@/ai/factory";
+import { makeAssistantProvider } from "@/ai/factory";
 
 let chatOrch: Orchestrator | null = null;
 let abort: AbortController | null = null;
@@ -13,7 +13,7 @@ let abort: AbortController | null = null;
 function orchestrator(): Orchestrator {
   const s = useSettings.getState().settings;
   if (!chatOrch) {
-    chatOrch = new Orchestrator(makeProvider(s), {
+    chatOrch = new Orchestrator(makeAssistantProvider(s), {
       onState: (st) => useAssistant.getState().setState(st),
       onAssistantText: () => {},
       onToolResult: (name, ok, result) => useAssistant.getState().pushMessage({ role: "tool", content: result, toolName: name, ok }),
@@ -21,7 +21,7 @@ function orchestrator(): Orchestrator {
       onPlan: (plan) => useAssistant.getState().setPlan(plan),
     });
   } else {
-    chatOrch.setProvider(makeProvider(s));
+    chatOrch.setProvider(makeAssistantProvider(s));
   }
   return chatOrch;
 }

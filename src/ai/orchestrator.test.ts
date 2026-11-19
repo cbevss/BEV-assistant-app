@@ -209,7 +209,7 @@ describe("model routing", () => {
     } as unknown as AiProvider;
     return { p, models };
   }
-  beforeEach(() => useSettings.setState((s) => ({ settings: { ...s.settings, provider: "anthropic", modelRouting: true, anthropicFastModel: "fast-model" } })));
+  beforeEach(() => useSettings.setState((s) => ({ settings: { ...s.settings, provider: "anthropic", modelRouting: true, models: { anthropic: { model: "", fast: "fast-model" } } } })));
 
   it("quick asks use the fast model, real tasks the main one", async () => {
     const { p, models } = recording();

@@ -4,7 +4,8 @@ import { useSettings, ProviderId } from "@/state/settings";
 import { native } from "@/lib/native";
 import { MicInput } from "@/voice/wakeword";
 import { WebSpeechSynthesizer } from "@/voice/webspeech";
-import { makeProvider, providerLabels, secretNameFor } from "@/ai/factory";
+import { makeProvider, secretNameFor } from "@/ai/factory";
+import { PROVIDERS, providerInfo } from "@/ai/catalog";
 import { Core } from "../components/Core";
 import { Button, TextInput, Select, StatusPill } from "../components/Form";
 
@@ -184,8 +185,11 @@ function ProviderStep({ provider, onProvider }: { provider: ProviderId; onProvid
         ariaLabel="Provider"
         value={provider}
         onChange={onProvider}
-        options={(["anthropic", "openai", "ollama"] as ProviderId[]).map((p) => ({ value: p, label: providerLabels[p] }))}
+        options={PROVIDERS.map((p) => ({ value: p.id, label: p.label }))}
       />
+      <p className="text-xs text-ink-3">
+        {providerInfo(provider).blurb} You can add more AIs as backups, and pick exact models, later in Settings → AI & models.
+      </p>
       {secretName ? (
         <div className="flex gap-2">
           <TextInput

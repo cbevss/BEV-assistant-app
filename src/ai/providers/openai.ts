@@ -1,51 +1,64 @@
 import { fetch } from "@tauri-apps/plugin-http";
 import { native } from "@/lib/native";
-import { AiImage, AiProvider, AiResponse, ChatRequest, ProviderError, ToolCall } from "../types";
+import { AiImage, AiProvider, AiResponse, ChatRequest, ProviderError, ToolCall, httpError } from "../types";
+import { providerInfo, type ProviderId, type ProviderInfo } from "../catalog";
 
 /**
- * OpenAI Chat Completions provider with function calling. Key is read from the
- * OS keyring (`openai_api_key`) per call and only sent to api.openai.com.
+ * Chat Completions provider with function calling, for OpenAI and every API
+ * that speaks the same dialect (Gemini, Grok, Groq, Mistral, DeepSeek,
+ * OpenRouter). The key is read from the OS keyring per call and only sent to
+ * that provider's own address.
  */
 export class OpenAiProvider implements AiProvider {
-  readonly id = "openai" as const;
-  readonly label = "OpenAI";
-  private model = "gpt-4.1-mini";
+  readonly id: ProviderId;
+  readonly label: string;
+  private info: ProviderInfo;
+  private model: string;
 
-  constructor(model?: string) {
-    if (model) this.model = model;
+  constructor(model?: string, id: ProviderId = "openai") {
+    this.info = providerInfo(id);
+    this.id = id;
+    this.label = this.info.label;
+    this.model = model || this.info.defaultModel;
   }
 
   async isConfigured(): Promise<boolean> {
-    return !!(await native.getSecret("openai_api_key").catch(() => null));
+    return !!this.info.secret && !!(await native.getSecret(this.info.secret).catch(() => null));
   }
 
   async chat(req: ChatRequest): Promise<AiResponse> {
-    const key = await native.getSecret("openai_api_key");
-    if (!key) throw new ProviderError("OpenAI API key not set");
+    const key = this.info.secret ? await native.getSecret(this.info.secret) : null;
+    if (!key) throw new ProviderError(`${this.label} API key not set`, false, "auth");
 
-    const res = await fetch("https://api.openai.com/v1/chat/completions", {
+    const tokenField = this.info.tokenParam ?? "max_tokens";
+    const res = await fetch(`${this.info.baseUrl}/chat/completions`, {
       method: "POST",
-      headers: { "content-type": "application/json", authorization: `Bearer ${key}` },
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${key}`,
+        // OpenRouter shows where requests come from on its dashboard.
+        ...(this.id === "openrouter" ? { "HTTP-Referer": "https://github.com/cbevss/BEV-assistant-app", "X-Title": "BEV" } : {}),
+      },
       body: JSON.stringify({
         model: req.model || this.model,
-        // max_completion_tokens works on every chat model; newer ones reject
-        // max_tokens. Temperature only when asked, as reasoning models refuse it.
-        max_completion_tokens: req.maxTokens ?? 1024,
+        // OpenAI's newer models only take max_completion_tokens; the others
+        // take max_tokens. Temperature only when asked (reasoning models refuse it).
+        [tokenField]: req.maxTokens ?? 1024,
         ...(req.temperature !== undefined ? { temperature: req.temperature } : {}),
         messages: toOpenAiMessages(req),
-        tools: req.tools.map((t) => ({
-          type: "function",
-          function: { name: t.name, description: t.description, parameters: t.parameters },
-        })),
+        ...(req.tools.length
+          ? { tools: req.tools.map((t) => ({ type: "function", function: { name: t.name, description: t.description, parameters: t.parameters } })) }
+          : {}),
       }),
       signal: req.signal,
     }).catch((e: unknown) => {
-      throw new ProviderError(`network: ${String(e)}`, true);
+      if (req.signal?.aborted) throw e;
+      throw new ProviderError(`${this.label}: couldn't connect (${String(e)})`, true, "network");
     });
 
     if (!res.ok) {
       const txt = await res.text().catch(() => "");
-      throw new ProviderError(`openai ${res.status}: ${txt}`, res.status >= 500 || res.status === 429);
+      throw httpError(this.label, res.status, txt);
     }
 
     const data = (await res.json()) as OpenAiResponse;
