@@ -34,6 +34,8 @@ const REPLAYABLE = new Set([
 const OBSERVE = new Set([
   "list_folder",
   "find_files",
+  "search_documents",
+  "read_document",
   "read_app_controls",
   "read_screen_text",
   "look_at_screen",

@@ -57,6 +57,8 @@ export interface Settings {
   streamReplies: boolean;
   /** Remember the steps of hands-on tasks and repeat them next time. */
   learnTasks: boolean;
+  /** "Ask about your documents": folders BEV reads, and when it last read them. */
+  documents: { folders: string[]; lastIndexed?: number };
   ollamaHost: string;
   personality: Personality;
   customPersonality: string;
@@ -153,6 +155,7 @@ export const defaultSettings: Settings = {
   modelRouting: true,
   streamReplies: true,
   learnTasks: true,
+  documents: { folders: [] },
   ollamaHost: "http://localhost:11434",
   personality: "casual",
   addressAs: "sir",

@@ -3,7 +3,8 @@ import {
   Mouse,
   History,
   AppWindow,
-  FolderOpen, Brain, Calendar, Cpu, Globe, GitBranch, House, Keyboard, ListChecks, Mail, MessageCircle, MousePointerClick, Music, Puzzle, ScanEye, Settings2, Stethoscope, Volume2, Wrench, type LucideIcon,
+  FolderOpen,
+  FileText, Brain, Calendar, Cpu, Globe, GitBranch, House, Keyboard, ListChecks, Mail, MessageCircle, MousePointerClick, Music, Puzzle, ScanEye, Settings2, Stethoscope, Volume2, Wrench, type LucideIcon,
 } from "lucide-react";
 
 const LABELS: Record<string, string> = {
@@ -22,6 +23,8 @@ const LABELS: Record<string, string> = {
   delete_files: "Sent to the Recycle Bin",
   tidy_folder: "Tidied a folder",
   undo_file_changes: "Undid file changes",
+  search_documents: "Searched your documents",
+  read_document: "Read a document",
   open_website: "Opened a website",
   web_search: "Searched the web",
   read_web_page: "Read a web page",
@@ -90,6 +93,7 @@ export function toolLabel(name: string): string {
 
 export function toolIcon(name: string): LucideIcon {
   if (/^(launch_app|close_app|focus_window|find_apps|refresh_app_list|launch_game|open_path|list_windows)$/.test(name)) return AppWindow;
+  if (/^(search_documents|read_document)$/.test(name)) return FileText;
   if (/^(list_folder|find_files|move_files|rename_file|make_folder|delete_files|tidy_folder|undo_file_changes)$/.test(name)) return FolderOpen;
   if (/^(web_search|read_web_page|open_website)$/.test(name)) return Globe;
   if (name === "look_back") return History;
