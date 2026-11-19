@@ -1,4 +1,5 @@
 import { fetch } from "@tauri-apps/plugin-http";
+import { sse } from "./stream";
 import { native } from "@/lib/native";
 import {
   AiImage,
@@ -45,6 +46,7 @@ export class AnthropicProvider implements AiProvider {
         input_schema: t.parameters,
       })),
       messages: toAnthropicMessages(req.messages),
+      ...(req.onText ? { stream: true } : {}),
     };
 
     const res = await fetch("https://api.anthropic.com/v1/messages", {
@@ -69,6 +71,8 @@ export class AnthropicProvider implements AiProvider {
       throw httpError("Anthropic", res.status, txt);
     }
 
+    if (req.onText) return readAnthropicStream(res, req.onText, req.signal);
+
     const data = (await res.json()) as AnthropicResponse;
     let text = "";
     const toolCalls: ToolCall[] = [];
@@ -79,6 +83,54 @@ export class AnthropicProvider implements AiProvider {
       }
     }
     return { text: text.trim(), toolCalls };
+  }
+}
+
+/** Anthropic's event stream: text deltas and tool-use blocks built from JSON pieces. */
+export async function readAnthropicStream(res: Response, onText: (d: string) => void, signal?: AbortSignal): Promise<AiResponse> {
+  let text = "";
+  const blocks = new Map<number, { id: string; name: string; json: string }>();
+  for await (const ev of sse(res.body, signal)) {
+    if (!ev.data || ev.data === "[DONE]") continue;
+    let d: {
+      type?: string;
+      index?: number;
+      content_block?: { type: string; id?: string; name?: string };
+      delta?: { type?: string; text?: string; partial_json?: string };
+      error?: { type?: string; message?: string };
+    };
+    try {
+      d = JSON.parse(ev.data);
+    } catch {
+      continue;
+    }
+    if (d.type === "error") {
+      const kind = d.error?.type === "overloaded_error" ? 529 : d.error?.type === "rate_limit_error" ? 429 : 500;
+      throw httpError("Anthropic", kind, d.error?.message ?? "stream error");
+    }
+    if (d.type === "content_block_start" && d.content_block?.type === "tool_use") {
+      blocks.set(d.index ?? 0, { id: d.content_block.id ?? "", name: d.content_block.name ?? "", json: "" });
+    } else if (d.type === "content_block_delta") {
+      if (d.delta?.type === "text_delta" && d.delta.text) {
+        text += d.delta.text;
+        onText(d.delta.text);
+      } else if (d.delta?.type === "input_json_delta") {
+        const b = blocks.get(d.index ?? 0);
+        if (b) b.json += d.delta.partial_json ?? "";
+      }
+    }
+  }
+  const toolCalls: ToolCall[] = [...blocks.values()].map((b) => ({ id: b.id, name: b.name, args: parseArgs(b.json) }));
+  return { text: text.trim(), toolCalls };
+}
+
+function parseArgs(json: string): Record<string, unknown> {
+  if (!json.trim()) return {};
+  try {
+    const v = JSON.parse(json);
+    return v && typeof v === "object" ? v : {};
+  } catch {
+    return {};
   }
 }
 

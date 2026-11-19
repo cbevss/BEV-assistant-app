@@ -71,12 +71,16 @@ export class FallbackProvider implements AiProvider {
       if (i > 0 && !(await provider.isConfigured().catch(() => false))) continue;
       // Quick replies use each provider's own fast model.
       const model = i === 0 ? req.model : quick ? fast || undefined : undefined;
+      // Once a reply has started streaming (and maybe being spoken), switching
+      // AI would start it again from the top: only fall back before that.
+      let streamed = false;
+      const onText = req.onText ? (d: string) => ((streamed = true), req.onText!(d)) : undefined;
       try {
-        const r = await this.attempt(provider, { ...req, model });
+        const r = await this.attempt(provider, { ...req, model, onText }, () => streamed);
         useAiStatus.setState({ answeredBy: provider.id, backupReason: i === 0 ? null : `${providerInfo(this.chain[0].provider.id).label}: ${reasonFor(firstError)}`, at: Date.now() });
         return r;
       } catch (e) {
-        if (req.signal?.aborted) throw e;
+        if (req.signal?.aborted || streamed) throw e;
         firstError ??= e;
         if (!shouldFallBack(e)) throw e;
       }
@@ -85,12 +89,12 @@ export class FallbackProvider implements AiProvider {
   }
 
   /** One provider: if its fast model is the problem, try its main model before giving up on it. */
-  private async attempt(p: AiProvider, req: ChatRequest): Promise<AiResponse> {
+  private async attempt(p: AiProvider, req: ChatRequest, streamed: () => boolean = () => false): Promise<AiResponse> {
     try {
       return await p.chat(req);
     } catch (e) {
       const fastModelProblem = req.model && e instanceof ProviderError && (e.kind === "unavailable" || e.kind === "request");
-      if (!fastModelProblem || req.signal?.aborted) throw e;
+      if (!fastModelProblem || req.signal?.aborted || streamed()) throw e;
       return p.chat({ ...req, model: undefined, maxTokens: Math.max(req.maxTokens ?? 0, 2048) });
     }
   }

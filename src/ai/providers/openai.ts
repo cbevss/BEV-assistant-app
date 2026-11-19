@@ -1,4 +1,5 @@
 import { fetch } from "@tauri-apps/plugin-http";
+import { sse } from "./stream";
 import { native } from "@/lib/native";
 import { AiImage, AiProvider, AiResponse, ChatRequest, ProviderError, ToolCall, httpError } from "../types";
 import { providerInfo, type ProviderId, type ProviderInfo } from "../catalog";
@@ -49,6 +50,7 @@ export class OpenAiProvider implements AiProvider {
         ...(req.tools.length
           ? { tools: req.tools.map((t) => ({ type: "function", function: { name: t.name, description: t.description, parameters: t.parameters } })) }
           : {}),
+        ...(req.onText ? { stream: true } : {}),
       }),
       signal: req.signal,
     }).catch((e: unknown) => {
@@ -60,6 +62,8 @@ export class OpenAiProvider implements AiProvider {
       const txt = await res.text().catch(() => "");
       throw httpError(this.label, res.status, txt);
     }
+
+    if (req.onText) return readOpenAiStream(res, req.onText, req.signal, this.label);
 
     const data = (await res.json()) as OpenAiResponse;
     const msg = data.choices?.[0]?.message;
@@ -135,4 +139,40 @@ interface OpenAiResponse {
       tool_calls?: Array<{ id: string; function: { name: string; arguments: string } }>;
     };
   }>;
+}
+
+/** Chat Completions stream: content deltas, and tool calls assembled by index. */
+export async function readOpenAiStream(res: Response, onText: (d: string) => void, signal: AbortSignal | undefined, label: string): Promise<AiResponse> {
+  let text = "";
+  const calls = new Map<number, { id: string; name: string; args: string }>();
+  for await (const ev of sse(res.body, signal)) {
+    if (!ev.data || ev.data === "[DONE]") continue;
+    let d: {
+      choices?: Array<{ delta?: { content?: string | null; tool_calls?: Array<{ index?: number; id?: string; function?: { name?: string; arguments?: string } }> } }>;
+      error?: { message?: string; code?: number | string };
+    };
+    try {
+      d = JSON.parse(ev.data);
+    } catch {
+      continue;
+    }
+    if (d.error) throw httpError(label, Number(d.error.code) || 500, d.error.message ?? "stream error");
+    const delta = d.choices?.[0]?.delta;
+    if (delta?.content) {
+      text += delta.content;
+      onText(delta.content);
+    }
+    for (const tc of delta?.tool_calls ?? []) {
+      const i = tc.index ?? 0;
+      const c = calls.get(i) ?? { id: "", name: "", args: "" };
+      if (tc.id) c.id = tc.id;
+      if (tc.function?.name) c.name += tc.function.name;
+      if (tc.function?.arguments) c.args += tc.function.arguments;
+      calls.set(i, c);
+    }
+  }
+  const toolCalls: ToolCall[] = [...calls.entries()]
+    .sort((a, b) => a[0] - b[0])
+    .map(([i, c]) => ({ id: c.id || `call_${i}`, name: c.name, args: safeJson(c.args) }));
+  return { text: text.trim(), toolCalls };
 }

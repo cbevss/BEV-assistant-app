@@ -22,6 +22,7 @@ import type { SpeechRecognizer } from "./types";
 import { WhisperRecognizer } from "./stt/whisper";
 import { effectiveMic } from "./mic";
 import { listenForBargeIn } from "./bargein";
+import { SpeechStream } from "./speechStream";
 import { followUpPlan, type FollowUpPlan } from "./turns";
 import { isForBev } from "./addressee";
 
@@ -76,7 +77,14 @@ export class VoiceController {
 
   constructor() {
     this.orchestrator = new Orchestrator(makeAssistantProvider(settings()), {
-      onState: (s) => this.setState(s),
+      // While a streamed reply is being spoken, keep showing "speaking"
+      // rather than flicking back to "thinking" as the model carries on.
+      onState: (s) => {
+        if (this.liveSpeech?.speakingNow && s === "thinking") return;
+        this.setState(s);
+      },
+      onTextDelta: (d) => this.liveSpeech?.push(d),
+      onTextEnd: () => this.liveSpeech?.flush(),
       onAssistantText: (t) => this.pushAssistant(t),
       onToolResult: (name, ok, result) =>
         useAssistant.getState().pushMessage({ role: "tool", content: result, toolName: name, ok }),
@@ -259,6 +267,8 @@ export class VoiceController {
   }
 
   private held = 0;
+  /** The reply being spoken while it's written (streaming), if any. */
+  private liveSpeech: SpeechStream | null = null;
 
   /**
    * Pause all listening (wake word and conversation) while something else
@@ -424,41 +434,82 @@ export class VoiceController {
         // run it directly — instant and offline, no AI round-trip.
         const routine = matchRoutine(utterance, useRoutines.getState().routines);
         let reply: string;
-        if (routine) {
-          this.setState("executing", `Running ${routine.name}`);
-          const report = await runRoutine(routine, { requestApproval: (d) => this.approve(d) });
-          useRoutines.getState().markRun(routine.id);
-          reply = summariseRun(report);
-          useAssistant.getState().pushMessage({ role: "assistant", content: reply });
-        } else {
-          reply = await this.orchestrator.send(utterance, this.abort.signal);
-        }
-
-        let interruptedTurn = false;
-        if (reply) {
-          this.setState("speaking");
-          // Barge-in: talking over BEV stops it and goes straight to listening.
-          const barge = settings().bargeIn ? new AbortController() : null;
-          let interrupted = false;
-          const watching = barge
-            ? listenForBargeIn({ deviceId: this.mic.deviceId || undefined, noiseSuppression: settings().noiseSuppression }, barge.signal).then((hit) => {
-                if (hit) {
-                  interrupted = true;
-                  this.tts.cancel();
-                }
-              })
-            : null;
-          try {
-            await this.tts.speak(reply, { signal: this.abort.signal, onLevel: (l) => this.setAudio(l) });
-          } catch (e) {
-            if (!interrupted) throw e;
-          } finally {
-            barge?.abort();
-            await watching;
+        // Barge-in: talking over BEV stops it and goes straight to listening.
+        let interrupted = false;
+        let barge: AbortController | null = null;
+        let watching: Promise<void> | null = null;
+        // The run gets its own signal, so talking over BEV can stop the
+        // reply without ending the whole conversation.
+        const run = new AbortController();
+        const stopRun = () => run.abort();
+        this.abort.signal.addEventListener("abort", stopRun);
+        let speech: SpeechStream | null = null;
+        const startBarge = () => {
+          if (barge || !settings().bargeIn) return;
+          barge = new AbortController();
+          watching = listenForBargeIn({ deviceId: this.mic.deviceId || undefined, noiseSuppression: settings().noiseSuppression }, barge.signal).then((hit) => {
+            if (!hit) return;
+            interrupted = true;
+            speech?.cancel();
+            this.tts.cancel();
+            run.abort();
+          });
+        };
+        try {
+          if (routine) {
+            this.setState("executing", `Running ${routine.name}`);
+            const report = await runRoutine(routine, { requestApproval: (d) => this.approve(d) });
+            useRoutines.getState().markRun(routine.id);
+            reply = summariseRun(report);
+            useAssistant.getState().pushMessage({ role: "assistant", content: reply });
+          } else {
+            // Speak each sentence as soon as it's written.
+            if (settings().streamReplies) {
+              speech = new SpeechStream(this.tts, {
+                signal: run.signal,
+                onLevel: (l) => this.setAudio(l),
+                onFirstSpeech: () => {
+                  this.setState("speaking");
+                  startBarge();
+                },
+              });
+              this.liveSpeech = speech;
+            }
+            try {
+              reply = await this.orchestrator.send(utterance, run.signal);
+            } catch (e) {
+              // Talked over mid-reply: keep what was said and listen.
+              if (interrupted && e instanceof DOMException && e.name === "AbortError") reply = speech?.text ?? "";
+              else throw e;
+            } finally {
+              this.liveSpeech = null;
+            }
           }
-          if (!interrupted) await pause(ECHO_GAP_MS);
-          interruptedTurn = interrupted;
+
+          if (speech?.started) {
+            speech.end();
+            try {
+              await speech.done();
+            } catch (e) {
+              if (!interrupted) throw e;
+            }
+          } else if (reply && !interrupted) {
+            // Not streamed (a routine, or a provider that sent it all at once).
+            this.setState("speaking");
+            startBarge();
+            try {
+              await this.tts.speak(reply, { signal: run.signal, onLevel: (l) => this.setAudio(l) });
+            } catch (e) {
+              if (!interrupted) throw e;
+            }
+          }
+        } finally {
+          this.abort.signal.removeEventListener("abort", stopRun);
+          (barge as AbortController | null)?.abort();
+          await watching;
         }
+        if (reply && !interrupted) await pause(ECHO_GAP_MS);
+        const interruptedTurn = interrupted;
         // Follow-up without repeating the wake word, if this reply calls for one.
         lastReply = reply;
         followUp = followUpPlan(reply, settings());
