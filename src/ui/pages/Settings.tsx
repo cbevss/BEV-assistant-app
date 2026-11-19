@@ -105,6 +105,9 @@ export function Settings({ part = "general" }: { part?: "general" | "apps" | "ad
         <Field label="Gaming quiet mode" hint="Minimal replies while you game. BEV can also toggle this by voice.">
           <Toggle label="Quiet mode" checked={settings.gamingQuietMode} onChange={(gamingQuietMode) => update({ gamingQuietMode })} />
         </Field>
+        <Field label="Go quiet when a game starts" hint="While a Steam game or any exclusive full-screen game is running, BEV keeps replies short, skips the spoken “Yeah?” and holds back pop-ups, then goes back to normal when you stop.">
+          <Toggle label="Automatic gaming mode" checked={settings.autoGamingMode} onChange={(autoGamingMode) => update({ autoGamingMode })} />
+        </Field>
         <Field
           label="Popup during fullscreen games"
           hint="The orb never takes focus from your game. Automatic shows it over borderless and windowed games, and hides it over exclusive fullscreen, where anything drawn on top can knock a game out of fullscreen. BEV still listens and talks either way."

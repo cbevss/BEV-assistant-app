@@ -1,6 +1,6 @@
 [package]
 name = "bev"
-version = "1.10.0"
+version = "1.11.0"
 description = "BEV — futuristic AI voice assistant for Windows 11"
 authors = ["cbevss"]
 edition = "2021"
@@ -45,6 +45,8 @@ tauri-plugin-dialog = "2"
 windows = { version = "0.58", features = [
   "Win32_Foundation",
   "Win32_Graphics_Gdi",
+  "Win32_Graphics_Dxgi",
+  "Win32_Graphics_Dxgi_Common",
   "Win32_Devices_FunctionDiscovery",
   "Win32_Media_Audio",
   "Win32_Media_Audio_Endpoints",

@@ -6,6 +6,7 @@ import { useSettings } from "@/state/settings";
 import { useRoutines } from "@/routines/store";
 import { startScheduler } from "@/routines/scheduler";
 import { needsReindex, indexDocuments } from "@/lib/documents";
+import { startGamingWatch, isQuiet } from "@/lib/gaming";
 import { applyAppearance } from "@/lib/appearance";
 import { Dashboard } from "./pages/Dashboard";
 import { Assistant } from "./pages/Assistant";
@@ -86,6 +87,7 @@ export function App() {
 
       // Fire scheduled routines on their own, even while minimised to tray.
       startScheduler();
+      startGamingWatch();
 
       // Catch up on documents changed since BEV last read them (in the background).
       {
@@ -111,7 +113,7 @@ export function App() {
       // Proactive: alerts wait while a game is fullscreen or quiet mode is on.
       configureNotices({
         notify: (t, b) => notify(t, b),
-        holdBack: async () => useSettings.getState().settings.gamingQuietMode || (await native.fullscreenState().catch(() => "none")) !== "none",
+        holdBack: async () => isQuiet() || (await native.fullscreenState().catch(() => "none")) !== "none",
       });
       // CPU/RAM alerts, crash/network/disk watchers and the daily briefing.
       startMonitor();

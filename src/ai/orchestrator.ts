@@ -1,4 +1,5 @@
 import { native } from "@/lib/native";
+import { useGaming } from "@/lib/gaming";
 import { controlCache } from "@/lib/control";
 import { describeSteps, exactMatch, learn, markReplay, similarTask, stepsFromTurn, type LearnedTask, type TurnStep } from "./learn";
 import { runRoutine } from "@/routines/engine";
@@ -81,7 +82,7 @@ async function currentSystemPrompt(userText = ""): Promise<string> {
     // Screen awareness is governed by the look_at_screen permission.
     toolAllowed("look_at_screen") ? native.foregroundWindow().catch(() => null) : Promise.resolve(null),
   ]);
-  return [buildSystemPrompt(s, memories, foregroundLabel(fg)), noticesForPrompt()].filter(Boolean).join("\n\n");
+  return [buildSystemPrompt(s, memories, foregroundLabel(fg), useGaming.getState().game?.name ?? null), noticesForPrompt()].filter(Boolean).join("\n\n");
 }
 
 /** "Discord — #general (Discord.exe)", or "" for BEV itself / nothing useful. */

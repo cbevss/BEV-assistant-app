@@ -4,6 +4,7 @@
  * then says it if it isn't busy, notifies, and puts it in Chat.
  */
 import { useSettings } from "@/state/settings";
+import { isQuiet } from "@/lib/gaming";
 import { startBackgroundTask, useBackground } from "@/ai/background";
 import { noticesForPrompt, raise } from "./notices";
 
@@ -75,7 +76,7 @@ export function startBriefings(deps: BriefingDeps) {
       if (t.status !== "done" || !t.result) return;
       deps.toChat(t.result);
       raise("briefing", "Your briefing", t.result.slice(0, 220), { key: `briefing:${day(new Date())}` });
-      if (useSettings.getState().settings.briefingSpoken && !useSettings.getState().settings.gamingQuietMode) deps.announce(t.result).catch(() => {});
+      if (useSettings.getState().settings.briefingSpoken && !isQuiet()) deps.announce(t.result).catch(() => {});
     });
   }, 60_000);
 }

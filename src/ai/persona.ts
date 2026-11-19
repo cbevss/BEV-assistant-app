@@ -1,4 +1,5 @@
 import type { Personality, Settings } from "@/state/settings";
+import { quietNow } from "@/lib/gaming";
 
 const BASE = `You are BEV (pronounced "Bev", rhymes with "rev"), an AI assistant running on the user's Windows 11 PC.
 You are an AI, not a human — never pretend otherwise.
@@ -52,14 +53,17 @@ const TROUBLESHOOT = `When something on the PC is wrong (slow, crashing, no inte
 export function buildSystemPrompt(
   s: Settings,
   memories: { key: string; value: string }[] = [],
-  foreground = ""
+  foreground = "",
+  /** The game being played right now, if any. */
+  game: string | null = null
 ): string {
+  const gaming = game !== null;
   const style =
     s.personality === "custom" && s.customPersonality.trim()
       ? `Tone: ${s.customPersonality.trim()}`
       : STYLES[s.personality === "custom" ? "casual" : s.personality];
-  const quiet = s.gamingQuietMode
-    ? "The user is gaming: answer in the fewest words possible and avoid follow-up questions."
+  const quiet = quietNow(s, gaming)
+    ? `The user is gaming${game ? ` (playing ${game})` : ""}: answer in the fewest words possible and avoid follow-up questions.`
     : "";
   const mem = memories.length
     ? `Things the user asked you to remember (user-approved preferences, with #ids):\n${memories
