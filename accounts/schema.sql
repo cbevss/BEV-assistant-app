@@ -65,3 +65,23 @@ CREATE TABLE IF NOT EXISTS counters (
   user_id TEXT PRIMARY KEY,
   seq INTEGER NOT NULL
 );
+
+-- Phone control: messages between the user's phone and their PC, encrypted
+-- on the devices with a key derived from the account's data key. The server
+-- only relays ciphertext. dir is 'to_pc' or 'to_phone'; big marks screenshots.
+CREATE TABLE IF NOT EXISTS phone_messages (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id TEXT NOT NULL,
+  dir TEXT NOT NULL,
+  iv TEXT NOT NULL,
+  ct TEXT NOT NULL,
+  big INTEGER NOT NULL DEFAULT 0,
+  created_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS phone_messages_user ON phone_messages(user_id, dir, id);
+
+-- When the user's PC last checked for phone messages (shown on the phone).
+CREATE TABLE IF NOT EXISTS phone_presence (
+  user_id TEXT PRIMARY KEY,
+  last_seen INTEGER NOT NULL
+);

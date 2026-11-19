@@ -85,6 +85,14 @@ export const localData: LocalData = {
   },
 };
 
+/** For phone control: the session, the data key and who's signed in (null unless ready). */
+export async function accountSecrets(): Promise<{ token: string; dek: Uint8Array<ArrayBuffer>; userId: string } | null> {
+  const s = useAccount.getState();
+  if (s.status !== "ready" || !s.user) return null;
+  const [t, raw] = await Promise.all([token(), native.getSecret(DATA_KEY).catch(() => null)]);
+  return t && raw ? { token: t, dek: fromB64(raw), userId: s.user.id } : null;
+}
+
 async function token(): Promise<string | null> {
   return native.getSecret(SESSION).catch(() => null);
 }

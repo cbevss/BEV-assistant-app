@@ -129,6 +129,8 @@ export interface Settings {
   gamingQuietMode: boolean;
   /** Go quiet by itself while a game is running. */
   autoGamingMode: boolean;
+  /** Take requests from the phone page (needs a signed-in account). */
+  phoneControl: boolean;
   /** Spending limits (USD, null = none) and custom prices per model (USD per million tokens). */
   spending: { dailyUsd: number | null; monthlyUsd: number | null; prices: Record<string, { input: number; output: number }> };
   proactiveMonitoring: boolean;
@@ -202,6 +204,7 @@ export const defaultSettings: Settings = {
   listenOnStartup: true,
   gamingQuietMode: false,
   autoGamingMode: true,
+  phoneControl: false,
   spending: { dailyUsd: null, monthlyUsd: null, prices: {} },
   proactiveMonitoring: false,
   watch: { crashes: true, network: true, disk: true },

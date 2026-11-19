@@ -36,5 +36,14 @@
 - Document text is untrusted: while it's in the conversation, sensitive actions need your explicit approval.
 - Memory → Documents → Forget (or Settings → Advanced → Your data) deletes the index; your files are never changed.
 
+## Phone control
+
+- Off by default (Settings → Account → Phone control). The phone page is served by the accounts service at `/phone`; you sign in with the same Discord account and unlock with your passphrase.
+- Messages between phone and PC are AES-GCM encrypted with a key derived (HKDF) from your account's data key, bound to the direction and your account. The service relays ciphertext it can't read, change or replay into the other direction. The phone keeps only a non-extractable key in the browser, never the passphrase.
+- The PC drops messages that are older than 10 minutes, repeated, or of an unknown kind, so a replayed or forged message does nothing.
+- Requests from the phone run without screen, mouse or keyboard tools. Anything that needs approval is sent to the phone and must be confirmed twice there ("Allow", then "Yes, do it"); no answer in 5 minutes means no. Auto-approve doesn't apply to phone requests.
+- The phone sees what BEV does on the PC (requests, steps, replies) while phone control is on, except in privacy mode. Screenshots are only taken when you tap "Show my screen", and the PC shows a notice each time.
+- The relay keeps at most a day of messages (300 per account, the newest 2 screenshots); deleting your account deletes them.
+
 ## Not present (by design)
 No remote-access, no telemetry/analytics, no auto-updates that run code without the user, no bypassing Windows security. Screen awareness and file tools ship **after** their explicit permission UI.
