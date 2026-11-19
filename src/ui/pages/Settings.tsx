@@ -5,6 +5,7 @@ import { useSettings, Personality } from "@/state/settings";
 import { PageHeader, Section, Field, Select, Slider, Toggle, TextArea, TextInput, Button } from "../components/Form";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { AppsIndex } from "../components/AppsIndex";
+import { DataControls } from "../components/DataControls";
 import { applyAppearance } from "@/lib/appearance";
 
 export function Settings({ part = "general" }: { part?: "general" | "apps" | "advanced" }) {
@@ -159,7 +160,7 @@ export function Settings({ part = "general" }: { part?: "general" | "apps" | "ad
       )}
       {part === "advanced" && (
         <>
-      <PageHeader title="Advanced" subtitle="Version information and resetting BEV." />
+      <PageHeader title="Advanced" subtitle="Version information, your data, and resetting BEV." />
       <Section title="Diagnostics">
         <Field label="Version">
           <span className="font-mono text-sm text-ink-2">BEV {version}</span>
@@ -170,6 +171,7 @@ export function Settings({ part = "general" }: { part?: "general" | "apps" | "ad
           </Button>
         </Field>
       </Section>
+      <DataControls />
         </>
       )}
 

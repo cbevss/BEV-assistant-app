@@ -104,6 +104,10 @@ export const native = {
     invoke<void>("log_action", { tool, args, result, ok }),
   actionLogList: (limit?: number) => invoke<ActionLogRow[]>("action_log_list", { limit }),
   actionLogClear: () => invoke<void>("action_log_clear"),
+  dataCounts: () => invoke<{ memories: number; notes: number; conversation_messages: number; activity: number }>("data_counts"),
+  memoriesClear: () => invoke<void>("memories_clear"),
+  notesClear: () => invoke<void>("notes_clear"),
+  activityClear: () => invoke<void>("activity_clear"),
 
   // System actions
   lockPc: () => invoke<void>("lock_pc"),
@@ -113,7 +117,7 @@ export const native = {
     invoke<ScreenCapture>("capture_screen", { target }),
   foregroundWindow: () => invoke<ForegroundWindow | null>("foreground_window"),
   // Screen replay: the last few seconds of the display the mouse is on, in RAM only.
-  replayConfigure: (enabled: boolean, keepSecs?: number) => invoke<ReplayStatus>("replay_configure", { enabled, keepSecs }),
+  replayConfigure: (enabled: boolean) => invoke<ReplayStatus>("replay_configure", { enabled }),
   replayStatus: () => invoke<ReplayStatus>("replay_status"),
   replayClip: (seconds: number, maxFrames?: number) => invoke<ReplayClip>("replay_clip", { seconds, maxFrames }),
   takeScreenshot: (monitor?: number) => invoke<string>("take_screenshot", { monitor }),

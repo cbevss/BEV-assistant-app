@@ -229,3 +229,22 @@ html[data-reduced-motion="true"] *::after {
 }
 .boot-in { animation: boot-in 420ms cubic-bezier(0.2, 0.8, 0.2, 1) both; }
 .boot-fade { animation: boot-fade 500ms ease-out both; }
+
+/* The main screen's emblem keeps moving while BEV rests: a scan circling the
+ * bezel every 6s and a slow pulse at the centre (the rings turn via orbit). */
+@keyframes core-scan-loop {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+@keyframes core-pulse {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.35); opacity: 0.75; }
+}
+.core-scan-loop,
+.core-pulse {
+  transform-box: view-box;
+  transform-origin: 50px 50px;
+  animation-iteration-count: infinite;
+}
+.core-scan-loop { animation: core-scan-loop 6s linear infinite; }
+.core-pulse { animation: core-pulse 3.2s ease-in-out infinite; }

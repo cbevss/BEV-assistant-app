@@ -55,8 +55,8 @@ export function App() {
   // screen, and privacy mode is off. Turning it off clears what was kept.
   const replayOn = loaded && settings.screenReplay && settings.toolPermissions.look_back !== false && !privacyMode;
   useEffect(() => {
-    native.replayConfigure(replayOn, settings.screenReplaySecs).catch(() => {});
-  }, [replayOn, settings.screenReplaySecs]);
+    native.replayConfigure(replayOn).catch(() => {});
+  }, [replayOn]);
 
   // Ctrl+K anywhere opens search and commands.
   useEffect(() => {

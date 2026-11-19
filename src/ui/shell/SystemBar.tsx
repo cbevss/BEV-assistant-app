@@ -44,7 +44,6 @@ const Cell = ({ k, v, tone, title }: { k: string; v: string; tone?: "accent" | "
 export function SystemBar() {
   const { state, micEnabled, privacyMode } = useAssistant();
   const replay = useSettings((x) => x.settings.screenReplay && x.settings.toolPermissions.look_back !== false && !privacyMode);
-  const replaySecs = useSettings((x) => x.settings.screenReplaySecs);
   const bg = useBackground((b) => b.tasks.filter((t) => t.status === "running").length);
   const s = useStats();
   const now = useClock();
@@ -66,7 +65,7 @@ export function SystemBar() {
         </>
       )}
       {bg > 0 && <Cell k="TASKS" v={String(bg)} tone="accent" />}
-      {replay && <Cell k="REPLAY" v={`${replaySecs}S`} tone="accent" title={`Screen replay is keeping the last ${replaySecs} seconds of the screen your mouse is on, in memory only`} />}
+      {replay && <Cell k="REPLAY" v="ON" tone="accent" title="Screen replay is keeping the last 15 minutes of the screen your mouse is on, in memory only" />}
       <span className="flex-1" />
       <Cell k="" v={now.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", second: "2-digit" })} />
     </footer>

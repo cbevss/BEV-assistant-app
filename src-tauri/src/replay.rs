@@ -1,11 +1,15 @@
-//! Screen replay: when the user turns it on, BEV keeps the last few seconds of
-//! the display the mouse is on, so they can ask "look at the last 20 seconds".
+//! Screen replay: when the user turns it on, BEV keeps the recent past of the
+//! display the mouse is on, so they can ask "look at the last 20 seconds" or
+//! "look at the last 10 minutes".
+//!
+//! It keeps 15 minutes: every frame (2 a second) for the last minute, then one
+//! every 5 seconds further back. About 25 MB at most.
 //!
 //! Privacy rules this module keeps:
 //! - Off unless the user switches it on (Settings → Privacy); the app turns it
 //!   off again in privacy mode.
-//! - Frames live in RAM only, downscaled and JPEG-encoded, and are dropped as
-//!   they age out. Nothing is written to disk.
+//! - Frames live in RAM only, downscaled and JPEG-encoded, thinned as they
+//!   age and dropped after 15 minutes. Nothing is written to disk.
 //! - Nothing leaves the PC unless the user asks BEV to look back; then only the
 //!   few frames picked for that question are handed to the app.
 //! - BEV's overlay is excluded from capture (overlay.rs), as for screenshots.
@@ -24,8 +28,12 @@ const PERIOD: Duration = Duration::from_millis(500);
 /// Long edge of a stored frame.
 const FRAME_EDGE: u32 = 1024;
 const FRAME_QUALITY: u8 = 62;
-pub const MIN_KEEP: u32 = 10;
-pub const MAX_KEEP: u32 = 120;
+/// How far back replay reaches.
+pub const KEEP: Duration = Duration::from_secs(15 * 60);
+/// Frames newer than this are all kept...
+const DENSE: Duration = Duration::from_secs(60);
+/// ...older ones are thinned to one per this interval.
+const SPARSE_GAP: Duration = Duration::from_secs(5);
 const MAX_FRAMES_PER_CLIP: usize = 12;
 
 struct Frame {
@@ -38,11 +46,10 @@ struct Frame {
 
 struct Buffer {
     frames: VecDeque<Frame>,
-    keep: Duration,
     enabled: bool,
 }
 
-static BUF: Mutex<Buffer> = Mutex::new(Buffer { frames: VecDeque::new(), keep: Duration::from_secs(30), enabled: false });
+static BUF: Mutex<Buffer> = Mutex::new(Buffer { frames: VecDeque::new(), enabled: false });
 /// Bumped on every start/stop so an old capture thread knows to exit.
 static GENERATION: AtomicU64 = AtomicU64::new(0);
 
@@ -76,19 +83,15 @@ pub struct ReplayClip {
 fn status_of(b: &Buffer) -> ReplayStatus {
     ReplayStatus {
         enabled: b.enabled,
-        keep_secs: b.keep.as_secs() as u32,
+        keep_secs: KEEP.as_secs() as u32,
         buffered_secs: b.frames.front().map(|f| f.at.elapsed().as_secs_f64()).unwrap_or(0.0),
     }
 }
 
-/// Turn replay on or off and set how many seconds to keep (10–120).
-/// Turning it off clears everything that was kept.
+/// Turn replay on or off. Turning it off clears everything that was kept.
 #[tauri::command]
-pub fn replay_configure(enabled: bool, keep_secs: Option<u32>) -> BevResult<ReplayStatus> {
+pub fn replay_configure(enabled: bool) -> BevResult<ReplayStatus> {
     let mut b = BUF.lock().unwrap();
-    if let Some(k) = keep_secs {
-        b.keep = Duration::from_secs(k.clamp(MIN_KEEP, MAX_KEEP) as u64);
-    }
     let was = b.enabled;
     b.enabled = enabled;
     if !enabled {
@@ -121,10 +124,7 @@ fn capture_loop(gen: u64) {
                     break; // turned off while we were capturing: don't keep it
                 }
                 b.frames.push_back(f);
-                let keep = b.keep;
-                while b.frames.front().is_some_and(|f| f.at.elapsed() > keep) {
-                    b.frames.pop_front();
-                }
+                thin(&mut b.frames, Instant::now());
             }
             // The secure desktop (UAC, lock screen) can't be captured; just skip.
             Err(e) => log::debug!("replay frame skipped: {e}"),
@@ -151,6 +151,39 @@ fn shrink(img: RgbaImage) -> BevResult<(Vec<u8>, u32, u32)> {
         .encode_image(&rgb)
         .map_err(|e| BevError::Os(format!("encode: {e}")))?;
     Ok((buf, w, h))
+}
+
+/// Which frames to keep, given their ages (oldest first): everything inside
+/// `DENSE`, then one per `SPARSE_GAP` back to `KEEP`. Returns keep flags.
+pub(crate) fn keep_plan(ages: &[Duration]) -> Vec<bool> {
+    let mut keep = vec![false; ages.len()];
+    let mut last_kept: Option<Duration> = None;
+    for (i, &age) in ages.iter().enumerate() {
+        if age > KEEP {
+            continue;
+        }
+        if age <= DENSE {
+            keep[i] = true;
+            continue;
+        }
+        // Older frames: keep one, then skip until SPARSE_GAP newer than it.
+        if last_kept.map_or(true, |k| k.saturating_sub(age) >= SPARSE_GAP) {
+            keep[i] = true;
+            last_kept = Some(age);
+        }
+    }
+    keep
+}
+
+fn thin(frames: &mut VecDeque<Frame>, now: Instant) {
+    let ages: Vec<Duration> = frames.iter().map(|f| now.duration_since(f.at)).collect();
+    let plan = keep_plan(&ages);
+    let mut i = 0;
+    frames.retain(|_| {
+        let k = plan[i];
+        i += 1;
+        k
+    });
 }
 
 pub(crate) fn fit_edge(w: u32, h: u32, edge: u32) -> (u32, u32) {
@@ -191,10 +224,10 @@ pub(crate) fn pick(n: usize, want: usize) -> Vec<usize> {
 pub fn replay_clip(seconds: f64, max_frames: Option<u32>) -> BevResult<ReplayClip> {
     let b = BUF.lock().unwrap();
     if !b.enabled {
-        return Err(BevError::Message("Screen replay is off. Turn it on in Settings → Privacy so BEV keeps the last few seconds of your screen.".into()));
+        return Err(BevError::Message("Screen replay is off. Turn it on in Settings → Privacy & security so BEV can look back at your screen.".into()));
     }
-    let keep = b.keep.as_secs() as u32;
-    let span = if seconds.is_finite() && seconds > 0.0 { seconds.min(keep as f64) } else { 10.0_f64.min(keep as f64) };
+    let keep = KEEP.as_secs() as u32;
+    let span = if seconds.is_finite() && seconds > 0.0 { seconds.min(keep as f64) } else { 10.0 };
     let now = Instant::now();
     let recent: Vec<&Frame> = b.frames.iter().filter(|f| now.duration_since(f.at).as_secs_f64() <= span + 0.25).collect();
     if recent.is_empty() {
@@ -239,6 +272,23 @@ mod tests {
         assert_eq!(frames_for(60.0, None), 12);
         assert_eq!(frames_for(60.0, Some(6)), 6);
         assert_eq!(frames_for(60.0, Some(99)), 12);
+    }
+
+    #[test]
+    fn keeps_every_frame_for_a_minute_then_one_per_five_seconds() {
+        // A frame every 0.5 s for 20 minutes, oldest first.
+        let ages: Vec<Duration> = (0..2400).rev().map(|i| Duration::from_millis(i * 500)).collect();
+        let plan = keep_plan(&ages);
+        let kept: Vec<Duration> = ages.iter().zip(&plan).filter(|(_, k)| **k).map(|(a, _)| *a).collect();
+        assert!(kept.iter().all(|a| *a <= KEEP), "nothing older than 15 minutes");
+        let dense = kept.iter().filter(|a| **a <= DENSE).count();
+        assert_eq!(dense, 121, "every frame in the last minute");
+        let sparse: Vec<&Duration> = kept.iter().filter(|a| **a > DENSE).collect();
+        assert!(sparse.windows(2).all(|w| w[0].saturating_sub(*w[1]) >= SPARSE_GAP));
+        assert!((165..=170).contains(&sparse.len()), "about one per 5 s for 14 minutes, got {}", sparse.len());
+        // Thinning again changes nothing (stable as frames age a step).
+        let ages2: Vec<Duration> = kept.clone();
+        assert_eq!(keep_plan(&ages2).iter().filter(|k| **k).count(), kept.len());
     }
 
     #[test]

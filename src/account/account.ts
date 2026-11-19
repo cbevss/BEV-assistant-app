@@ -48,6 +48,8 @@ interface AccountState {
   changePassphrase(current: string, next: string): Promise<void>;
   signOut(): Promise<void>;
   deleteAccount(): Promise<void>;
+  /** Erase everything synced from the server (every device deletes its copy); keeps the account. */
+  eraseSynced(): Promise<void>;
   exportData(): Promise<string>;
 }
 
@@ -299,6 +301,20 @@ export const useAccount = create<AccountState>((set, get) => {
         await forgetLocal();
         stopTimer();
         set({ status: "signedOut", user: null, devices: [], lastSync: null });
+      } catch (e) {
+        await handle(e);
+      } finally {
+        set({ busy: false });
+      }
+    },
+
+    async eraseSynced() {
+      const t = await token();
+      if (!t) return;
+      set({ busy: true });
+      try {
+        await api.eraseSynced(t);
+        await get().syncNow(); // pulls the deletions here too
       } catch (e) {
         await handle(e);
       } finally {

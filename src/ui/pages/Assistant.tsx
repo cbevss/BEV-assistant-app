@@ -174,7 +174,7 @@ function Welcome({ onPick, level, listening, state, status }: { onPick: (s: stri
   const idle = state === "idle";
   return (
     <div className="flex flex-1 flex-col items-center justify-center py-4">
-      <Emblem state={idle ? (listening ? "idle" : "off") : state} level={level} size={228} />
+      <Emblem state={idle ? (listening ? "idle" : "off") : state} level={level} size={228} continuous />
       <h1 key={idle ? "idle" : state} className="mt-6 animate-page-in text-[30px] font-light leading-9 tracking-[-0.01em] text-ink">{idle ? greeting() : stateMeta[state].label}</h1>
       <p className={clsx("mt-2 max-w-[520px] text-center", idle || !status?.trim() ? "font-mono text-[11px] uppercase tracking-[0.18em] text-ink-3" : state === "error" ? "text-sm text-danger" : "text-sm text-ink-2")}>
         {idle ? (listening ? "Say “Hey BEV” or type below" : "Microphone off · type below") : status?.trim() || ""}

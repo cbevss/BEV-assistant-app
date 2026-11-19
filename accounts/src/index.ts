@@ -12,6 +12,7 @@
  *   DELETE /sessions/:id             sign a device out
  *   GET    /vault  PUT /vault        the wrapped data key (opaque to us)
  *   POST   /sync/push  GET /sync/pull?since=N
+ *   POST   /data/erase  { kinds }    erase synced memories/notes/profile (keep the account)
  *   GET    /export                   everything we hold, as JSON
  *   DELETE /account                  erase the account and all its data
  *
@@ -403,6 +404,23 @@ async function handle(req: Request, env: Env, fetcher: typeof fetch): Promise<Re
     const r = await pull(url, env, user);
     Object.entries(c).forEach(([k, v]) => r.headers.set(k, v));
     return r;
+  }
+  if (req.method === "POST" && path === "/data/erase") {
+    // Erased records become deletion markers, so every device removes its
+    // copy on its next sync; their content is gone from the server at once.
+    const b = await body<{ kinds?: string[] }>(req, 1024);
+    const kinds = (b?.kinds ?? ["memory", "note", "profile"]).filter((k) => KINDS.has(k));
+    if (!kinds.length) return fail(400, "nothing to erase", c);
+    const rows = await env.DB.prepare(`SELECT id FROM items WHERE user_id = ? AND deleted = 0 AND kind IN (${kinds.map(() => "?").join(",")})`)
+      .bind(user.id, ...kinds)
+      .all<{ id: string }>();
+    let seq = (await env.DB.prepare("SELECT seq FROM counters WHERE user_id = ?").bind(user.id).first<{ seq: number }>())?.seq ?? 0;
+    const now = Date.now();
+    const stmts = rows.results.map((r) => env.DB.prepare("UPDATE items SET deleted = 1, iv = '', ct = '', seq = ?, updated_at = ? WHERE user_id = ? AND id = ?").bind(++seq, now, user.id, r.id));
+    stmts.push(env.DB.prepare("INSERT INTO counters (user_id, seq) VALUES (?, ?) ON CONFLICT(user_id) DO UPDATE SET seq = excluded.seq").bind(user.id, seq));
+    if (env.DB.batch) await env.DB.batch(stmts);
+    else for (const s of stmts) await s.run();
+    return json({ ok: true, erased: rows.results.length }, 200, c);
   }
   if (req.method === "GET" && path === "/export") {
     const v = await env.DB.prepare("SELECT data FROM vaults WHERE user_id = ?").bind(user.id).first<{ data: string }>();

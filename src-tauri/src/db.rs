@@ -112,6 +112,56 @@ pub fn action_log_list(state: State<AppState>, limit: Option<i64>) -> BevResult<
     Ok(rows)
 }
 
+/// How much of each kind of data BEV holds on this PC (for Settings → Advanced).
+#[derive(serde::Serialize)]
+pub struct DataCounts {
+    pub memories: i64,
+    pub notes: i64,
+    pub conversation_messages: i64,
+    pub activity: i64,
+}
+
+fn count(c: &rusqlite::Connection, table: &str) -> i64 {
+    c.query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |r| r.get(0)).unwrap_or(0)
+}
+
+pub fn data_counts_sql(c: &rusqlite::Connection) -> DataCounts {
+    DataCounts {
+        memories: count(c, "memories"),
+        notes: count(c, "notes"),
+        conversation_messages: count(c, "conv_messages"),
+        activity: count(c, "action_log") + count(c, "task_runs"),
+    }
+}
+
+#[tauri::command]
+pub fn data_counts(state: State<AppState>) -> DataCounts {
+    data_counts_sql(&state.db.lock().unwrap())
+}
+
+/// Delete every memory BEV has on this PC.
+#[tauri::command]
+pub fn memories_clear(state: State<AppState>) -> BevResult<()> {
+    state.db.lock().unwrap().execute("DELETE FROM memories", [])?;
+    Ok(())
+}
+
+/// Delete every note (the search index follows via its triggers).
+#[tauri::command]
+pub fn notes_clear(state: State<AppState>) -> BevResult<()> {
+    let c = state.db.lock().unwrap();
+    c.execute_batch("DELETE FROM notes; INSERT INTO notes_fts(notes_fts) VALUES('rebuild');")?;
+    Ok(())
+}
+
+/// Delete the activity history: actions BEV took and the task journal.
+#[tauri::command]
+pub fn activity_clear(state: State<AppState>) -> BevResult<()> {
+    let c = state.db.lock().unwrap();
+    c.execute_batch("DELETE FROM action_log; DELETE FROM task_runs;")?;
+    Ok(())
+}
+
 #[tauri::command]
 pub fn action_log_clear(state: State<AppState>) -> BevResult<()> {
     let conn = state.db.lock().unwrap();

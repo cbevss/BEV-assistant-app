@@ -88,7 +88,8 @@ What makes BEV feel like an instrument rather than a website. All of it is flat 
 
 - 120ms for hovers and colour changes, 160–260ms for panels, pages, dialogs and the palette; ease-out curves, no springs or bounce.
 - **Boot**: when the emblem first appears, the collar draws itself in, the plate settles and the Core's rings draw in (about a second, once).
-- **Ambient scan**: a resting Core with `ambient` (the rail logo and the emblem) runs one short scan every 7s: a sweep round the bezel, a centre blip and one turn of the hero ring. It stops whenever BEV has real work to show, so it never competes with a state. Avatars and small status Cores stay still.
+- **Main screen emblem**: with `continuous`, the emblem on the opening screen never stops while BEV rests: its rings turn slowly in opposite directions (18s / 28s a turn), a scan circles the bezel every 6s and the centre pulses gently. Real states (listening, thinking, speaking) take over as soon as they happen.
+- **Ambient scan**: a resting Core with `ambient` (the rail logo) runs one short scan every 7s: a sweep round the bezel, a centre blip and one turn of the hero ring. It stops whenever BEV has real work to show, so it never competes with a state. Avatars and small status Cores stay still.
 - **Navigation**: the rail, the settings list and tab bars have one highlight (or underline) that glides to the selected item (`Motion.tsx`: `useActiveRect`, `SlidingHighlight`, `SlidingUnderline`). The rail and settings highlight carry a 2px accent tick at the leading edge.
 - **Pages**: switching area, settings section or tab fades the new content in with a 6px rise. New messages, tool runs and the working row enter the same way; welcome suggestions follow the emblem in a short stagger.
 - **Feedback**: buttons press in slightly (scale 0.97); meters fill from zero when they first appear.

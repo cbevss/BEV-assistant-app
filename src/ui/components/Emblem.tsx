@@ -20,10 +20,12 @@ export interface EmblemProps {
   size?: number;
   /** Drop shadow for floating over a wallpaper or game (overlay only). */
   floating?: boolean;
+  /** Keep the emblem moving all the time while resting (the main screen). */
+  continuous?: boolean;
   className?: string;
 }
 
-export function Emblem({ state, level = 0, progress = null, size = 240, floating = false, className }: EmblemProps) {
+export function Emblem({ state, level = 0, progress = null, size = 240, floating = false, continuous = false, className }: EmblemProps) {
   const plate = Math.round(size * 0.7);
   const tone = state === "error" ? "var(--danger)" : state === "completed" ? "var(--ok)" : "var(--accent)";
   const live = state !== "off" && state !== "idle";
@@ -56,7 +58,7 @@ export function Emblem({ state, level = 0, progress = null, size = 240, floating
           boxShadow: floating ? "0 10px 30px rgb(0 0 0 / 0.45)" : "inset 0 0 0 4px rgb(var(--surface-1))",
         }}
       >
-        <Core state={state} level={level} progress={progress} size={Math.round(plate * 0.94)} ambient intro />
+        <Core state={state} level={level} progress={progress} size={Math.round(plate * 0.94)} ambient={!continuous} continuous={continuous} intro />
       </div>
     </div>
   );
