@@ -14,6 +14,7 @@ mod appengine;
 mod db;
 mod error;
 mod files;
+mod filemgr;
 mod journal;
 mod games;
 mod overlay;
@@ -138,6 +139,11 @@ pub fn run() {
             games::list_games,
             games::launch_game,
             files::open_path,
+            filemgr::files_list,
+            filemgr::files_find,
+            filemgr::files_move,
+            filemgr::files_mkdir,
+            filemgr::files_trash,
             // Window management
             windows_mgmt::focus_window,
             windows_mgmt::list_windows,
