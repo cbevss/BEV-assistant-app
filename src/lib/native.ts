@@ -67,7 +67,7 @@ export const native = {
   listProcesses: () => invoke<{ pid: number; name: string }[]>("list_processes"),
 
   // Windows
-  listWindows: () => invoke<{ hwnd: number; title: string }[]>("list_windows"),
+  listWindows: () => invoke<import("./windows").WinEntry[]>("list_windows"),
   focusWindow: (hwnd: number) => invoke<void>("focus_window", { hwnd }),
 
   // Overlay
@@ -109,7 +109,7 @@ export const native = {
   lockPc: () => invoke<void>("lock_pc"),
   powerAction: (action: "sleep" | "restart" | "shutdown" | "cancel", delaySecs?: number) =>
     invoke<string>("power_action", { action, delaySecs }),
-  captureScreen: (target?: "current" | "primary" | "all") =>
+  captureScreen: (target?: "auto" | "current" | "primary" | "all" | `window:${number}`) =>
     invoke<ScreenCapture>("capture_screen", { target }),
   foregroundWindow: () => invoke<ForegroundWindow | null>("foreground_window"),
   // Screen replay: the last few seconds of the display the mouse is on, in RAM only.
@@ -124,7 +124,7 @@ export const native = {
   // Vision & control (control/ in Rust)
   uiRead: (hwnd?: number) => invoke<UiSnapshot>("ui_read", { hwnd }),
   uiAct: (id: number, action: string, text?: string) => invoke<ActResult>("ui_act", { id, action, text }),
-  screenOcr: (target?: "window" | "screen" | "all") => invoke<OcrResult>("screen_ocr", { target }),
+  screenOcr: (target?: "window" | "screen" | "all" | `window:${number}`) => invoke<OcrResult>("screen_ocr", { target }),
   inputKeys: (keys: string) => invoke<InputTarget>("input_keys", { keys }),
   inputType: (text: string) => invoke<InputTarget>("input_type", { text }),
   inputClick: (x: number, y: number, space: "screen" | "screenshot", button?: "left" | "right", double?: boolean) =>

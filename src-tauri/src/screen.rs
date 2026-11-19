@@ -65,12 +65,13 @@ fn describe(m: &xcap::Monitor, idx: usize, total: usize) -> String {
     format!("display {} of {total}{primary}", idx + 1)
 }
 
-/// Capture for the AI. `target`: "current" (the display the mouse is on,
-/// default), "primary", or "all" (every display side by side, as arranged).
+/// Capture for the AI. `target`: "auto" (every display if there are several,
+/// default), "current" (the display the mouse is on), "primary", "all", or
+/// "window:<hwnd>" (one window close up, on whichever display it's on).
 #[tauri::command]
 pub async fn capture_screen(target: Option<String>) -> BevResult<ScreenCapture> {
     // Capture + encode takes ~100-300 ms; keep it off the main thread.
-    tauri::async_runtime::spawn_blocking(move || capture_blocking(target.as_deref().unwrap_or("current")))
+    tauri::async_runtime::spawn_blocking(move || capture_blocking(target.as_deref().unwrap_or("auto")))
         .await
         .map_err(os("capture task"))?
 }
@@ -99,11 +100,45 @@ pub(crate) fn capture_raw(target: &str) -> BevResult<(RgbaImage, i32, i32, Strin
         let m = &monitors[i];
         Ok((m.capture_image().map_err(os("capture"))?, m.x().unwrap_or(0), m.y().unwrap_or(0), describe(m, i, n)))
     };
+    if let Some(h) = target.strip_prefix("window:").and_then(|h| h.parse::<isize>().ok()) {
+        return capture_window(h);
+    }
     match target {
-        "all" if n > 1 => capture_all(&monitors),
+        // auto: every display when there's more than one, so nothing is out of sight.
+        "all" | "auto" if n > 1 => capture_all(&monitors),
         "primary" => one(monitors.iter().position(|m| m.is_primary().unwrap_or(false)).unwrap_or(0)),
         _ => one(cursor_monitor(&monitors).unwrap_or_else(|| monitors.iter().position(|m| m.is_primary().unwrap_or(false)).unwrap_or(0))),
     }
+}
+
+/// "display N of M" for the display containing a desktop point.
+pub(crate) fn display_label_at(x: i32, y: i32) -> Option<String> {
+    let monitors = xcap::Monitor::all().ok()?;
+    let n = monitors.len();
+    monitors.iter().enumerate().find_map(|(i, m)| {
+        let (mx, my) = (m.x().unwrap_or(0), m.y().unwrap_or(0));
+        let (w, h) = (m.width().unwrap_or(0) as i32, m.height().unwrap_or(0) as i32);
+        (x >= mx && x < mx + w && y >= my && y < my + h).then(|| describe(m, i, n))
+    })
+}
+
+/// One window, cropped from the display it's on (any display). Errors if it's
+/// minimised or off screen, so the caller can restore it first.
+pub(crate) fn capture_window(hwnd: isize) -> BevResult<(RgbaImage, i32, i32, String)> {
+    let r = crate::control::win::window_rect(hwnd).ok_or_else(|| BevError::NotFound("that window has closed".into()))?;
+    if r.minimized {
+        return Err(BevError::Invalid("that window is minimised: bring it forward with focus_window first".into()));
+    }
+    let (cx, cy) = ((r.left + r.right) / 2, (r.top + r.bottom) / 2);
+    let label = display_label_at(cx, cy).unwrap_or_default();
+    let (full, mx, my) = capture_at(cx, cy)?;
+    let (l, t) = ((r.left - mx).max(0) as u32, (r.top - my).max(0) as u32);
+    let (rr, bb) = (((r.right - mx).max(0) as u32).min(full.width()), ((r.bottom - my).max(0) as u32).min(full.height()));
+    if rr <= l + 4 || bb <= t + 4 {
+        return Err(BevError::Invalid("that window isn't on screen".into()));
+    }
+    let crop = image::imageops::crop_imm(&full, l, t, rr - l, bb - t).to_image();
+    Ok((crop, mx + l as i32, my + t as i32, format!("{} window on {label}", r.title)))
 }
 
 /// Capture the display containing a desktop point (for cropping to a window).

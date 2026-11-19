@@ -10,6 +10,17 @@ pub struct WinInfo {
     pub pid: u32,
 }
 
+/// Where a window is on the desktop.
+#[derive(Debug, Clone, Default)]
+pub struct WinRect {
+    pub left: i32,
+    pub top: i32,
+    pub right: i32,
+    pub bottom: i32,
+    pub minimized: bool,
+    pub title: String,
+}
+
 impl WinInfo {
     pub fn is_bev(&self) -> bool {
         self.pid == std::process::id()
@@ -64,6 +75,20 @@ mod imp {
         }
     }
 
+    pub fn window_rect(hwnd: isize) -> Option<super::WinRect> {
+        use windows::Win32::Foundation::RECT;
+        use windows::Win32::UI::WindowsAndMessaging::{GetWindowRect, IsWindow};
+        let h = HWND(hwnd as *mut _);
+        unsafe {
+            if !IsWindow(h).as_bool() {
+                return None;
+            }
+            let mut r = RECT::default();
+            GetWindowRect(h, &mut r).ok()?;
+            Some(super::WinRect { left: r.left, top: r.top, right: r.right, bottom: r.bottom, minimized: IsIconic(h).as_bool(), title: info(h).title })
+        }
+    }
+
     pub fn foreground() -> Option<WinInfo> {
         let h = unsafe { GetForegroundWindow() };
         (!h.0.is_null()).then(|| info(h))
@@ -97,6 +122,9 @@ mod imp {
         None
     }
     pub fn user_window() -> Option<WinInfo> {
+        None
+    }
+    pub fn window_rect(_hwnd: isize) -> Option<super::WinRect> {
         None
     }
 }
