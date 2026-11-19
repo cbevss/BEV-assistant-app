@@ -52,3 +52,23 @@ if (freeze >= 0 && new URLSearchParams(location.search).has("freeze")) {
 if (new URLSearchParams(location.search).get("replay")) {
   setTimeout(() => useSettings.getState().update({ screenReplay: true }), 700);
 }
+
+// ?account=signedOut|setup|locked|ready: preview the account screens.
+{
+  const v = new URLSearchParams(location.search).get("account");
+  if (v) {
+    const { useAccount } = await import("@/account/account");
+    useAccount.setState({
+      status: v as never,
+      init: async () => {},
+      user: { id: "u", name: "Cbev", avatar: null, created_at: Date.now() - 86400000 * 30 },
+      devices: [
+        { id: "a", device: "BEV on Windows", created_at: Date.now() - 86400000 * 30, last_used: Date.now(), current: true },
+        { id: "b", device: "BEV web (iPhone)", created_at: Date.now() - 86400000 * 3, last_used: Date.now() - 3600000 * 5, current: false },
+      ],
+      lastSync: Date.now() - 90_000,
+      refreshDevices: async () => {},
+      ...(v === "setup" ? { pendingRecoveryKey: "7KQ2-M9XD-4TNB-WR8H-C3FV-PJ6E-YA1S-0GZ5" } : {}),
+    });
+  }
+}

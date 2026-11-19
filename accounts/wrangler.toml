@@ -1,0 +1,20 @@
+# BEV Accounts: sign-in with Discord and end-to-end encrypted sync of BEV's
+# memories across devices. The server stores only ciphertext it can't read.
+# Deployed by .github/workflows/accounts.yml, which fills in the D1 database id.
+name = "bev-accounts"
+main = "src/index.ts"
+compatibility_date = "2026-11-01"
+
+# Tidy up expired sign-ins and sessions once an hour.
+[triggers]
+crons = ["17 * * * *"]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "bev-accounts"
+database_id = "__D1_DATABASE_ID__"
+
+[vars]
+# Extra browser origins allowed to call the API (the future web version),
+# comma-separated, e.g. "https://app.bev.example". The desktop app needs none.
+WEB_ORIGINS = ""

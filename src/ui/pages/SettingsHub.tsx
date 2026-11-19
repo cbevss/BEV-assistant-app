@@ -3,6 +3,7 @@ import { useRef } from "react";
 import { NavLink, Navigate, useParams } from "react-router-dom";
 import clsx from "clsx";
 import { SETTINGS_NAV } from "../shell/nav";
+import { AccountSettings } from "../account/AccountSettings";
 import { SlidingHighlight, useActiveRect } from "../components/Motion";
 import { Settings } from "./Settings";
 import { VoiceAudio } from "./VoiceAudio";
@@ -11,6 +12,7 @@ import { Appearance } from "./Appearance";
 import { Security } from "./Security";
 
 const SECTIONS: Record<string, () => JSX.Element> = {
+  account: () => <AccountSettings />,
   general: () => <Settings part="general" />,
   voice: () => <VoiceAudio />,
   ai: () => <Integrations part="ai" />,
