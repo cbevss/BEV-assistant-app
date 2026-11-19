@@ -14,6 +14,7 @@ import { loadWakeModels, removeWakeModel } from "@/voice/oww/model-store";
 import { useAccount } from "@/account/account";
 import { useAssistant } from "@/state/assistant";
 import { useLearned } from "@/ai/learn";
+import { useUsage } from "@/ai/usage";
 
 /**
  * Every secret BEV keeps in Windows Credential Manager. Keep in step with the
@@ -55,6 +56,7 @@ export const dataActions = {
   },
   /** Tasks BEV learned by doing them. */
   learned: () => useLearned.getState().clear(),
+  usage: () => useUsage.getState().clear(),
   /** What BEV read from your documents (the files themselves are untouched). */
   documents: () => invoke<void>("docs_clear"),
   secrets: async () => {
@@ -80,6 +82,7 @@ export async function eraseEverything(): Promise<void> {
   const routines = useRoutines.getState();
   for (const r of [...routines.routines]) await routines.remove(r.id);
   await dataActions.learned().catch(() => {});
+  await dataActions.usage().catch(() => {});
   await dataActions.documents().catch(() => {});
   for (const m of await loadWakeModels().catch(() => [])) await removeWakeModel(m.name).catch(() => {});
   await dataActions.secrets();

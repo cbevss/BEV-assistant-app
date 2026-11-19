@@ -1,5 +1,5 @@
 /** Where everything lives: the rail, the settings categories and their routes. */
-import { Activity, AppWindow, Brain, Cpu, MessagesSquare, Mic, Palette, Plug, ShieldCheck, SlidersHorizontal, Workflow, Wrench, type LucideIcon, CircleUserRound } from "lucide-react";
+import { Gauge, Activity, AppWindow, Brain, Cpu, MessagesSquare, Mic, Palette, Plug, ShieldCheck, SlidersHorizontal, Workflow, Wrench, type LucideIcon, CircleUserRound } from "lucide-react";
 
 export interface NavItem {
   to: string;
@@ -21,6 +21,7 @@ export const SETTINGS_NAV: NavItem[] = [
   { to: "/settings/general", label: "General", icon: SlidersHorizontal, keywords: "startup tray personality briefing proactive monitoring alerts" },
   { to: "/settings/voice", label: "Voice & microphone", icon: Mic, keywords: "audio mic wake word speech whisper voice output speaker" },
   { to: "/settings/ai", label: "AI & models", icon: Cpu, keywords: "provider anthropic claude openai ollama api key model routing" },
+  { to: "/settings/usage", label: "Usage", icon: Gauge, keywords: "cost spending limit budget tokens price money bill" },
   { to: "/settings/services", label: "Connected services", icon: Plug, keywords: "integrations home assistant spotify gmail calendar github discord mcp web search cloud telegram phone" },
   { to: "/settings/apps", label: "Apps", icon: AppWindow, keywords: "installed applications index rescan" },
   { to: "/settings/appearance", label: "Appearance", icon: Palette, keywords: "accent colour theme overlay motion" },

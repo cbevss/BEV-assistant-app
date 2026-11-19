@@ -19,7 +19,7 @@ import {
 export class AnthropicProvider implements AiProvider {
   readonly id = "anthropic" as const;
   readonly label = "Anthropic Claude";
-  private model = "claude-sonnet-5-5";
+  readonly model: string = "claude-sonnet-5-5";
 
   constructor(model?: string) {
     if (model) this.model = model;
@@ -71,7 +71,10 @@ export class AnthropicProvider implements AiProvider {
       throw httpError("Anthropic", res.status, txt);
     }
 
-    if (req.onText) return readAnthropicStream(res, req.onText, req.signal);
+    if (req.onText) {
+      const r = await readAnthropicStream(res, req.onText, req.signal);
+      return r.usage ? { ...r, usage: { ...r.usage, model: body.model } } : r;
+    }
 
     const data = (await res.json()) as AnthropicResponse;
     let text = "";
@@ -82,13 +85,16 @@ export class AnthropicProvider implements AiProvider {
         toolCalls.push({ id: block.id, name: block.name, args: block.input ?? {} });
       }
     }
-    return { text: text.trim(), toolCalls };
+    const u = data.usage;
+    return { text: text.trim(), toolCalls, ...(u ? { usage: { input: (u.input_tokens ?? 0) + (u.cache_creation_input_tokens ?? 0) + (u.cache_read_input_tokens ?? 0), output: u.output_tokens ?? 0, model: body.model } } : {}) };
   }
 }
 
 /** Anthropic's event stream: text deltas and tool-use blocks built from JSON pieces. */
 export async function readAnthropicStream(res: Response, onText: (d: string) => void, signal?: AbortSignal): Promise<AiResponse> {
   let text = "";
+  let input = -1;
+  let output = 0;
   const blocks = new Map<number, { id: string; name: string; json: string }>();
   for await (const ev of sse(res.body, signal)) {
     if (!ev.data || ev.data === "[DONE]") continue;
@@ -98,6 +104,8 @@ export async function readAnthropicStream(res: Response, onText: (d: string) => 
       content_block?: { type: string; id?: string; name?: string };
       delta?: { type?: string; text?: string; partial_json?: string };
       error?: { type?: string; message?: string };
+      message?: { usage?: { input_tokens?: number; output_tokens?: number; cache_creation_input_tokens?: number; cache_read_input_tokens?: number } };
+      usage?: { output_tokens?: number };
     };
     try {
       d = JSON.parse(ev.data);
@@ -107,6 +115,13 @@ export async function readAnthropicStream(res: Response, onText: (d: string) => 
     if (d.type === "error") {
       const kind = d.error?.type === "overloaded_error" ? 529 : d.error?.type === "rate_limit_error" ? 429 : 500;
       throw httpError("Anthropic", kind, d.error?.message ?? "stream error");
+    }
+    if (d.type === "message_start" && d.message?.usage) {
+      const u = d.message.usage;
+      input = (u.input_tokens ?? 0) + (u.cache_creation_input_tokens ?? 0) + (u.cache_read_input_tokens ?? 0);
+      output = u.output_tokens ?? 0;
+    } else if (d.type === "message_delta" && d.usage?.output_tokens !== undefined) {
+      output = d.usage.output_tokens;
     }
     if (d.type === "content_block_start" && d.content_block?.type === "tool_use") {
       blocks.set(d.index ?? 0, { id: d.content_block.id ?? "", name: d.content_block.name ?? "", json: "" });
@@ -121,7 +136,7 @@ export async function readAnthropicStream(res: Response, onText: (d: string) => 
     }
   }
   const toolCalls: ToolCall[] = [...blocks.values()].map((b) => ({ id: b.id, name: b.name, args: parseArgs(b.json) }));
-  return { text: text.trim(), toolCalls };
+  return { text: text.trim(), toolCalls, ...(input >= 0 ? { usage: { input, output } } : {}) };
 }
 
 function parseArgs(json: string): Record<string, unknown> {
@@ -139,6 +154,7 @@ interface AnthropicResponse {
     | { type: "text"; text: string }
     | { type: "tool_use"; id: string; name: string; input: Record<string, unknown> }
   >;
+  usage?: { input_tokens?: number; output_tokens?: number; cache_creation_input_tokens?: number; cache_read_input_tokens?: number };
 }
 
 type ImageBlock = {

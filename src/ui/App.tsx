@@ -7,6 +7,7 @@ import { useRoutines } from "@/routines/store";
 import { startScheduler } from "@/routines/scheduler";
 import { needsReindex, indexDocuments } from "@/lib/documents";
 import { startGamingWatch, isQuiet } from "@/lib/gaming";
+import { useUsage } from "@/ai/usage";
 import { applyAppearance } from "@/lib/appearance";
 import { Dashboard } from "./pages/Dashboard";
 import { Assistant } from "./pages/Assistant";
@@ -88,6 +89,7 @@ export function App() {
       // Fire scheduled routines on their own, even while minimised to tray.
       startScheduler();
       startGamingWatch();
+      void useUsage.getState().load();
 
       // Catch up on documents changed since BEV last read them (in the background).
       {

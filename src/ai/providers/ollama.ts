@@ -16,7 +16,7 @@ export class OllamaProvider implements AiProvider {
   readonly id = "ollama" as const;
   readonly label = "Ollama (local)";
   private host = "http://localhost:11434";
-  private model = "llama3.1";
+  readonly model: string = "llama3.1";
 
   constructor(opts?: { host?: string; model?: string }) {
     if (opts?.host) this.host = opts.host.replace(/\/$/, "");
