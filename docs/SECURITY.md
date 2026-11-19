@@ -21,5 +21,13 @@
 - **Learned tasks** are only kept from turns where every step succeeded without needing your approval, and never from clicks at screen positions. Replays go through the normal approval checks, so a sensitive button still asks first. A task that fails three times in a row is forgotten.
 - **Hands-on routines** (taught or learned) can click and type, so they only run when you ask; they can't be scheduled, and background jobs can't use `use_named_control`.
 
+## Files
+
+- BEV's file tools never touch Windows, Program Files, ProgramData, AppData, `$Recycle.Bin` or `System Volume Information`, and refuse paths with `..`. These checks are in the native code (`filemgr.rs`), so the AI can't talk its way past them.
+- A drive, your user folder and main folders like Downloads or Documents can be looked in and moved into, but never moved, renamed or deleted themselves.
+- Nothing is overwritten (clashes become "name (2)"), and deleting only sends things to the Recycle Bin. Deleting always asks first, as do moves of more than 10 items and tidy-ups (you see what will go where).
+- Moves, renames, copies and tidy-ups can be undone with "undo that" until BEV restarts.
+- File and folder names are treated as untrusted text: while they're in the conversation, sensitive actions need your explicit approval.
+
 ## Not present (by design)
 No remote-access, no telemetry/analytics, no auto-updates that run code without the user, no bypassing Windows security. Screen awareness and file tools ship **after** their explicit permission UI.
