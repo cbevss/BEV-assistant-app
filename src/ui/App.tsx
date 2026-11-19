@@ -27,7 +27,7 @@ import { configureNotices } from "@/proactive/notices";
 import { startWatchers } from "@/proactive/watchers";
 import { startBriefings } from "@/proactive/briefing";
 import { Orchestrator } from "@/ai/orchestrator";
-import { makeProvider } from "@/ai/factory";
+import { makeAssistantProvider } from "@/ai/factory";
 import { notify } from "@/lib/notify";
 import { bootstrapVoice, getController, maybeStartListening } from "@/voice/bootstrap";
 import { startMonitor } from "@/lib/monitor";
@@ -116,7 +116,7 @@ export function App() {
 
       // Background tasks run in their own orchestrators.
       configureBackground({
-        makeProvider: () => makeProvider(useSettings.getState().settings),
+        makeProvider: () => makeAssistantProvider(useSettings.getState().settings),
         makeOrchestrator: (p, h) => new Orchestrator(p, h, { background: true }),
         notify: (t, b) => void notify(t, b),
       });

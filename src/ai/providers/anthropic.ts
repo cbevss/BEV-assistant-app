@@ -6,6 +6,7 @@ import {
   AiResponse,
   ChatRequest,
   ProviderError,
+  httpError,
   ToolCall,
 } from "../types";
 
@@ -30,7 +31,7 @@ export class AnthropicProvider implements AiProvider {
 
   async chat(req: ChatRequest): Promise<AiResponse> {
     const key = await native.getSecret("anthropic_api_key");
-    if (!key) throw new ProviderError("Anthropic API key not set");
+    if (!key) throw new ProviderError("Anthropic API key not set", false, "auth");
 
     const body = {
       model: req.model || this.model,
@@ -58,12 +59,14 @@ export class AnthropicProvider implements AiProvider {
       body: JSON.stringify(body),
       signal: req.signal,
     } as RequestInit).catch((e: unknown) => {
-      throw new ProviderError(`network: ${String(e)}`, true);
+      if (req.signal?.aborted) throw e;
+      throw new ProviderError(`Anthropic: couldn't connect (${String(e)})`, true, "network");
     });
 
     if (!res.ok) {
       const txt = await res.text().catch(() => "");
-      throw new ProviderError(`anthropic ${res.status}: ${txt}`, res.status >= 500);
+      // 529 = overloaded: worth trying a backup.
+      throw httpError("Anthropic", res.status, txt);
     }
 
     const data = (await res.json()) as AnthropicResponse;

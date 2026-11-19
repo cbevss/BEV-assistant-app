@@ -40,7 +40,7 @@ async function start(): Promise<VoiceController> {
 
   // Mic plugged in or removed: switch to the right one without a restart.
   watchMics(async () => {
-    if (c.busy || !useAssistant.getState().micEnabled) return;
+    if (c.busy || c.isHeld || !useAssistant.getState().micEnabled) return;
     if (await c.micChanged()) await restartListening();
   });
 
@@ -119,9 +119,25 @@ export function setPrivacy(on: boolean) {
   useAssistant.getState().setPrivacyMode(on);
 }
 
+/**
+ * Pause BEV's listening while a microphone test runs; call the returned
+ * function when the test ends (it's safe to call more than once).
+ */
+export function holdListening(): () => void {
+  const c = controller;
+  if (!c) return () => {};
+  c.hold();
+  let done = false;
+  return () => {
+    if (done) return;
+    done = true;
+    void c.release();
+  };
+}
+
 /** Restart listening so a changed engine, model or mic takes effect now. */
 export async function restartListening() {
-  if (controller && useAssistant.getState().micEnabled) {
+  if (controller && !controller.isHeld && useAssistant.getState().micEnabled) {
     controller.disableListening();
     await controller.enableListening();
   }

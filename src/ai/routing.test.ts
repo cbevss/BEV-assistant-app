@@ -33,12 +33,13 @@ describe("classify", () => {
 
 describe("modelFor", () => {
   it("fast model only for quick turns, only when routing is on", () => {
-    const s = { ...defaultSettings, provider: "anthropic" as const, modelRouting: true, anthropicFastModel: "claude-haiku-5-5" };
+    const s = { ...defaultSettings, provider: "anthropic" as const, modelRouting: true, models: { anthropic: { model: "", fast: "claude-haiku-5-5" } } };
     expect(modelFor(s, "quick")).toBe("claude-haiku-5-5");
     expect(modelFor(s, "complex")).toBeUndefined();
     expect(modelFor(s, "vision")).toBeUndefined();
     expect(modelFor({ ...s, modelRouting: false }, "quick")).toBeUndefined();
-    expect(modelFor({ ...s, provider: "ollama", ollamaFastModel: "" }, "quick")).toBeUndefined();
+    expect(modelFor({ ...s, provider: "ollama" }, "quick")).toBeUndefined();
+    expect(modelFor({ ...s, models: { anthropic: { model: "", fast: "" } } }, "quick")).toBeUndefined();
     expect(maxTokensFor("complex")).toBeGreaterThan(maxTokensFor("quick"));
   });
 });

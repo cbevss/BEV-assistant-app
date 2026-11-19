@@ -60,13 +60,15 @@ export class OllamaProvider implements AiProvider {
       body: JSON.stringify(body),
       signal: req.signal,
     }).catch((e: unknown) => {
-      throw new ProviderError(`ollama unreachable: ${String(e)}`, true);
+      if (req.signal?.aborted) throw e;
+      throw new ProviderError(`Ollama isn't running or can't be reached (${String(e)})`, true, "network");
     });
     if (!res.ok) {
       const txt = await res.text().catch(() => "");
       // A model that can't take images answers 4xx/5xx with a message saying so.
       const noVision = /image|vision|multimodal/i.test(txt);
-      throw new ProviderError(`ollama ${res.status}: ${txt.slice(0, 200)}`, res.status >= 500 && !noVision);
+      // A model that isn't pulled answers 404: treat as unavailable so a backup can step in.
+      throw new ProviderError(`Ollama ${res.status}: ${txt.slice(0, 200)}`, res.status >= 500 && !noVision, res.status === 404 ? "unavailable" : res.status >= 500 && !noVision ? "unavailable" : "request");
     }
 
     const data = (await res.json()) as OllamaResponse;

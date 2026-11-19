@@ -3,7 +3,7 @@ import { endIntent, DISMISS_REPLY } from "./intents";
 import { AssistantState, useAssistant } from "@/state/assistant";
 import { native } from "@/lib/native";
 import { useSettings } from "@/state/settings";
-import { makeProvider } from "@/ai/factory";
+import { makeAssistantProvider } from "@/ai/factory";
 import { Orchestrator } from "@/ai/orchestrator";
 import { WebSpeechRecognizer } from "./webspeech";
 import type { SpeechSynthesizer } from "./types";
@@ -75,7 +75,7 @@ export class VoiceController {
   private active = false;
 
   constructor() {
-    this.orchestrator = new Orchestrator(makeProvider(settings()), {
+    this.orchestrator = new Orchestrator(makeAssistantProvider(settings()), {
       onState: (s) => this.setState(s),
       onAssistantText: (t) => this.pushAssistant(t),
       onToolResult: (name, ok, result) =>
@@ -88,7 +88,7 @@ export class VoiceController {
   /** Rebuild provider + voice from current settings (called at the start of each conversation). */
   private applySettings() {
     const s = settings();
-    this.orchestrator.setProvider(makeProvider(s));
+    this.orchestrator.setProvider(makeAssistantProvider(s));
     this.tts = this.makeTts();
   }
 
@@ -258,6 +258,38 @@ export class VoiceController {
     }
   }
 
+  private held = 0;
+
+  /**
+   * Pause all listening (wake word and conversation) while something else
+   * needs the microphone, such as a microphone test, without changing the
+   * user's mic setting. Nested holds are counted; listening comes back only
+   * after the last release, and only if the mic was on.
+   */
+  hold() {
+    this.held++;
+    if (this.held > 1) return;
+    if (this.active) {
+      this.closeQuietly = true;
+      this.interrupt();
+    }
+    this.wake?.stop();
+    this.setState("idle", "Listening paused while the microphone test runs.");
+  }
+
+  async release() {
+    if (this.held === 0) return;
+    this.held--;
+    if (this.held > 0) return;
+    this.setState("idle", "");
+    const a = useAssistant.getState();
+    if (a.micEnabled && !a.privacyMode) await this.enableListening();
+  }
+
+  get isHeld() {
+    return this.held > 0;
+  }
+
   disableListening() {
     this.wake?.stop();
     useAssistant.getState().setMic(false);
@@ -267,6 +299,8 @@ export class VoiceController {
 
   /** Manual activation (push-to-talk / shortcut) without the wake word. */
   async onWake() {
+    // A microphone test has the mic: don't start a conversation over it.
+    if (this.held > 0) return;
     // Pressed again mid-conversation: "I'm done", so end it now and free the mic.
     if (this.active) {
       this.closeQuietly = true;

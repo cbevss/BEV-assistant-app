@@ -18,7 +18,7 @@ import { listElevenVoices, elevenUsage, type ElevenVoice, type ElevenUsage } fro
 import { native, OutputDevice } from "@/lib/native";
 import { Segmented, PageHeader, Section, Field, Select, Slider, Toggle, Button, TextInput, StatusPill } from "../components/Form";
 import { useAssistant } from "@/state/assistant";
-import { restartListening, getController, bindShortcut } from "@/voice/bootstrap";
+import { restartListening, getController, bindShortcut, holdListening } from "@/voice/bootstrap";
 import { HotkeyInput } from "../components/HotkeyInput";
 import { MicDiagnostics, Calibration, RecognitionSettings } from "../components/VoiceSetup";
 import { activeWakeModels, customWakeModels, revertWakeModels, BUILT_IN_PHRASE } from "@/voice/oww/wake-models";
@@ -790,6 +790,8 @@ function WakeTest({
   useEffect(() => {
     if (!on) return;
     let cancelled = false;
+    // Otherwise saying the wake word to test it would also wake the real BEV.
+    const resume = holdListening();
     (async () => {
       try {
         const [{ OnDeviceWakeWord }, bytes] = await Promise.all([
@@ -818,6 +820,7 @@ function WakeTest({
       engine.current?.stop();
       engine.current = null;
       setScore(0);
+      resume();
     };
     // threshold changes are applied live above; don't restart for them
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -856,6 +859,8 @@ function MicTest({ deviceId }: { deviceId: string }) {
 
   useEffect(() => {
     if (!on) return;
+    // BEV stops listening while you test, and carries on afterwards.
+    const resume = holdListening();
     const m = new MicInput();
     mic.current = m;
     m.onLevel(setLevel);
@@ -866,11 +871,12 @@ function MicTest({ deviceId }: { deviceId: string }) {
     return () => {
       m.stop();
       setLevel(0);
+      resume();
     };
   }, [on, deviceId]);
 
   return (
-    <Field label="Test input" hint={err ?? "Speak — the bar should move."}>
+    <Field label="Test input" hint={err ?? (on ? "Speak: the bar should move. BEV isn't listening during the test." : "Speak: the bar should move.")}>
       <div className="flex items-center gap-3">
         <div className="h-2 flex-1 overflow-hidden rounded bg-surface-2">
           <div

@@ -72,3 +72,9 @@ if (new URLSearchParams(location.search).get("replay")) {
     });
   }
 }
+
+// ?picker=<aria label>: open that model dropdown (screenshots).
+{
+  const v = new URLSearchParams(location.search).get("picker");
+  if (v) (globalThis as { __bevOpenPicker?: string }).__bevOpenPicker = v;
+}

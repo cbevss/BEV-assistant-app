@@ -6,6 +6,7 @@
  * here deletes them on your other devices too, on the next sync.
  */
 import { native } from "./native";
+import { PROVIDERS } from "@/ai/catalog";
 import { useSettings } from "@/state/settings";
 import { useRoutines } from "@/routines/store";
 import { loadWakeModels, removeWakeModel } from "@/voice/oww/model-store";
@@ -16,9 +17,9 @@ import { useAssistant } from "@/state/assistant";
  * Every secret BEV keeps in Windows Credential Manager. Keep in step with the
  * names used across the app (dataControls.test.ts checks the shared constants).
  */
-export const KNOWN_SECRETS = [
-  "anthropic_api_key",
-  "openai_api_key",
+export const KNOWN_SECRETS: readonly string[] = [
+  // Every AI provider's key.
+  ...PROVIDERS.flatMap((p) => (p.secret ? [p.secret] : [])),
   "brave_search_key",
   "elevenlabs_key",
   "github_token",
@@ -28,7 +29,7 @@ export const KNOWN_SECRETS = [
   "bev_cloud_key",
   "oauth_spotify",
   "oauth_google",
-] as const;
+];
 
 /** Secret names for this PC: the known ones plus each MCP server's token. */
 export function secretNames(): string[] {
