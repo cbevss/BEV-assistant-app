@@ -1,7 +1,7 @@
 import { fetch } from "@tauri-apps/plugin-http";
 import { sse } from "./stream";
 import { native } from "@/lib/native";
-import { AiImage, AiProvider, AiResponse, ChatRequest, ProviderError, ToolCall, httpError } from "../types";
+import { AiImage, AiProvider, AiResponse, AiUsage, ChatRequest, ProviderError, ToolCall, httpError } from "../types";
 import { providerInfo, type ProviderId, type ProviderInfo } from "../catalog";
 
 /**
@@ -14,7 +14,7 @@ export class OpenAiProvider implements AiProvider {
   readonly id: ProviderId;
   readonly label: string;
   private info: ProviderInfo;
-  private model: string;
+  readonly model: string;
 
   constructor(model?: string, id: ProviderId = "openai") {
     this.info = providerInfo(id);
@@ -32,6 +32,9 @@ export class OpenAiProvider implements AiProvider {
     if (!key) throw new ProviderError(`${this.label} API key not set`, false, "auth");
 
     const tokenField = this.info.tokenParam ?? "max_tokens";
+    const model = req.model || this.model;
+    // Providers known to accept stream_options report token use at the end of a stream.
+    const streamUsage = req.onText && STREAM_USAGE.has(this.id) ? { stream_options: { include_usage: true } } : {};
     const res = await fetch(`${this.info.baseUrl}/chat/completions`, {
       method: "POST",
       headers: {
@@ -41,7 +44,7 @@ export class OpenAiProvider implements AiProvider {
         ...(this.id === "openrouter" ? { "HTTP-Referer": "https://github.com/cbevss/BEV-assistant-app", "X-Title": "BEV" } : {}),
       },
       body: JSON.stringify({
-        model: req.model || this.model,
+        model,
         // OpenAI's newer models only take max_completion_tokens; the others
         // take max_tokens. Temperature only when asked (reasoning models refuse it).
         [tokenField]: req.maxTokens ?? 1024,
@@ -50,7 +53,7 @@ export class OpenAiProvider implements AiProvider {
         ...(req.tools.length
           ? { tools: req.tools.map((t) => ({ type: "function", function: { name: t.name, description: t.description, parameters: t.parameters } })) }
           : {}),
-        ...(req.onText ? { stream: true } : {}),
+        ...(req.onText ? { stream: true, ...streamUsage } : {}),
       }),
       signal: req.signal,
     }).catch((e: unknown) => {
@@ -63,7 +66,10 @@ export class OpenAiProvider implements AiProvider {
       throw httpError(this.label, res.status, txt);
     }
 
-    if (req.onText) return readOpenAiStream(res, req.onText, req.signal, this.label);
+    if (req.onText) {
+      const r = await readOpenAiStream(res, req.onText, req.signal, this.label);
+      return r.usage ? { ...r, usage: { ...r.usage, model } } : r;
+    }
 
     const data = (await res.json()) as OpenAiResponse;
     const msg = data.choices?.[0]?.message;
@@ -73,9 +79,12 @@ export class OpenAiProvider implements AiProvider {
         name: tc.function.name,
         args: safeJson(tc.function.arguments),
       })) ?? [];
-    return { text: (msg?.content ?? "").trim(), toolCalls };
+    const u = data.usage;
+    return { text: (msg?.content ?? "").trim(), toolCalls, ...(u ? { usage: { input: u.prompt_tokens ?? 0, output: u.completion_tokens ?? 0, model } } : {}) };
   }
 }
+
+const STREAM_USAGE = new Set<ProviderId>(["openai", "openrouter", "groq", "deepseek", "xai"]);
 
 /** Neutral history → OpenAI messages; assistant tool calls carry their args. */
 export function toOpenAiMessages(req: ChatRequest): unknown[] {
@@ -133,6 +142,7 @@ function safeJson(s: string): Record<string, unknown> {
 }
 
 interface OpenAiResponse {
+  usage?: { prompt_tokens?: number; completion_tokens?: number };
   choices?: Array<{
     message?: {
       content?: string | null;
@@ -144,12 +154,14 @@ interface OpenAiResponse {
 /** Chat Completions stream: content deltas, and tool calls assembled by index. */
 export async function readOpenAiStream(res: Response, onText: (d: string) => void, signal: AbortSignal | undefined, label: string): Promise<AiResponse> {
   let text = "";
+  let usage: AiUsage | undefined;
   const calls = new Map<number, { id: string; name: string; args: string }>();
   for await (const ev of sse(res.body, signal)) {
     if (!ev.data || ev.data === "[DONE]") continue;
     let d: {
       choices?: Array<{ delta?: { content?: string | null; tool_calls?: Array<{ index?: number; id?: string; function?: { name?: string; arguments?: string } }> } }>;
       error?: { message?: string; code?: number | string };
+      usage?: { prompt_tokens?: number; completion_tokens?: number } | null;
     };
     try {
       d = JSON.parse(ev.data);
@@ -157,6 +169,7 @@ export async function readOpenAiStream(res: Response, onText: (d: string) => voi
       continue;
     }
     if (d.error) throw httpError(label, Number(d.error.code) || 500, d.error.message ?? "stream error");
+    if (d.usage) usage = { input: d.usage.prompt_tokens ?? 0, output: d.usage.completion_tokens ?? 0 };
     const delta = d.choices?.[0]?.delta;
     if (delta?.content) {
       text += delta.content;
@@ -174,5 +187,5 @@ export async function readOpenAiStream(res: Response, onText: (d: string) => voi
   const toolCalls: ToolCall[] = [...calls.entries()]
     .sort((a, b) => a[0] - b[0])
     .map(([i, c]) => ({ id: c.id || `call_${i}`, name: c.name, args: safeJson(c.args) }));
-  return { text: text.trim(), toolCalls };
+  return { text: text.trim(), toolCalls, ...(usage ? { usage } : {}) };
 }

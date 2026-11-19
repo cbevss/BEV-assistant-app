@@ -5,7 +5,21 @@
  */
 const store = new Map<string, unknown>();
 const params = new URLSearchParams(location.search);
-store.set("settings.json:settings", { onboarded: params.get("onboarding") !== "1", userName: "Charlie", provider: "anthropic", models: { anthropic: { model: "claude-sonnet-5-5", fast: "claude-haiku-5-5" } }, fallbacks: ["openai", "gemini"], ...(params.get("docs") ? { documents: { folders: ["C:\\Users\\Charlie\\Documents", "D:\\Work\\Contracts"], lastIndexed: Date.now() - 2 * 3600_000 } } : {}) });
+if (params.get("usage")) {
+  const days: Record<string, Record<string, unknown>> = {};
+  for (let i = 0; i < 14; i++) {
+    const t = new Date(Date.now() - i * 86_400_000);
+    const k = `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, "0")}-${String(t.getDate()).padStart(2, "0")}`;
+    const n = [12, 30, 8, 44, 21, 0, 17, 35, 26, 9, 40, 14, 22, 31][i];
+    days[k] = {
+      "anthropic/claude-sonnet-5-5": { requests: n, input: n * 9000, output: n * 600, cost: n * 0.024, estimated: false },
+      "anthropic/claude-haiku-5-5": { requests: n * 2, input: n * 6000, output: n * 200, cost: n * 0.0013, estimated: false },
+      ...(i % 3 === 0 ? { "mistral/mistral-large-latest": { requests: 3, input: 20000, output: 900, cost: null, estimated: true } } : {}),
+    };
+  }
+  store.set("settings.json:days", days);
+}
+store.set("settings.json:settings", { onboarded: params.get("onboarding") !== "1", userName: "Charlie", provider: "anthropic", models: { anthropic: { model: "claude-sonnet-5-5", fast: "claude-haiku-5-5" } }, fallbacks: ["openai", "gemini"], ...(params.get("usage") ? { spending: { dailyUsd: 2, monthlyUsd: 10, prices: {} } } : {}), ...(params.get("docs") ? { documents: { folders: ["C:\\Users\\Charlie\\Documents", "D:\\Work\\Contracts"], lastIndexed: Date.now() - 2 * 3600_000 } } : {}) });
 
 const now = Math.floor(Date.now() / 1000);
 const data: Record<string, unknown> = {

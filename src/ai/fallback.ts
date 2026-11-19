@@ -8,6 +8,7 @@ import { create } from "zustand";
 import type { AiProvider, AiResponse, ChatRequest } from "./types";
 import { ProviderError } from "./types";
 import { providerInfo, type ProviderId } from "./catalog";
+import { useUsage, blockedBy, limitError, LOCAL } from "./usage";
 
 /** Which AI answered last, so the app can show when a backup stepped in. */
 export const useAiStatus = create<{ answeredBy: ProviderId | null; backupReason: string | null; at: number }>(() => ({
@@ -69,6 +70,12 @@ export class FallbackProvider implements AiProvider {
       if (req.signal?.aborted) throw new DOMException("aborted", "AbortError");
       // Backups that aren't set up are skipped without a round trip.
       if (i > 0 && !(await provider.isConfigured().catch(() => false))) continue;
+      // Over a spending limit: paid AIs are skipped; a local one can still answer.
+      const blocked = LOCAL.has(provider.id) ? null : blockedBy();
+      if (blocked) {
+        firstError ??= limitError(blocked);
+        continue;
+      }
       // Quick replies use each provider's own fast model.
       const model = i === 0 ? req.model : quick ? fast || undefined : undefined;
       // Once a reply has started streaming (and maybe being spoken), switching
@@ -77,6 +84,7 @@ export class FallbackProvider implements AiProvider {
       const onText = req.onText ? (d: string) => ((streamed = true), req.onText!(d)) : undefined;
       try {
         const r = await this.attempt(provider, { ...req, model, onText }, () => streamed);
+        void useUsage.getState().record(provider.id, { ...req, model }, r, provider.model ?? providerInfo(provider.id).defaultModel).catch(() => {});
         useAiStatus.setState({ answeredBy: provider.id, backupReason: i === 0 ? null : `${providerInfo(this.chain[0].provider.id).label}: ${reasonFor(firstError)}`, at: Date.now() });
         return r;
       } catch (e) {

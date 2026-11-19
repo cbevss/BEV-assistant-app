@@ -129,6 +129,8 @@ export interface Settings {
   gamingQuietMode: boolean;
   /** Go quiet by itself while a game is running. */
   autoGamingMode: boolean;
+  /** Spending limits (USD, null = none) and custom prices per model (USD per million tokens). */
+  spending: { dailyUsd: number | null; monthlyUsd: number | null; prices: Record<string, { input: number; output: number }> };
   proactiveMonitoring: boolean;
   /** What BEV keeps an eye on while proactive monitoring is on. */
   watch: { crashes: boolean; network: boolean; disk: boolean };
@@ -200,6 +202,7 @@ export const defaultSettings: Settings = {
   listenOnStartup: true,
   gamingQuietMode: false,
   autoGamingMode: true,
+  spending: { dailyUsd: null, monthlyUsd: null, prices: {} },
   proactiveMonitoring: false,
   watch: { crashes: true, network: true, disk: true },
   briefingTime: "",

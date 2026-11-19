@@ -39,6 +39,14 @@ export interface AiResponse {
   text: string;
   /** Tool calls the model wants executed before continuing. */
   toolCalls: ToolCall[];
+  /** Tokens used, when the provider reports them; model = the model that answered. */
+  usage?: AiUsage;
+}
+
+export interface AiUsage {
+  input: number;
+  output: number;
+  model?: string;
 }
 
 export interface ChatRequest {
@@ -60,6 +68,8 @@ export interface ChatRequest {
 export interface AiProvider {
   readonly id: import("./catalog").ProviderId;
   readonly label: string;
+  /** The model used when a request doesn't name one. */
+  readonly model?: string;
   /** Resolve true when credentials/endpoint are configured and reachable. */
   isConfigured(): Promise<boolean>;
   chat(req: ChatRequest): Promise<AiResponse>;

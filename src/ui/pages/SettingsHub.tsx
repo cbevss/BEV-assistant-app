@@ -10,12 +10,14 @@ import { VoiceAudio } from "./VoiceAudio";
 import { Integrations } from "./Integrations";
 import { Appearance } from "./Appearance";
 import { Security } from "./Security";
+import { Usage } from "./Usage";
 
 const SECTIONS: Record<string, () => JSX.Element> = {
   account: () => <AccountSettings />,
   general: () => <Settings part="general" />,
   voice: () => <VoiceAudio />,
   ai: () => <Integrations part="ai" />,
+  usage: () => <Usage />,
   services: () => <Integrations part="services" />,
   apps: () => <Settings part="apps" />,
   appearance: () => <Appearance />,
