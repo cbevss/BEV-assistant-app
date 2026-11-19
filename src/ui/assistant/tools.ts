@@ -24,6 +24,14 @@ const LABELS: Record<string, string> = {
   tidy_folder: "Tidied a folder",
   undo_file_changes: "Undid file changes",
   search_documents: "Searched your documents",
+  set_audio_output: "Switched sound output",
+  set_microphone: "Changed the microphone",
+  set_power_plan: "Changed the power plan",
+  set_brightness: "Changed brightness",
+  set_dark_mode: "Changed the theme",
+  media_control: "Controlled media",
+  set_wallpaper: "Changed the wallpaper",
+  empty_recycle_bin: "Emptied the Recycle Bin",
   read_document: "Read a document",
   open_website: "Opened a website",
   web_search: "Searched the web",
@@ -101,7 +109,8 @@ export function toolIcon(name: string): LucideIcon {
   if (/^(use_control|use_named_control|click_on_screen|hover_on_screen|drag_on_screen)$/.test(name)) return MousePointerClick;
   if (name === "scroll_screen") return Mouse;
   if (/^(press_keys|type_text)$/.test(name)) return Keyboard;
-  if (/^(set_volume|set_muted)$/.test(name)) return Volume2;
+  if (/^(set_volume|set_muted|set_audio_output|set_microphone|media_control)$/.test(name)) return Volume2;
+  if (/^(set_power_plan|set_brightness|set_dark_mode|set_wallpaper|empty_recycle_bin)$/.test(name)) return Settings2;
   if (/^(get_system_stats|get_running_apps|get_gpu_stats)$/.test(name)) return Cpu;
   if (name === "diagnose_pc") return Stethoscope;
   if (/^(remember|recall_memories|forget_memory|save_note|search_notes|read_note|delete_note|search_conversations)$/.test(name)) return Brain;

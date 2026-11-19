@@ -11,7 +11,7 @@ export function builtInRoutines(): Routine[] {
     {
       id: "builtin-gaming",
       name: "Gaming Mode",
-      description: "Opens Discord and Steam, sets volume to 40% and switches BEV to quiet replies.",
+      description: "Opens Discord and Steam, sets volume to 40%, switches to the high performance power plan and BEV to quiet replies.",
       triggers: ["gaming mode", "game mode"],
       enabled: true,
       builtIn: true,
@@ -19,6 +19,7 @@ export function builtInRoutines(): Routine[] {
         { id: id(), tool: "launch_app", args: { name: "discord" }, continueOnError: true },
         { id: id(), tool: "launch_app", args: { name: "steam" }, continueOnError: true },
         { id: id(), tool: "set_volume", args: { percent: 40 } },
+        { id: id(), tool: "set_power_plan", args: { plan: "high performance" }, continueOnError: true },
         { id: id(), tool: "set_quiet_mode", args: { enabled: true } },
       ],
     },
