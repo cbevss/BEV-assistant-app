@@ -107,7 +107,13 @@ pub async fn integration_fetch(url: String, method: Option<String>, headers: Opt
     if !allowed(&url, &user_origins().lock().unwrap()) {
         return Err(BevError::Message(format!("BEV isn't set up to talk to {}. Add it in Integrations first.", origin_of(&url).unwrap_or_else(|| "that address".into()))));
     }
-    let client = reqwest::Client::builder().timeout(Duration::from_secs(30)).build().map_err(|e| BevError::Os(e.to_string()))?;
+    // Some APIs (GitHub) refuse requests without a User-Agent. A connector can
+    // still send its own; this is only the default.
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(30))
+        .user_agent(concat!("BEV/", env!("CARGO_PKG_VERSION"), " (personal assistant; +https://github.com/cbevss/BEV-assistant-app)"))
+        .build()
+        .map_err(|e| BevError::Os(e.to_string()))?;
     let m = reqwest::Method::from_bytes(method.as_deref().unwrap_or("GET").to_ascii_uppercase().as_bytes()).map_err(|_| BevError::Invalid("bad method".into()))?;
     let mut req = client.request(m, &url);
     for (k, v) in headers.unwrap_or_default() {
