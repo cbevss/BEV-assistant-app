@@ -117,7 +117,7 @@ export const native = {
     invoke<ScreenCapture>("capture_screen", { target }),
   foregroundWindow: () => invoke<ForegroundWindow | null>("foreground_window"),
   // Screen replay: the last few seconds of the display the mouse is on, in RAM only.
-  replayConfigure: (enabled: boolean, keepSecs?: number) => invoke<ReplayStatus>("replay_configure", { enabled, keepSecs }),
+  replayConfigure: (enabled: boolean) => invoke<ReplayStatus>("replay_configure", { enabled }),
   replayStatus: () => invoke<ReplayStatus>("replay_status"),
   replayClip: (seconds: number, maxFrames?: number) => invoke<ReplayClip>("replay_clip", { seconds, maxFrames }),
   takeScreenshot: (monitor?: number) => invoke<string>("take_screenshot", { monitor }),

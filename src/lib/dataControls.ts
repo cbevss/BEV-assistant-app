@@ -48,7 +48,7 @@ export const dataActions = {
   replay: async () => {
     const s = useSettings.getState().settings;
     await native.replayConfigure(false);
-    if (s.screenReplay) await native.replayConfigure(true, s.screenReplaySecs);
+    if (s.screenReplay) await native.replayConfigure(true);
   },
   secrets: async () => {
     for (const n of secretNames()) await native.deleteSecret(n).catch(() => {});

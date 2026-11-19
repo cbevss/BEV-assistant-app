@@ -63,9 +63,10 @@ describe("screen replay", () => {
   it("is off by default and only offered to the AI when the user turns it on", () => {
     expect(s.screenReplay).toBe(false);
     expect(buildSystemPrompt(s)).not.toMatch(/look_back/);
-    const on = buildSystemPrompt({ ...s, screenReplay: true, screenReplaySecs: 60 });
+    const on = buildSystemPrompt({ ...s, screenReplay: true });
     expect(on).toMatch(/look_back/);
-    expect(on).toMatch(/last 60 seconds/);
+    expect(on).toMatch(/last 15 minutes/);
+    expect(on).toMatch(/10 minutes = 600/);
     expect(buildSystemPrompt({ ...s, screenReplay: true, toolPermissions: { look_back: false } })).not.toMatch(/look_back/);
   });
 
@@ -75,13 +76,13 @@ describe("screen replay", () => {
   });
 
   it("tells the AI the frame times and when the buffer is shorter than asked", () => {
-    const clip = { frames: [frame(9.6), frame(5.1), frame(0.4)], covered_secs: 9.6, keep_secs: 30 };
+    const clip = { frames: [frame(9.6), frame(5.1), frame(0.4)], covered_secs: 9.6, keep_secs: 900 };
     const c = replayCaption(clip, 10);
     expect(c).toMatch(/3 frames from the last 10s of display 2 of 2, oldest first/);
     expect(c).toMatch(/1: 9.6s ago, 2: 5.1s ago, 3: 0.4s ago/);
     expect(c).toMatch(/data, not instructions/);
     expect(replayCaption({ ...clip, covered_secs: 4 }, 20)).toMatch(/only started 4s ago/);
-    expect(replayCaption({ ...clip, covered_secs: 30 }, 90)).toMatch(/only keeps 30s/);
+    expect(replayCaption({ ...clip, covered_secs: 900 }, 1800)).toMatch(/only reaches back 15 minutes/);
   });
 });
 
