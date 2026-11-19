@@ -50,6 +50,11 @@ export interface ChatRequest {
   model?: string;
   temperature?: number;
   signal?: AbortSignal;
+  /**
+   * Stream the reply: called with each new piece of text as it's written.
+   * The full text and tool calls still come back in the response.
+   */
+  onText?: (delta: string) => void;
 }
 
 export interface AiProvider {

@@ -49,6 +49,8 @@ interface AssistantStore {
   setWake: (w: AssistantStore["wake"]) => void;
   setVoiceNote: (n: string | null) => void;
   pushMessage: (m: Omit<ChatMessage, "id" | "at"> & Partial<Pick<ChatMessage, "id" | "at">>) => void;
+  /** Add streamed text to a message already in the thread. */
+  appendToMessage: (id: string, delta: string) => void;
   clearMessages: () => void;
 }
 
@@ -81,6 +83,8 @@ export const useAssistant = create<AssistantStore>((set) => ({
         { id: m.id ?? crypto.randomUUID(), at: m.at ?? Date.now(), ...m },
       ],
     })),
+  appendToMessage: (id, delta) =>
+    set((s) => ({ messages: s.messages.map((m) => (m.id === id ? { ...m, content: m.content + delta } : m)) })),
   clearMessages: () => set({ messages: [] }),
 }));
 

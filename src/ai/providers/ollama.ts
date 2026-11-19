@@ -1,4 +1,5 @@
 import { fetch } from "@tauri-apps/plugin-http";
+import { lines } from "./stream";
 import {
   AiProvider,
   AiResponse,
@@ -45,7 +46,7 @@ export class OllamaProvider implements AiProvider {
   private async post(req: ChatRequest, messages: unknown[]): Promise<AiResponse> {
     const body = {
       model: req.model || this.model,
-      stream: false,
+      stream: !!req.onText,
       messages,
       tools: req.tools.map((t) => ({
         type: "function",
@@ -70,6 +71,8 @@ export class OllamaProvider implements AiProvider {
       // A model that isn't pulled answers 404: treat as unavailable so a backup can step in.
       throw new ProviderError(`Ollama ${res.status}: ${txt.slice(0, 200)}`, res.status >= 500 && !noVision, res.status === 404 ? "unavailable" : res.status >= 500 && !noVision ? "unavailable" : "request");
     }
+
+    if (req.onText) return readOllamaStream(res, req.onText, req.signal);
 
     const data = (await res.json()) as OllamaResponse;
     const toolCalls: ToolCall[] =
@@ -130,4 +133,29 @@ interface OllamaResponse {
       function: { name: string; arguments: Record<string, unknown> };
     }>;
   };
+}
+
+/** Ollama streams one JSON object per line; tool calls arrive whole in a chunk. */
+export async function readOllamaStream(res: Response, onText: (d: string) => void, signal?: AbortSignal): Promise<AiResponse> {
+  let text = "";
+  const toolCalls: ToolCall[] = [];
+  for await (const line of lines(res.body, signal)) {
+    if (!line.trim()) continue;
+    let d: OllamaResponse & { error?: string };
+    try {
+      d = JSON.parse(line);
+    } catch {
+      continue;
+    }
+    if (d.error) throw new ProviderError(`Ollama: ${d.error}`, false, "request");
+    const piece = d.message?.content ?? "";
+    if (piece) {
+      text += piece;
+      onText(piece);
+    }
+    for (const tc of d.message?.tool_calls ?? []) {
+      toolCalls.push({ id: `ollama-${toolCalls.length}`, name: tc.function.name, args: tc.function.arguments ?? {} });
+    }
+  }
+  return { text: text.trim(), toolCalls };
 }

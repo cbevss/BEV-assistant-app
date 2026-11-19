@@ -53,6 +53,8 @@ export interface Settings {
   fallbacks: ProviderId[];
   /** Send quick, simple requests to a faster, cheaper model. */
   modelRouting: boolean;
+  /** Show and speak replies while they're being written. */
+  streamReplies: boolean;
   ollamaHost: string;
   personality: Personality;
   customPersonality: string;
@@ -147,6 +149,7 @@ export const defaultSettings: Settings = {
   models: {},
   fallbacks: [],
   modelRouting: true,
+  streamReplies: true,
   ollamaHost: "http://localhost:11434",
   personality: "casual",
   addressAs: "sir",

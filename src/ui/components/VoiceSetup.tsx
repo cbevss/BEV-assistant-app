@@ -355,6 +355,12 @@ export function RecognitionSettings() {
       <Field label="Interrupt by talking" hint="Start speaking while BEV is talking and it stops to listen. Works best with headphones.">
         <Toggle label="Interrupt by talking" checked={settings.bargeIn} onChange={(bargeIn) => update({ bargeIn })} />
       </Field>
+      <Field
+        label="Start speaking straight away"
+        hint="BEV speaks each sentence as soon as it's written, instead of waiting for the whole answer. Typed replies appear word by word too."
+      >
+        <Toggle label="Start speaking straight away" checked={settings.streamReplies} onChange={(streamReplies) => update({ streamReplies })} />
+      </Field>
     </Section>
   );
 }

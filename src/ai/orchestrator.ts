@@ -16,6 +16,13 @@ export interface OrchestratorHooks {
   requestApproval: (call: ToolCall, description: string) => Promise<boolean>;
   /** The task plan changed (update_plan). */
   onPlan?: (plan: PlanStep[]) => void;
+  /**
+   * Streaming: each new piece of the model's text as it's written. When set,
+   * replies are streamed so they can be spoken and shown while being written.
+   */
+  onTextDelta?: (delta: string) => void;
+  /** Streaming: the model finished one reply (tools may run, then another follows). */
+  onTextEnd?: () => void;
 }
 
 export interface OrchestratorOptions {
@@ -239,7 +246,10 @@ export class Orchestrator {
     if (!finished) {
       const open = unfinished(this.plan);
       const tail = open.length ? ` Still to do: ${open.map((s) => s.text).join("; ")}.` : "";
-      finalText = `${finalText ? `${finalText}\n\n` : ""}I stopped here because the task took more steps than I'm allowed in one go.${tail} Ask me to carry on if you want.`;
+      const stopNote = `I stopped here because the task took more steps than I'm allowed in one go.${tail} Ask me to carry on if you want.`;
+      finalText = `${finalText ? `${finalText}\n\n` : ""}${stopNote}`;
+      this.hooks.onTextDelta?.(stopNote);
+      this.hooks.onTextEnd?.();
       this.hooks.onAssistantText(finalText);
     }
     this.hooks.onState("completed");
@@ -263,16 +273,24 @@ export class Orchestrator {
   /** One retry with backoff on transient (network / 5xx) provider failures. */
   private async chatWithRetry(system: string, specs: ReturnType<typeof toolSpecs>, signal: AbortSignal | undefined, workload: ReturnType<typeof classify>) {
     const model = modelFor(useSettings.getState().settings, workload);
-    const req = { system, messages: this.history, tools: specs, signal, model, maxTokens: maxTokensFor(workload) };
+    // Stream when someone's listening for it. Once text has gone out it may
+    // already be spoken, so a failure after that isn't retried (it would repeat).
+    let emitted = false;
+    const delta = this.hooks.onTextDelta;
+    const onText = delta && useSettings.getState().settings.streamReplies !== false ? (d: string) => ((emitted = true), delta(d)) : undefined;
+    const req = { system, messages: this.history, tools: specs, signal, model, maxTokens: maxTokensFor(workload), onText };
     try {
       return await this.provider.chat(req);
     } catch (e) {
+      if (emitted || signal?.aborted) throw e;
       // The fast model failed (wrong name, not pulled, overloaded): use the main one.
-      if (model && !signal?.aborted) return await this.provider.chat({ ...req, model: undefined, maxTokens: maxTokensFor("complex") });
+      if (model) return await this.provider.chat({ ...req, model: undefined, maxTokens: maxTokensFor("complex") });
       const retriable = e instanceof ProviderError && e.retriable;
-      if (!retriable || signal?.aborted) throw e;
+      if (!retriable) throw e;
       await new Promise((r) => setTimeout(r, 1200));
       return await this.provider.chat(req);
+    } finally {
+      if (onText) this.hooks.onTextEnd?.();
     }
   }
 
