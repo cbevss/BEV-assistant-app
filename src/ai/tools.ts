@@ -14,6 +14,8 @@ import { controlCache, formatSnapshot, formatOcr, findText, centre, riskOfLabel,
 import { diagnose, formatFindings, type Area } from "@/lib/diagnose";
 import { docsApi, formatHits } from "@/lib/documents";
 import { gpuApi, describeGpu, useGaming } from "@/lib/gaming";
+import { hardwareApi, matchDevice } from "@/lib/hardware";
+import { winMics } from "@/voice/mic";
 import { filesApi, describeEntries, describeBatch, recordChange, undoLast, tidyPlan, describePlan, baseName, dirName, joinPath } from "@/lib/files";
 import * as brain from "@/brain/memory";
 import { connectorTools } from "@/integrations/registry";
@@ -865,6 +867,122 @@ Object.assign(tools, {
       await native.lockPc();
       return "PC locked";
     },
+  },
+
+  set_audio_output: {
+    spec: {
+      name: "set_audio_output",
+      description: "Switch which speakers or headset Windows plays sound through, e.g. \"headset\", \"speakers\" or part of the device name. With no device, lists them.",
+      parameters: { type: "object", properties: { device: { type: "string" } }, required: [] },
+    },
+    run: async (a) => {
+      const devs = await native.listOutputDevices();
+      const list = devs.map((d) => `${d.name}${d.is_default ? " (current)" : ""}`).join("; ");
+      if (typeof a.device !== "string" || !a.device.trim()) return `Sound outputs: ${list}`;
+      const d = matchDevice(devs, a.device);
+      if (!d) return `Not sure which one "${a.device}" is. Sound outputs: ${list}. Ask the user which.`;
+      if (d.is_default) return `Already playing through ${d.name}.`;
+      await native.setOutputDevice(d.id);
+      return `Now playing through ${d.name}.`;
+    },
+  },
+
+  set_microphone: {
+    spec: {
+      name: "set_microphone",
+      description: "Switch which microphone Windows records from (by name or kind), or mute/unmute it. With no device, lists them.",
+      parameters: { type: "object", properties: { device: { type: "string" }, muted: { type: "boolean" } }, required: [] },
+    },
+    run: async (a) => {
+      const mics = await winMics.list();
+      const list = mics.map((d) => `${d.name}${d.is_default ? " (current)" : ""}${d.muted ? " (muted)" : ""}`).join("; ");
+      const want = typeof a.device === "string" && a.device.trim() ? a.device : null;
+      if (!want && typeof a.muted !== "boolean") return `Microphones: ${list}`;
+      const d = want ? matchDevice(mics, want) : mics.find((m) => m.is_default) ?? null;
+      if (!d) return `Not sure which microphone "${want}" is. Microphones: ${list}. Ask the user which.`;
+      const done: string[] = [];
+      if (want && !d.is_default) {
+        await winMics.setDefault(d.id);
+        done.push(`recording from ${d.name}`);
+      }
+      if (typeof a.muted === "boolean") {
+        await winMics.setLevel(d.id, undefined, a.muted);
+        done.push(`${d.name} ${a.muted ? "muted" : "unmuted"}`);
+      }
+      return done.length ? `Done: ${done.join(", ")}.` : `Already recording from ${d.name}.`;
+    },
+  },
+
+  set_power_plan: {
+    spec: {
+      name: "set_power_plan",
+      description: "Switch the Windows power plan, e.g. \"high performance\" for gaming, \"balanced\", \"power saver\", or a plan's name. With no plan, lists them.",
+      parameters: { type: "object", properties: { plan: { type: "string" } }, required: [] },
+    },
+    run: async (a) => {
+      if (typeof a.plan !== "string" || !a.plan.trim()) {
+        const ps = await hardwareApi.powerPlans();
+        return `Power plans: ${ps.map((p) => `${p.name}${p.active ? " (current)" : ""}`).join("; ")}`;
+      }
+      return hardwareApi.setPowerPlan(a.plan);
+    },
+  },
+
+  set_brightness: {
+    spec: {
+      name: "set_brightness",
+      description: "Set monitor brightness (0-100) on all monitors, or one by its number from a no-argument call. Works on monitors with DDC/CI switched on. With no percent, reports current brightness.",
+      parameters: { type: "object", properties: { percent: { type: "number" }, monitor: { type: "number", description: "monitor number, from 1" } }, required: [] },
+    },
+    timeoutMs: 30_000,
+    run: async (a) => {
+      if (typeof a.percent !== "number") {
+        const ms = await hardwareApi.brightness();
+        return ms.length ? ms.map((m) => `${m.index + 1}: ${m.name} at ${m.percent}%`).join("; ") : "None of the monitors report brightness (DDC/CI may be off in the monitor's menu).";
+      }
+      return hardwareApi.setBrightness(Math.max(0, Math.min(100, Math.round(a.percent))), typeof a.monitor === "number" ? a.monitor - 1 : undefined);
+    },
+  },
+
+  set_dark_mode: {
+    spec: {
+      name: "set_dark_mode",
+      description: "Switch Windows and apps between dark mode (on=true) and light mode (on=false).",
+      parameters: { type: "object", properties: { on: { type: "boolean" } }, required: ["on"] },
+    },
+    run: async (a) => hardwareApi.setTheme(bool(a.on, "on")),
+  },
+
+  media_control: {
+    spec: {
+      name: "media_control",
+      description: "Play/pause, skip to the next or previous track, or stop whatever's playing (Spotify, YouTube, any media app), even over a full-screen game.",
+      parameters: { type: "object", properties: { action: { type: "string", enum: ["play_pause", "next", "previous", "stop"] } }, required: ["action"] },
+    },
+    run: async (a) => {
+      const action = str(a.action, "action");
+      if (!["play_pause", "next", "previous", "stop"].includes(action)) throw new Error("action must be play_pause, next, previous or stop");
+      return hardwareApi.mediaKey(action as "play_pause");
+    },
+  },
+
+  set_wallpaper: {
+    spec: {
+      name: "set_wallpaper",
+      description: "Set the desktop wallpaper to a picture on this PC (full path to a .jpg, .png or .bmp; find_files can find one).",
+      parameters: { type: "object", properties: { path: { type: "string" } }, required: ["path"] },
+    },
+    run: async (a) => hardwareApi.setWallpaper(str(a.path, "path")),
+  },
+
+  empty_recycle_bin: {
+    spec: {
+      name: "empty_recycle_bin",
+      description: "Empty the Recycle Bin. Everything in it is deleted for good, so this always asks the user first.",
+      parameters: { type: "object", properties: {}, required: [] },
+      sensitive: true,
+    },
+    run: async () => hardwareApi.emptyRecycleBin(),
   },
 
   power_action: {

@@ -17,6 +17,7 @@ mod files;
 mod filemgr;
 mod docs;
 mod gpu;
+mod hardware;
 mod journal;
 mod games;
 mod overlay;
@@ -154,6 +155,14 @@ pub fn run() {
             docs::docs_clear,
             gpu::gpu_stats,
             gpu::running_game,
+            hardware::power_plans,
+            hardware::set_power_plan,
+            hardware::monitor_brightness,
+            hardware::set_monitor_brightness,
+            hardware::set_theme,
+            hardware::media_key,
+            hardware::set_wallpaper,
+            hardware::empty_recycle_bin,
             // Window management
             windows_mgmt::focus_window,
             windows_mgmt::list_windows,
