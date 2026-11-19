@@ -64,7 +64,8 @@ mod imp {
         move |e| BevError::Os(format!("{what}: {e}"))
     }
 
-    /// target: "window" (the app in front, default), "screen" (its display) or "all".
+    /// target: "window" (the app in front, default), "window:<hwnd>" (that window),
+    /// "screen" (the display the mouse is on) or "all".
     pub fn read(target: &str) -> BevResult<OcrResult> {
         unsafe {
             let _ = CoInitializeEx(None, COINIT_MULTITHREADED);
@@ -75,6 +76,8 @@ mod imp {
                 (i, x, y, l)
             }
             "all" => crate::screen::capture_raw("all")?,
+            // One particular window, on whichever display it's on.
+            t if t.starts_with("window:") => crate::screen::capture_raw(t)?,
             _ => {
                 let w = win::user_window().ok_or_else(|| BevError::NotFound("there's no window to read".into()))?;
                 let mut r = RECT::default();

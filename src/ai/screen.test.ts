@@ -109,3 +109,12 @@ describe("hands-on control and manners", () => {
     }
   });
 });
+
+describe("several monitors", () => {
+  it("tells BEV to find windows itself instead of asking the user to move them", () => {
+    const p = buildSystemPrompt(useSettings.getState().settings);
+    expect(p).toMatch(/Never ask them to move, open or bring a window forward/);
+    expect(p).toMatch(/app: "Discord"/);
+    expect(p).toMatch(/shows all of them side by side/);
+  });
+});
