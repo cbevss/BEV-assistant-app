@@ -32,6 +32,23 @@ export const controlCache = {
   },
 };
 
+/**
+ * Find a control by its label, for steps that must survive the window being
+ * reopened (ids change every read). Exact name first (same role preferred),
+ * then a unique partial match. Password boxes are never returned.
+ */
+export function findControl(elements: UiElement[], name: string, role?: string): UiElement | null {
+  const want = name.trim().toLowerCase();
+  if (!want) return null;
+  const usable = elements.filter((e) => !e.password && e.enabled !== false);
+  const exact = usable.filter((e) => e.name.trim().toLowerCase() === want);
+  const byRole = role ? exact.filter((e) => e.role === role) : exact;
+  if (byRole.length) return byRole[0];
+  if (exact.length) return exact[0];
+  const partial = usable.filter((e) => e.name.toLowerCase().includes(want) && (!role || e.role === role));
+  return partial.length === 1 ? partial[0] : null;
+}
+
 // ---------------------------------------------------------------------------
 // What the AI sees
 

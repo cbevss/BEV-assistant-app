@@ -53,6 +53,28 @@ if (new URLSearchParams(location.search).get("replay")) {
   setTimeout(() => useSettings.getState().update({ screenReplay: true }), 700);
 }
 
+// ?learned=1: a learned task on the Automations page.
+if (new URLSearchParams(location.search).get("learned")) {
+  const { useLearned } = await import("@/ai/learn");
+  useLearned.setState({
+    load: async () => {},
+    tasks: [
+      {
+        id: "t1",
+        request: "leave the discord call",
+        example: "Leave the Discord call",
+        createdAt: Date.now() - 86400000,
+        uses: 3,
+        failures: 0,
+        steps: [
+          { id: "a", tool: "use_named_control", args: { app: "Discord", name: "Disconnect", role: "button", action: "click" } },
+          { id: "b", tool: "set_quiet_mode", args: { enabled: false }, delayMs: 500 },
+        ],
+      },
+    ],
+  });
+}
+
 // ?account=signedOut|setup|locked|ready: preview the account screens.
 {
   const v = new URLSearchParams(location.search).get("account");

@@ -10,7 +10,7 @@ import type { Routine, RoutineStep } from "@/routines/types";
 import { AiImage, ToolSpec } from "./types";
 import { bevCloud } from "@/lib/bevCloud";
 import { appsApi, describeOpen, describeClose } from "@/lib/apps";
-import { controlCache, formatSnapshot, formatOcr, findText, centre, riskOfLabel, riskOfKeys, riskOfTyping } from "@/lib/control";
+import { controlCache, formatSnapshot, formatOcr, findText, centre, riskOfLabel, riskOfKeys, riskOfTyping, findControl } from "@/lib/control";
 import { diagnose, formatFindings, type Area } from "@/lib/diagnose";
 import * as brain from "@/brain/memory";
 import { connectorTools } from "@/integrations/registry";
@@ -922,6 +922,45 @@ Object.assign(tools, {
       const text = typeof a.text === "string" ? a.text : undefined;
       if (action === "type" && text === undefined) throw new Error('argument "text" is needed to type');
       const r = await native.uiAct(id, action, text);
+      return `${r.done}${r.detail ? ` ${r.detail}` : ""}${r.verified ? "" : " (Not confirmed: check before telling the user it worked.)"}`;
+    },
+  },
+
+  use_named_control: {
+    spec: {
+      name: "use_named_control",
+      description:
+        "Operate a control by its visible name in an app's window, on any monitor, without reading every control first. Use when you know the exact label, e.g. app \"Discord\", name \"Disconnect\", action click. role (button, link, checkbox, edit…) helps when two controls share a name. Never for password boxes.",
+      parameters: {
+        type: "object",
+        properties: {
+          app: { type: "string", description: "app name, e.g. Discord" },
+          name: { type: "string", description: "the control's visible label" },
+          role: { type: "string", description: "optional: button, link, checkbox, edit, menuitem, tab…" },
+          action: { type: "string", enum: ["click", "toggle", "select", "expand", "collapse", "focus", "type"] },
+          text: { type: "string", description: "for type" },
+        },
+        required: ["app", "name", "action"],
+      },
+    },
+    timeoutMs: 25_000,
+    sensitiveCheck: async (a) => {
+      const action = String(a.action ?? "");
+      if (!["click", "toggle", "select"].includes(action)) return null;
+      const why = riskOfLabel(String(a.name ?? ""));
+      return why ? `clicking ${JSON.stringify(a.name)} ${why}` : null;
+    },
+    run: async (a) => {
+      const name = str(a.name, "name");
+      const action = str(a.action, "action");
+      const text = typeof a.text === "string" ? a.text : undefined;
+      if (action === "type" && text === undefined) throw new Error('argument "text" is needed to type');
+      const w = await findWindow({ app: a.app });
+      const snap = await native.uiRead(w.hwnd);
+      controlCache.setUi(snap);
+      const el = findControl(snap.elements, name, typeof a.role === "string" ? a.role : undefined);
+      if (!el) throw new Error(`No control called "${name}" in ${w.title}. read_app_controls to see what's there.`);
+      const r = await native.uiAct(el.id, action, text);
       return `${r.done}${r.detail ? ` ${r.detail}` : ""}${r.verified ? "" : " (Not confirmed: check before telling the user it worked.)"}`;
     },
   },

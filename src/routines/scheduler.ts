@@ -26,7 +26,8 @@ function stamp(d: Date): string {
 }
 
 function isDue(r: Routine, now: Date): boolean {
-  if (!r.enabled || !r.schedule?.time) return false;
+  // Hands-on routines click and type in apps: they only run when the user asks.
+  if (!r.enabled || r.handsOn || !r.schedule?.time) return false;
   const hh = String(now.getHours()).padStart(2, "0");
   const mm = String(now.getMinutes()).padStart(2, "0");
   if (r.schedule.time !== `${hh}:${mm}`) return false;

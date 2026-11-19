@@ -35,6 +35,12 @@ export interface Routine {
   enabled: boolean;
   builtIn?: boolean;
   lastRunAt?: number;
+  /**
+   * Clicks and types in apps (a learned task or a "watch me" recording).
+   * Only ever runs when the user asks, never on a schedule, because someone
+   * should be there while it uses the screen.
+   */
+  handsOn?: boolean;
 }
 
 export type StepStatus = "pending" | "skipped" | "running" | "ok" | "failed" | "declined" | "cancelled";

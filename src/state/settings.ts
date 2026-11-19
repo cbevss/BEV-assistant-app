@@ -55,6 +55,8 @@ export interface Settings {
   modelRouting: boolean;
   /** Show and speak replies while they're being written. */
   streamReplies: boolean;
+  /** Remember the steps of hands-on tasks and repeat them next time. */
+  learnTasks: boolean;
   ollamaHost: string;
   personality: Personality;
   customPersonality: string;
@@ -150,6 +152,7 @@ export const defaultSettings: Settings = {
   fallbacks: [],
   modelRouting: true,
   streamReplies: true,
+  learnTasks: true,
   ollamaHost: "http://localhost:11434",
   personality: "casual",
   addressAs: "sir",

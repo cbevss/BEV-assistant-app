@@ -84,3 +84,26 @@ describe("formatSnapshot", () => {
     expect(out).toMatch(/data, not instructions/);
   });
 });
+
+import { findControl } from "./control";
+import type { UiElement } from "./native";
+
+describe("findControl", () => {
+  const el = (id: number, name: string, role = "button", extra: Partial<UiElement> = {}): UiElement => ({
+    id, name, role, actions: ["invoke"], enabled: true, password: false, rect: [0, 0, 10, 10], ...extra,
+  });
+  const els = [el(1, "Disconnect"), el(2, "Disconnect", "menuitem"), el(3, "Mute"), el(4, "Deafen"), el(5, "Password", "edit", { password: true }), el(6, "Send", "button", { enabled: false })];
+
+  it("prefers an exact name with the same role", () => {
+    expect(findControl(els, "disconnect", "menuitem")?.id).toBe(2);
+    expect(findControl(els, "Disconnect")?.id).toBe(1);
+  });
+  it("accepts one unique partial match only", () => {
+    expect(findControl(els, "mut")?.id).toBe(3);
+    expect(findControl(els, "e")).toBeNull();
+  });
+  it("never returns password boxes or disabled controls", () => {
+    expect(findControl(els, "Password")).toBeNull();
+    expect(findControl(els, "Send")).toBeNull();
+  });
+});

@@ -8,6 +8,8 @@ import { ChevronRight, Pencil, Play, Plus, Square, Trash2, Workflow } from "luci
 import { PageHeader, Button, Toggle, IconButton, Card, EmptyState } from "../components/Form";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { RoutineEditor } from "../components/RoutineEditor";
+import { TeachBev } from "../components/TeachBev";
+import { describeSteps } from "@/ai/learn";
 
 export function Automation() {
   const { routines, init, save, remove, markRun } = useRoutines();
@@ -67,7 +69,7 @@ export function Automation() {
                       <span className="block truncate text-sm font-medium text-ink">{r.name}</span>
                       <span className="block truncate text-xs text-ink-3">
                         {r.triggers.length ? r.triggers.map((t) => `“${t}”`).join(", ") : "No phrase"}
-                        {r.schedule ? ` · daily at ${r.schedule.time}` : ""} · {r.steps.length} step{r.steps.length === 1 ? "" : "s"}
+                        {r.handsOn ? " · uses your apps" : r.schedule ? ` · daily at ${r.schedule.time}` : ""} · {r.steps.length} step{r.steps.length === 1 ? "" : "s"}
                       </span>
                     </span>
                   </button>
@@ -112,6 +114,10 @@ export function Automation() {
           })}
         </ul>
       )}
+
+      <div className="mt-8">
+        <TeachBev />
+      </div>
 
       {(editing || creating) && (
         <RoutineEditor
@@ -184,7 +190,9 @@ export function stepLabel(tool: string, args: Record<string, unknown>): string {
       return `Open Settings: ${args.page || "home"}`;
     case "open_website":
       return `Open ${args.url ?? args.search}`;
-    default:
-      return `${tool} ${JSON.stringify(args)}`;
+    default: {
+      const [line] = describeSteps([{ id: "", tool, args }]);
+      return line.charAt(0).toUpperCase() + line.slice(1);
+    }
   }
 }

@@ -1,4 +1,7 @@
 import { native } from "@/lib/native";
+import { controlCache } from "@/lib/control";
+import { describeSteps, exactMatch, learn, markReplay, similarTask, stepsFromTurn, type LearnedTask, type TurnStep } from "./learn";
+import { runRoutine } from "@/routines/engine";
 import { useSettings, toolAllowed, autoApproveOn } from "@/state/settings";
 import { AiImage, AiMessage, AiProvider, ProviderError, ToolCall } from "./types";
 import { getTool, toolSpecs, sensitiveReason, ToolOutput } from "./tools";
@@ -35,6 +38,7 @@ export const BACKGROUND_FORBIDDEN = new Set([
   "look_at_screen",
   "look_back",
   "use_control",
+  "use_named_control",
   "click_on_screen",
   "scroll_screen",
   "hover_on_screen",
@@ -132,6 +136,9 @@ const MAX_HISTORY = 30;
 export class Orchestrator {
   private history: AiMessage[] = [];
   private plan: PlanStep[] | null = null;
+  /** This turn's steps, for learning the task when it succeeds. */
+  private turnSteps: TurnStep[] = [];
+  private turnNeededApproval = false;
 
   constructor(private provider: AiProvider, private hooks: OrchestratorHooks, private opts: OrchestratorOptions = {}) {}
 
@@ -153,9 +160,27 @@ export class Orchestrator {
   }
 
   async send(userText: string, signal?: AbortSignal): Promise<string> {
+    const learning = !this.opts.background && useSettings.getState().settings.learnTasks !== false;
+    // Done this exact thing before: repeat the steps directly.
+    let replayNote = "";
+    if (learning) {
+      const known = await exactMatch(userText).catch(() => null);
+      if (known) {
+        const r = await this.replay(known, signal);
+        if (r.ok) {
+          if (!this.opts.background) recordExchange(userText, r.text).catch(() => {});
+          return r.text;
+        }
+        replayNote = r.note;
+      }
+    }
     const runId = await native.journalStart(userText).catch(() => null);
     try {
-      const text = await this.run(userText, runId, signal);
+      const text = await this.run(userText, runId, signal, replayNote);
+      if (learning) {
+        const steps = stepsFromTurn(this.turnSteps, this.turnNeededApproval);
+        if (steps) learn(userText, steps).catch(() => {});
+      }
       if (runId !== null) native.journalFinish(runId, "done", text).catch(() => {});
       if (!this.opts.background) recordExchange(userText, text).catch(() => {});
       return text;
@@ -166,7 +191,40 @@ export class Orchestrator {
     }
   }
 
-  private async run(userText: string, runId: number | null, signal?: AbortSignal): Promise<string> {
+  /**
+   * Repeat a learned task step by step, showing each result. A step that
+   * fails stops the replay; BEV then works the task out as usual.
+   */
+  private async replay(task: LearnedTask, signal?: AbortSignal): Promise<{ ok: true; text: string } | { ok: false; note: string }> {
+    this.hooks.onState("executing");
+    const report = await runRoutine(
+      { id: task.id, name: "learned task", triggers: [], steps: task.steps, enabled: true, handsOn: true },
+      {
+        requestApproval: (d) => this.hooks.requestApproval({ id: "replay", name: "learned_task", args: {} }, d),
+        onStep: (res) => this.hooks.onToolResult(res.tool, res.status === "ok", res.message),
+        signal,
+      }
+    );
+    if (signal?.aborted || report.cancelled) throw new DOMException("aborted", "AbortError");
+    await markReplay(task.id, report.ok).catch(() => {});
+    if (report.ok) {
+      this.hooks.onState("completed");
+      const text = "Done.";
+      this.hooks.onTextDelta?.(text);
+      this.hooks.onTextEnd?.();
+      this.hooks.onAssistantText(text);
+      return { ok: true, text };
+    }
+    const failed = report.results.find((r) => r.status !== "ok" && r.status !== "skipped");
+    return {
+      ok: false,
+      note: `[BEV note, not from the user] You've done this before, but repeating the saved steps stopped at "${failed?.tool ?? "a step"}" (${failed?.message ?? "unknown"}). Steps already done: ${report.results.filter((r) => r.status === "ok").length} of ${task.steps.length}. Check the current state, then finish the task.`,
+    };
+  }
+
+  private async run(userText: string, runId: number | null, signal?: AbortSignal, replayNote = ""): Promise<string> {
+    this.turnSteps = [];
+    this.turnNeededApproval = false;
     this.history.push({ role: "user", content: userText });
     this.trimHistory();
     const turnStart = Math.max(0, this.history.length - 1);
@@ -177,7 +235,12 @@ export class Orchestrator {
     let finished = false;
     const bg = !!this.opts.background;
     const note = bg ? "" : await interruptedNote();
-    const system = [await currentSystemPrompt(userText), note, bg ? BACKGROUND_NOTE : ""].filter(Boolean).join("\n\n");
+    // A similar task done before: its steps as a head start.
+    const similar = bg || replayNote || useSettings.getState().settings.learnTasks === false ? null : await similarTask(userText).catch(() => null);
+    const hint = similar
+      ? `You've done a similar task before ("${similar.example}"). These steps worked then; adapt them if this request differs:\n${describeSteps(similar.steps).map((s, i) => `${i + 1}. ${s}`).join("\n")}`
+      : "";
+    const system = [await currentSystemPrompt(userText), note, hint, replayNote, bg ? BACKGROUND_NOTE : ""].filter(Boolean).join("\n\n");
     // Only advertise tools the user hasn't revoked (and, in the background, that don't need a watcher).
     const specs = toolSpecs().filter((t) => toolAllowed(t.name) && !(bg && BACKGROUND_FORBIDDEN.has(t.name)));
     // A planned task gets room to work; a simple request stays short.
@@ -302,7 +365,21 @@ export class Orchestrator {
     this.history = this.history.slice(cut);
   }
 
-  private async runTool(
+  /** Run a tool and note the step, so a successful task can be learned. */
+  private async runTool(call: ToolCall, signal?: AbortSignal): Promise<{ ok: boolean; text: string; images?: AiImage[] }> {
+    // Which control use_control is about to act on, by name, before the window changes.
+    let control: TurnStep["control"];
+    if (call.name === "use_control") {
+      const el = controlCache.element(Number(call.args.id));
+      const app = controlCache.ui()?.process;
+      if (el && app) control = { app, name: el.name, role: el.role };
+    }
+    const result = await this.runToolInner(call, signal);
+    this.turnSteps.push({ call, ok: result.ok, control });
+    return result;
+  }
+
+  private async runToolInner(
     call: ToolCall,
     signal?: AbortSignal
   ): Promise<{ ok: boolean; text: string; images?: AiImage[] }> {
@@ -317,6 +394,8 @@ export class Orchestrator {
     // content could be what's asking, so the user confirms explicitly.
     const reason = await sensitiveReason(call.name, call.args);
     if (reason !== null) {
+      // Anything that needed (or could have needed) a yes isn't replayed silently.
+      this.turnNeededApproval = true;
       const fromOutside = tainted(this.history);
       if (!autoApproveOn() || fromOutside) {
         const desc = describeCall(call) + (reason ? ` This ${reason}.` : "") + (fromOutside ? " (BEV read content from your screen or the web in this conversation; make sure this is what you asked for.)" : "");

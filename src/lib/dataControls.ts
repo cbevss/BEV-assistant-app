@@ -12,6 +12,7 @@ import { useRoutines } from "@/routines/store";
 import { loadWakeModels, removeWakeModel } from "@/voice/oww/model-store";
 import { useAccount } from "@/account/account";
 import { useAssistant } from "@/state/assistant";
+import { useLearned } from "@/ai/learn";
 
 /**
  * Every secret BEV keeps in Windows Credential Manager. Keep in step with the
@@ -51,6 +52,8 @@ export const dataActions = {
     await native.replayConfigure(false);
     if (s.screenReplay) await native.replayConfigure(true);
   },
+  /** Tasks BEV learned by doing them. */
+  learned: () => useLearned.getState().clear(),
   secrets: async () => {
     for (const n of secretNames()) await native.deleteSecret(n).catch(() => {});
   },
@@ -58,7 +61,7 @@ export const dataActions = {
 
 /**
  * Erase everything BEV keeps on this PC: conversations, memories, notes,
- * activity, routines, custom wake phrases, saved keys and sign-ins, and every
+ * activity, routines, learned tasks, custom wake phrases, saved keys and sign-ins, and every
  * setting (the app starts again from first-run setup). Signs this PC out of
  * the BEV account but doesn't delete the account.
  */
@@ -73,6 +76,7 @@ export async function eraseEverything(): Promise<void> {
   await native.replayConfigure(false).catch(() => {});
   const routines = useRoutines.getState();
   for (const r of [...routines.routines]) await routines.remove(r.id);
+  await dataActions.learned().catch(() => {});
   for (const m of await loadWakeModels().catch(() => [])) await removeWakeModel(m.name).catch(() => {});
   await dataActions.secrets();
   await useSettings.getState().update({ ...(await import("@/state/settings")).defaultSettings, onboarded: false });
