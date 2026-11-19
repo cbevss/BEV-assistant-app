@@ -66,6 +66,18 @@ export function DataControls() {
       show: replayOn,
     },
     {
+      id: "learned",
+      label: "Learned tasks",
+      hint: "Steps BEV remembered from tasks it did in your apps (Automations page).",
+      confirm: "Forget every task BEV has learned? Routines you saved stay.",
+    },
+    {
+      id: "documents",
+      label: "What BEV read from your documents",
+      hint: "The search index of your chosen document folders. Your files aren't touched.",
+      confirm: "Forget what BEV read from your documents? Your files stay as they are; BEV re-reads the folders if they're still chosen.",
+    },
+    {
       id: "secrets",
       label: "Saved keys and sign-ins",
       hint: "AI provider keys, connected services (Spotify, Google, GitHub, Home Assistant…), BEV Cloud and MCP tokens, stored in Windows Credential Manager.",

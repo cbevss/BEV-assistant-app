@@ -5,6 +5,7 @@ import { useAssistant } from "@/state/assistant";
 import { useSettings } from "@/state/settings";
 import { useRoutines } from "@/routines/store";
 import { startScheduler } from "@/routines/scheduler";
+import { needsReindex, indexDocuments } from "@/lib/documents";
 import { applyAppearance } from "@/lib/appearance";
 import { Dashboard } from "./pages/Dashboard";
 import { Assistant } from "./pages/Assistant";
@@ -85,6 +86,12 @@ export function App() {
 
       // Fire scheduled routines on their own, even while minimised to tray.
       startScheduler();
+
+      // Catch up on documents changed since BEV last read them (in the background).
+      {
+        const d = useSettings.getState().settings.documents;
+        if (needsReindex(d.folders, d.lastIndexed)) setTimeout(() => void indexDocuments().catch(() => {}), 20_000);
+      }
 
       // Register the approval handler the orchestrator calls for sensitive tools.
       // BEV is often hidden in the tray when a voice request needs approval;

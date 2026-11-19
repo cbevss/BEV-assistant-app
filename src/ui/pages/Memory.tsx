@@ -6,6 +6,7 @@ import { looksSensitive } from "@/lib/sensitive";
 import { PageHeader, Section, TextInput, Button, IconButton, Badge } from "../components/Form";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { NotesPanel, HistoryPanel, SemanticSearchSettings } from "../components/BrainPanels";
+import { DocumentsPanel } from "../components/DocumentsPanel";
 import { remember, forgetMemory, searchMemories } from "@/brain/memory";
 
 export function Memory() {
@@ -17,7 +18,10 @@ export function Memory() {
   const [editing, setEditing] = useState<number | null>(null);
   const [editVal, setEditVal] = useState("");
   const [confirm, setConfirm] = useState<{ text: string; run: () => Promise<void> } | null>(null);
-  const [tab, setTab] = useState<"memories" | "notes" | "history">("memories");
+  const [tab, setTab] = useState<"memories" | "notes" | "documents" | "history">(() => {
+    const t = new URLSearchParams(location.search).get("tab");
+    return t === "notes" || t === "documents" || t === "history" ? t : "memories";
+  });
   const tabsRef = useRef<HTMLDivElement>(null);
   const tabRect = useActiveRect(tabsRef, tab);
   const [ranked, setRanked] = useState<MemoryRow[] | null>(null);
@@ -102,13 +106,13 @@ export function Memory() {
     <div>
       <PageHeader
         title="Memory"
-        subtitle="Everything BEV remembers (facts, notes and past conversations) lives in a local database on this PC. Inspect, edit, export or permanently delete it."
+        subtitle="Everything BEV remembers (facts, notes, past conversations and what it has read of your documents) lives in a local database on this PC. Inspect, edit, export or permanently delete it."
       />
       {err && <p className="mb-4 text-sm text-danger">{err}</p>}
 
       <div ref={tabsRef} className="relative mb-6 flex gap-5 border-b border-line-subtle" role="tablist">
         <SlidingUnderline rect={tabRect.rect} ready={tabRect.ready} />
-        {(["memories", "notes", "history"] as const).map((t) => (
+        {(["memories", "notes", "documents", "history"] as const).map((t) => (
           <button
             key={t}
             role="tab"
@@ -124,6 +128,7 @@ export function Memory() {
       <div key={tab} className="animate-page-in">
       {tab === "notes" && <NotesPanel />}
       {tab === "history" && <HistoryPanel />}
+      {tab === "documents" && <DocumentsPanel />}
       {tab === "memories" && (
         <>
 

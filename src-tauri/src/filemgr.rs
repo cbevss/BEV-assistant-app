@@ -125,6 +125,10 @@ impl Guard {
         Ok(())
     }
 
+    pub(crate) fn check_usable(&self, p: &Path) -> Result<(), String> {
+        self.usable(p)
+    }
+
     /// May BEV move, rename or bin this path itself?
     fn movable(&self, p: &Path) -> Result<(), String> {
         self.usable(p)?;

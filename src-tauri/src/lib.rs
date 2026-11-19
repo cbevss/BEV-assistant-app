@@ -15,6 +15,7 @@ mod db;
 mod error;
 mod files;
 mod filemgr;
+mod docs;
 mod journal;
 mod games;
 mod overlay;
@@ -81,6 +82,7 @@ pub fn run() {
             // Task journal; anything left "running" was cut off last time.
             journal::init(&conn)?;
             brain::init(&conn)?;
+            docs::init(&conn)?;
             integrations::load_origins(app.handle());
             let cut_off = journal::mark_interrupted(&conn, journal::now_ms())?;
             if cut_off > 0 {
@@ -144,6 +146,11 @@ pub fn run() {
             filemgr::files_move,
             filemgr::files_mkdir,
             filemgr::files_trash,
+            docs::docs_index,
+            docs::docs_status,
+            docs::docs_search,
+            docs::docs_read,
+            docs::docs_clear,
             // Window management
             windows_mgmt::focus_window,
             windows_mgmt::list_windows,

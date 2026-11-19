@@ -29,5 +29,12 @@
 - Moves, renames, copies and tidy-ups can be undone with "undo that" until BEV restarts.
 - File and folder names are treated as untrusted text: while they're in the conversation, sensitive actions need your explicit approval.
 
+## Your documents
+
+- BEV only reads the folders you add in Memory → Documents, plus any single file you ask it to read. The same native guard as the file tools applies (no system folders or AppData).
+- The extracted text is kept in BEV's local database for searching. Nothing is uploaded when indexing; when you ask a question, only the matching passages (or the pages BEV reads) go to your chosen AI as part of the answer.
+- Document text is untrusted: while it's in the conversation, sensitive actions need your explicit approval.
+- Memory → Documents → Forget (or Settings → Advanced → Your data) deletes the index; your files are never changed.
+
 ## Not present (by design)
 No remote-access, no telemetry/analytics, no auto-updates that run code without the user, no bypassing Windows security. Screen awareness and file tools ship **after** their explicit permission UI.

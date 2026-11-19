@@ -5,6 +5,7 @@
  * While signed in to a BEV account, memories and notes sync: deleting them
  * here deletes them on your other devices too, on the next sync.
  */
+import { invoke } from "@tauri-apps/api/core";
 import { native } from "./native";
 import { PROVIDERS } from "@/ai/catalog";
 import { useSettings } from "@/state/settings";
@@ -54,6 +55,8 @@ export const dataActions = {
   },
   /** Tasks BEV learned by doing them. */
   learned: () => useLearned.getState().clear(),
+  /** What BEV read from your documents (the files themselves are untouched). */
+  documents: () => invoke<void>("docs_clear"),
   secrets: async () => {
     for (const n of secretNames()) await native.deleteSecret(n).catch(() => {});
   },
@@ -77,6 +80,7 @@ export async function eraseEverything(): Promise<void> {
   const routines = useRoutines.getState();
   for (const r of [...routines.routines]) await routines.remove(r.id);
   await dataActions.learned().catch(() => {});
+  await dataActions.documents().catch(() => {});
   for (const m of await loadWakeModels().catch(() => [])) await removeWakeModel(m.name).catch(() => {});
   await dataActions.secrets();
   await useSettings.getState().update({ ...(await import("@/state/settings")).defaultSettings, onboarded: false });
