@@ -15,5 +15,11 @@
 9a. **Screen replay is opt-in and in memory only.** Off until the user switches it on in Privacy & security. While on, BEV keeps the last 15 minutes of the display the mouse is on, downscaled and JPEG-encoded in RAM: two frames a second for the last minute, one every 5 seconds before that (about 25 MB), dropping frames older than 15 minutes. Nothing is written to disk. Frames go to the AI provider only when the user asks BEV to look back (`look_back`), and only the handful picked for that question. Privacy mode, revoking `look_back`, or turning the setting off stops capture and clears the buffer. Routines and background tasks can't use it, and the system bar shows REPLAY while it runs.
 10. **Prompt-injection posture.** Web/screen content fed to the model is data, not commands; tool execution is gated by the validated registry + approval, so page text can't trigger an unapproved sensitive action.
 
+## Teaching BEV tasks
+
+- **"Show BEV how" recording** uses low-level Windows mouse and keyboard hooks only while you've pressed Start, and stops by itself after 5 minutes. Events stay in memory on your PC, are turned into steps you review, and are thrown away; nothing is uploaded. Typing into password boxes is dropped before you see the steps, and clicks inside BEV itself are ignored.
+- **Learned tasks** are only kept from turns where every step succeeded without needing your approval, and never from clicks at screen positions. Replays go through the normal approval checks, so a sensitive button still asks first. A task that fails three times in a row is forgotten.
+- **Hands-on routines** (taught or learned) can click and type, so they only run when you ask; they can't be scheduled, and background jobs can't use `use_named_control`.
+
 ## Not present (by design)
 No remote-access, no telemetry/analytics, no auto-updates that run code without the user, no bypassing Windows security. Screen awareness and file tools ship **after** their explicit permission UI.

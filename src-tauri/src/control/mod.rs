@@ -11,6 +11,7 @@ pub mod guard;
 pub mod input;
 pub mod keys;
 pub mod ocr;
+pub mod recorder;
 pub mod uia;
 pub mod win;
 

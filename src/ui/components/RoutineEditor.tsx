@@ -68,7 +68,8 @@ export function RoutineEditor({
       steps,
       enabled: routine?.enabled ?? true,
       builtIn: routine?.builtIn,
-      schedule: scheduleTime ? { time: scheduleTime, days } : undefined,
+      handsOn: routine?.handsOn,
+      schedule: scheduleTime && !routine?.handsOn ? { time: scheduleTime, days } : undefined,
       lastRunAt: routine?.lastRunAt,
     });
   };
@@ -124,6 +125,10 @@ export function RoutineEditor({
           + Add step
         </Button>
 
+        {routine?.handsOn ? (
+          <p className="mt-5 text-xs text-ink-3">This routine clicks and types in your apps, so it only runs when you ask for it, never on a schedule.</p>
+        ) : (
+        <>
         <label className="mb-1 mt-5 block text-xs text-ink-2">
           Schedule (optional)
         </label>
@@ -161,6 +166,8 @@ export function RoutineEditor({
               })}
             </div>
           </div>
+        )}
+        </>
         )}
 
         <div className="mt-6 flex justify-end gap-2">

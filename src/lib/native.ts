@@ -138,6 +138,10 @@ export const native = {
   inputHover: (x: number, y: number, space: "screen" | "screenshot") => invoke<ClickResult>("input_hover", { x, y, space }),
   inputDrag: (fromX: number, fromY: number, toX: number, toY: number, space: "screen" | "screenshot" = "screenshot") =>
     invoke<ClickResult>("input_drag", { fromX, fromY, toX, toY, space }),
+  // "Watch me" demonstrations.
+  recordStart: () => invoke<void>("record_start"),
+  recordStop: () => invoke<import("@/ai/demonstration").RecEvent[]>("record_stop"),
+  recordStatus: () => invoke<{ recording: boolean; events: number }>("record_status"),
   pointInfo: (x: number, y: number, space: "screen" | "screenshot") => invoke<PointInfo | null>("point_info", { x, y, space }),
   inputTarget: () => invoke<InputTarget | null>("input_target"),
 

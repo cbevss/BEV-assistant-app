@@ -7,6 +7,8 @@ export interface RunHooks {
   onStep?: (r: StepResult, index: number, total: number) => void;
   /** Approve a sensitive step. Return false to decline (step marked declined). */
   requestApproval?: (description: string) => Promise<boolean>;
+  /** Stop the routine when this aborts (e.g. "BEV, stop" during a replay). */
+  signal?: AbortSignal;
 }
 
 /** Tools a routine may never call, to prevent recursion / self-modification. */
@@ -23,6 +25,7 @@ export const ROUTINE_FORBIDDEN = new Set([
   // Controlling apps needs someone watching: nothing unattended clicks or types.
   "read_app_controls",
   "use_control",
+  "use_named_control",
   "read_screen_text",
   "click_on_screen",
   "scroll_screen",
@@ -35,6 +38,9 @@ export const ROUTINE_FORBIDDEN = new Set([
   "update_tracked_task",
   "refresh_app_list",
 ]);
+
+/** Screen tools a hands-on routine may use (it only runs when the user asks). */
+export const HANDS_ON_ALLOWED = new Set(["use_named_control", "click_on_screen", "scroll_screen", "press_keys", "type_text"]);
 
 let current: AbortController | null = null;
 
@@ -66,11 +72,11 @@ async function conditionMet(cond: StepCondition | undefined): Promise<boolean> {
   return cond.type === "process_running" ? running : !running;
 }
 
-async function runStep(step: RoutineStep, signal: AbortSignal, hooks: RunHooks): Promise<StepResult> {
+async function runStep(step: RoutineStep, signal: AbortSignal, hooks: RunHooks, handsOn = false): Promise<StepResult> {
   const base = { stepId: step.id, tool: step.tool };
   const tool = getTool(step.tool);
   if (!tool) return { ...base, status: "failed", message: `unknown tool "${step.tool}"` };
-  if (ROUTINE_FORBIDDEN.has(step.tool))
+  if (ROUTINE_FORBIDDEN.has(step.tool) && !(handsOn && HANDS_ON_ALLOWED.has(step.tool)))
     return { ...base, status: "failed", message: `"${step.tool}" can't be used inside a routine` };
   if (!toolAllowed(step.tool)) return { ...base, status: "skipped", message: "permission revoked" };
 
@@ -131,6 +137,8 @@ export async function runRoutine(routine: Routine, hooks: RunHooks = {}): Promis
   current?.abort();
   const ctl = new AbortController();
   current = ctl;
+  if (hooks.signal?.aborted) ctl.abort();
+  hooks.signal?.addEventListener("abort", () => ctl.abort(), { once: true });
   const results: StepResult[] = [];
   let cancelled = false;
 
@@ -142,7 +150,7 @@ export async function runRoutine(routine: Routine, hooks: RunHooks = {}): Promis
       }
       let result: StepResult;
       try {
-        result = await runStep(routine.steps[i], ctl.signal, hooks);
+        result = await runStep(routine.steps[i], ctl.signal, hooks, !!routine.handsOn);
       } catch (e) {
         if (e instanceof DOMException && e.name === "AbortError") {
           cancelled = true;
