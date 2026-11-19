@@ -9,6 +9,7 @@ import { useAssistant } from "@/state/assistant";
 import { useSettings } from "@/state/settings";
 import { useBackground } from "@/ai/background";
 import { stateMeta } from "../design";
+import { gpuApi, useGaming, type GpuStats } from "@/lib/gaming";
 
 function useStats() {
   const [s, setS] = useState<SystemStats | null>(null);
@@ -23,6 +24,22 @@ function useStats() {
     };
   }, []);
   return s;
+}
+
+/** GPU readings every few seconds (usage is Windows' own counter; temperature needs an AMD card). */
+function useGpu() {
+  const [g, setG] = useState<GpuStats | null>(null);
+  useEffect(() => {
+    let alive = true;
+    const tick = () => gpuApi.stats().then((v) => alive && setG(v)).catch(() => {});
+    tick();
+    const id = setInterval(tick, 4000);
+    return () => {
+      alive = false;
+      clearInterval(id);
+    };
+  }, []);
+  return g;
 }
 
 function useClock() {
@@ -46,6 +63,9 @@ export function SystemBar() {
   const replay = useSettings((x) => x.settings.screenReplay && x.settings.toolPermissions.look_back !== false && !privacyMode);
   const bg = useBackground((b) => b.tasks.filter((t) => t.status === "running").length);
   const s = useStats();
+  const gpu = useGpu();
+  const game = useGaming((g) => g.game);
+  const autoQuiet = useSettings((x) => x.settings.autoGamingMode || x.settings.gamingQuietMode);
   const now = useClock();
   const active = state !== "idle";
   const label = privacyMode ? "PRIVACY" : state === "idle" ? (micEnabled ? "STANDBY" : "MIC OFF") : state === "error" ? "FAULT" : stateMeta[state].label.toUpperCase();
@@ -61,9 +81,18 @@ export function SystemBar() {
         <>
           <Cell k="CPU" v={`${s.cpu_usage.toFixed(0).padStart(2, "0")}%`} tone={s.cpu_usage >= 90 ? "warn" : undefined} />
           <Cell k="MEM" v={`${(s.mem_used_mb / 1024).toFixed(1)}/${(s.mem_total_mb / 1024).toFixed(0)}G`} tone={s.mem_percent >= 90 ? "warn" : undefined} />
-          {s.gpu_usage != null && <Cell k="GPU" v={`${s.gpu_usage.toFixed(0)}%`} />}
+          {gpu?.usage != null && <Cell k="GPU" v={`${gpu.usage.toFixed(0).padStart(2, "0")}%`} title={gpu.name ?? undefined} />}
+          {gpu?.temp_c != null && (
+            <Cell
+              k="TEMP"
+              v={`${Math.round(gpu.temp_c)}°C`}
+              tone={(gpu.hotspot_c ?? gpu.temp_c) >= 95 ? "danger" : (gpu.hotspot_c ?? gpu.temp_c) >= 85 ? "warn" : undefined}
+              title={gpu.hotspot_c != null ? `Hotspot ${Math.round(gpu.hotspot_c)}°C` : undefined}
+            />
+          )}
         </>
       )}
+      {game && <Cell k="GAMING" v={autoQuiet ? "QUIET" : "ON"} tone="accent" title={`${game.name}${autoQuiet ? ": BEV is keeping it short" : ""}`} />}
       {bg > 0 && <Cell k="TASKS" v={String(bg)} tone="accent" />}
       {replay && <Cell k="REPLAY" v="ON" tone="accent" title="Screen replay is keeping the last 15 minutes of the screen your mouse is on, in memory only" />}
       <span className="flex-1" />

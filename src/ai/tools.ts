@@ -13,6 +13,7 @@ import { appsApi, describeOpen, describeClose } from "@/lib/apps";
 import { controlCache, formatSnapshot, formatOcr, findText, centre, riskOfLabel, riskOfKeys, riskOfTyping, findControl } from "@/lib/control";
 import { diagnose, formatFindings, type Area } from "@/lib/diagnose";
 import { docsApi, formatHits } from "@/lib/documents";
+import { gpuApi, describeGpu, useGaming } from "@/lib/gaming";
 import { filesApi, describeEntries, describeBatch, recordChange, undoLast, tidyPlan, describePlan, baseName, dirName, joinPath } from "@/lib/files";
 import * as brain from "@/brain/memory";
 import { connectorTools } from "@/integrations/registry";
@@ -82,6 +83,19 @@ const bool = (v: unknown, name: string): boolean => {
 };
 
 export const tools: Record<string, RegisteredTool> = {
+  get_gpu_stats: {
+    spec: {
+      name: "get_gpu_stats",
+      description:
+        "Read the graphics card right now: how busy it is, video memory in use and, on AMD cards, temperature (edge and hotspot), clocks, fan speed and power. Use for \"how's my GPU doing\", \"is my graphics card too hot\", or when a game is stuttering.",
+      parameters: { type: "object", properties: {}, required: [] },
+    },
+    run: async () => {
+      const g = useGaming.getState().game;
+      return describeGpu(await gpuApi.stats()) + (g ? ` They're playing ${g.name}.` : "");
+    },
+  },
+
   get_system_stats: {
     spec: {
       name: "get_system_stats",
@@ -831,7 +845,7 @@ Object.assign(tools, {
     spec: {
       name: "set_quiet_mode",
       description:
-        "Turn BEV's quiet/gaming mode on or off. When on, BEV replies in as few words as possible. Use when the user says they're gaming or wants BEV to keep it quiet.",
+        "Turn BEV's quiet mode on or off. When on, BEV replies in as few words as possible. BEV already goes quiet by itself while a game is running (if automatic gaming mode is on), so use this when the user asks.",
       parameters: { type: "object", properties: { enabled: { type: "boolean" } }, required: ["enabled"] },
     },
     run: async (a: Record<string, unknown>) => {

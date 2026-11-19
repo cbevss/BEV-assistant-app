@@ -16,6 +16,7 @@ mod error;
 mod files;
 mod filemgr;
 mod docs;
+mod gpu;
 mod journal;
 mod games;
 mod overlay;
@@ -151,6 +152,8 @@ pub fn run() {
             docs::docs_search,
             docs::docs_read,
             docs::docs_clear,
+            gpu::gpu_stats,
+            gpu::running_game,
             // Window management
             windows_mgmt::focus_window,
             windows_mgmt::list_windows,

@@ -71,6 +71,8 @@ w.__TAURI_INTERNALS__ = {
     if (cmd === "plugin:store|set") return null;
     if (cmd.startsWith("plugin:event|")) return cb++;
     if (cmd === "plugin:app|version") return "1.1.17";
+    if (cmd === "gpu_stats") return { name: "AMD Radeon RX 9060 XT", vram_total_mb: 16304, vram_used_mb: 6144, usage: 64, temp_c: 68, hotspot_c: 84, mem_temp_c: null, clock_mhz: 3050, mem_clock_mhz: null, fan_rpm: 1500, fan_percent: 38, power_w: 140 };
+    if (cmd === "running_game") return params.get("game") ? { id: "252950", name: "Rocket League" } : null;
     if (cmd === "docs_status") return { files: 214, passages: 3862, unreadable: 3, running: false, done: 0, total: 0 };
     if (cmd === "get_secret") return ["anthropic_api_key", "openai_api_key", "gemini_api_key"].includes(String(args.name)) ? "sk-preview" : null;
     if (cmd in data) return structuredClone(data[cmd]);

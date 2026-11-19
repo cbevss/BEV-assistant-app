@@ -127,6 +127,8 @@ export interface Settings {
   /** Begin listening for the wake word automatically on launch. */
   listenOnStartup: boolean;
   gamingQuietMode: boolean;
+  /** Go quiet by itself while a game is running. */
+  autoGamingMode: boolean;
   proactiveMonitoring: boolean;
   /** What BEV keeps an eye on while proactive monitoring is on. */
   watch: { crashes: boolean; network: boolean; disk: boolean };
@@ -197,6 +199,7 @@ export const defaultSettings: Settings = {
   minimizeToTray: false,
   listenOnStartup: true,
   gamingQuietMode: false,
+  autoGamingMode: true,
   proactiveMonitoring: false,
   watch: { crashes: true, network: true, disk: true },
   briefingTime: "",

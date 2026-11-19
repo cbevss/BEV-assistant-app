@@ -102,7 +102,7 @@ export function toolIcon(name: string): LucideIcon {
   if (name === "scroll_screen") return Mouse;
   if (/^(press_keys|type_text)$/.test(name)) return Keyboard;
   if (/^(set_volume|set_muted)$/.test(name)) return Volume2;
-  if (/^(get_system_stats|get_running_apps)$/.test(name)) return Cpu;
+  if (/^(get_system_stats|get_running_apps|get_gpu_stats)$/.test(name)) return Cpu;
   if (name === "diagnose_pc") return Stethoscope;
   if (/^(remember|recall_memories|forget_memory|save_note|search_notes|read_note|delete_note|search_conversations)$/.test(name)) return Brain;
   if (/(plan|task|routine)/.test(name)) return ListChecks;

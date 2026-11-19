@@ -1,4 +1,5 @@
 import { emit } from "@tauri-apps/api/event";
+import { isQuiet } from "@/lib/gaming";
 import { endIntent, DISMISS_REPLY } from "./intents";
 import { AssistantState, useAssistant } from "@/state/assistant";
 import { native } from "@/lib/native";
@@ -324,7 +325,7 @@ export class VoiceController {
     await showOverlayUnlessGaming();
     this.setState("activating");
     playChime("wake");
-    if (!settings().gamingQuietMode) {
+    if (!isQuiet()) {
       const sir = settings().addressAs.trim();
       await this.tts.speak(sir ? `Yes, ${sir}?` : "Yeah?").catch(() => {});
       await pause(ECHO_GAP_MS);
