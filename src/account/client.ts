@@ -88,4 +88,6 @@ export const api = {
   exportAll: (t: string) => call<unknown>("/export", t),
   eraseSynced: (t: string, kinds?: string[]) => call<{ erased: number }>("/data/erase", t, { method: "POST", body: kinds ? { kinds } : {} }),
   deleteAccount: (t: string) => call("/account", t, { method: "DELETE" }),
+  phoneSend: (t: string, dir: "to_pc" | "to_phone", iv: string, ct: string) => call<{ ok: boolean }>("/phone/messages", t, { method: "POST", body: { dir, iv, ct } }),
+  phoneInbox: (t: string, since: number) => call<{ messages: Array<{ id: number; iv: string; ct: string; created_at: number }>; latest: number }>(`/phone/messages?dir=to_pc&since=${since}`, t),
 };

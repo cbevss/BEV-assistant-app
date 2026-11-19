@@ -20,6 +20,8 @@ export interface ChatMessage {
   toolName?: string;
   ok?: boolean;
   at: number;
+  /** Sent from the user's phone (phone control). */
+  source?: "phone";
 }
 
 interface AssistantStore {

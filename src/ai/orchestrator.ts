@@ -32,6 +32,11 @@ export interface OrchestratorHooks {
 export interface OrchestratorOptions {
   /** Runs unattended: no screen/input tools, no questions, a report at the end. */
   background?: boolean;
+  /**
+   * The user is messaging from their phone, away from the PC: no screen or
+   * input tools, and anything sensitive is confirmed on the phone (even with auto-approve on).
+   */
+  remote?: boolean;
 }
 
 /** Tools a background task may not use: nobody is watching the screen. */
@@ -50,6 +55,8 @@ export const BACKGROUND_FORBIDDEN = new Set([
 ]);
 
 const BACKGROUND_NOTE = `You are running as a BACKGROUND TASK: the user isn't watching and can't answer questions. Write a plan with update_plan, work through it, make sensible choices and say which ones you made. Actions that need the user's approval will be refused: note them for the user instead. End with a short report of what you found or did, including anything left for the user.`;
+
+const REMOTE_NOTE = `The user is messaging you from their PHONE and isn't at the PC, so they can't see the screen or approve anything. Keep replies short and plain (no markdown tables). You can't look at or control the screen, mouse or keyboard from here (they can tap "Show my screen" on their phone to see it). Anything that needs approval (deleting, sending messages, closing apps and so on) is sent to their phone, where they confirm it twice; if they say no or don't answer, accept that and don't try another way round.`;
 
 let interruptedChecked = false;
 
@@ -161,7 +168,7 @@ export class Orchestrator {
   }
 
   async send(userText: string, signal?: AbortSignal): Promise<string> {
-    const learning = !this.opts.background && useSettings.getState().settings.learnTasks !== false;
+    const learning = !this.opts.background && !this.opts.remote && useSettings.getState().settings.learnTasks !== false;
     // Done this exact thing before: repeat the steps directly.
     let replayNote = "";
     if (learning) {
@@ -234,14 +241,16 @@ export class Orchestrator {
     let finalText = "";
     let nudged = false;
     let finished = false;
-    const bg = !!this.opts.background;
+    const remote = !!this.opts.remote;
+    // Screen and input tools need someone at the PC: off in the background and from the phone.
+    const bg = !!this.opts.background || remote;
     const note = bg ? "" : await interruptedNote();
     // A similar task done before: its steps as a head start.
     const similar = bg || replayNote || useSettings.getState().settings.learnTasks === false ? null : await similarTask(userText).catch(() => null);
     const hint = similar
       ? `You've done a similar task before ("${similar.example}"). These steps worked then; adapt them if this request differs:\n${describeSteps(similar.steps).map((s, i) => `${i + 1}. ${s}`).join("\n")}`
       : "";
-    const system = [await currentSystemPrompt(userText), note, hint, replayNote, bg ? BACKGROUND_NOTE : ""].filter(Boolean).join("\n\n");
+    const system = [await currentSystemPrompt(userText), note, hint, replayNote, remote ? REMOTE_NOTE : bg ? BACKGROUND_NOTE : ""].filter(Boolean).join("\n\n");
     // Only advertise tools the user hasn't revoked (and, in the background, that don't need a watcher).
     const specs = toolSpecs().filter((t) => toolAllowed(t.name) && !(bg && BACKGROUND_FORBIDDEN.has(t.name)));
     // A planned task gets room to work; a simple request stays short.
@@ -252,7 +261,7 @@ export class Orchestrator {
       if (signal?.aborted) throw new DOMException("aborted", "AbortError");
       this.hooks.onState("thinking");
 
-      const workload = classify(userText, this.history.slice(turnStart), { hasPlan: !!this.plan, background: bg });
+      const workload = classify(userText, this.history.slice(turnStart), { hasPlan: !!this.plan, background: !!this.opts.background });
       const res = await this.chatWithRetry(system, specs, signal, workload);
 
       if (res.text || res.toolCalls.length) {
@@ -287,7 +296,7 @@ export class Orchestrator {
       this.hooks.onState("executing");
       for (const call of res.toolCalls) {
         if (bg && BACKGROUND_FORBIDDEN.has(call.name)) {
-          this.history.push({ role: "tool", toolCallId: call.id, toolName: call.name, content: `${call.name} isn't available in background tasks.` });
+          this.history.push({ role: "tool", toolCallId: call.id, toolName: call.name, content: `${call.name} isn't available ${remote ? "from the phone" : "in background tasks"}.` });
           continue;
         }
         const result = call.name === "update_plan" ? this.applyPlan(call) : await this.runTool(call, signal);
@@ -398,7 +407,8 @@ export class Orchestrator {
       // Anything that needed (or could have needed) a yes isn't replayed silently.
       this.turnNeededApproval = true;
       const fromOutside = tainted(this.history);
-      if (!autoApproveOn() || fromOutside) {
+      // From the phone, every sensitive action is confirmed there (twice), even with auto-approve on.
+      if (this.opts.remote || !autoApproveOn() || fromOutside) {
         const desc = describeCall(call) + (reason ? ` This ${reason}.` : "") + (fromOutside ? " (BEV read content from your screen or the web in this conversation; make sure this is what you asked for.)" : "");
         const approved = await this.hooks.requestApproval(call, desc);
         if (!approved) return { ok: false, text: "user declined this action" };

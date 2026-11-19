@@ -1,9 +1,12 @@
 /** Settings → Account: who's signed in, sync, devices, passphrase, export, delete. */
 import { useEffect, useState } from "react";
-import { RefreshCw, LogOut, Download, Trash2 } from "lucide-react";
+import { RefreshCw, LogOut, Download, Trash2, Copy, Smartphone } from "lucide-react";
 import { useAccount } from "@/account/account";
 import { MIN_PASSPHRASE } from "@/account/crypto";
-import { PageHeader, Section, Field, Button, TextInput, Notice, StatusPill } from "../components/Form";
+import { PageHeader, Section, Field, Button, TextInput, Notice, StatusPill, Toggle } from "../components/Form";
+import { useSettings } from "@/state/settings";
+import { usePhone } from "@/account/phone";
+import { ACCOUNTS_URL } from "@/account/config";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 
 const ago = (t: number | null) => {
@@ -14,6 +17,47 @@ const ago = (t: number | null) => {
   if (s < 86400) return `${Math.round(s / 3600)} h ago`;
   return new Date(t).toLocaleDateString();
 };
+
+function PhoneControl() {
+  const { settings, update } = useSettings();
+  const phone = usePhone();
+  const [copied, setCopied] = useState(false);
+  const url = `${ACCOUNTS_URL.replace(/\/+$/, "")}/phone`;
+  const on = settings.phoneControl;
+  return (
+    <Section
+      title="Phone control"
+      description="Use BEV from your phone: ask it to do things on this PC, see what it's doing, approve actions and look at your screen. Messages are encrypted with your passphrase, so the BEV service can't read them."
+      aside={on ? <StatusPill ok={!phone.error && phone.running} label={phone.error ? "problem" : phone.running ? "listening" : "starting"} /> : undefined}
+    >
+      <Field
+        label="Take requests from my phone"
+        hint="While BEV is open, it checks for messages from your phone every few seconds. From the phone, BEV can't use the mouse, keyboard or screen, and anything that needs your OK is sent to your phone, where you confirm it twice."
+      >
+        <Toggle label="Phone control" checked={on} onChange={(phoneControl) => update({ phoneControl })} />
+      </Field>
+      {on && (
+        <Field label="Open this on your phone" hint={`${url}. Sign in with the same Discord account, then unlock with your passphrase. Add it to your home screen to use it like an app.`}>
+          <Button
+            icon={copied ? Smartphone : Copy}
+            onClick={async () => {
+              await navigator.clipboard.writeText(url).catch(() => {});
+              setCopied(true);
+              setTimeout(() => setCopied(false), 2000);
+            }}
+          >
+            {copied ? "Copied" : "Copy link"}
+          </Button>
+        </Field>
+      )}
+      {on && phone.error && (
+        <div className="px-4 py-3">
+          <Notice tone="danger">{phone.error}</Notice>
+        </div>
+      )}
+    </Section>
+  );
+}
 
 export function AccountSettings() {
   const a = useAccount();
@@ -50,6 +94,8 @@ export function AccountSettings() {
           </div>
         </Field>
       </Section>
+
+      <PhoneControl />
 
       <Section title="Sync" aside={<StatusPill ok={!a.error} label={a.syncing ? "syncing" : a.error ? "problem" : "on"} />}>
         <Field label="Last synced" hint="Every couple of minutes while BEV is open. Encrypted on this PC first: the server only ever holds scrambled data.">

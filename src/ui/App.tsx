@@ -8,6 +8,7 @@ import { startScheduler } from "@/routines/scheduler";
 import { needsReindex, indexDocuments } from "@/lib/documents";
 import { startGamingWatch, isQuiet } from "@/lib/gaming";
 import { useUsage } from "@/ai/usage";
+import { startPhoneControl } from "@/account/phone";
 import { applyAppearance } from "@/lib/appearance";
 import { Dashboard } from "./pages/Dashboard";
 import { Assistant } from "./pages/Assistant";
@@ -90,6 +91,8 @@ export function App() {
       startScheduler();
       startGamingWatch();
       void useUsage.getState().load();
+      // Phone control (only runs when switched on and signed in).
+      startPhoneControl();
 
       // Catch up on documents changed since BEV last read them (in the background).
       {

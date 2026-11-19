@@ -16,9 +16,17 @@
  *   GET    /export                   everything we hold, as JSON
  *   DELETE /account                  erase the account and all its data
  *
+ * Phone control (the phone page signs in the same way, redirecting to /phone):
+ *   GET  /phone                       the phone page
+ *   POST /phone/messages  { dir, iv, ct }        relay one encrypted message
+ *   GET  /phone/messages?dir=to_pc|to_phone&since=N
+ *   GET  /phone/status                when the PC last checked in
+ *
  * Memories are encrypted on the user's devices before they're sent. This
  * service never sees the key, so it can't read them.
  */
+
+import { phonePage } from "./phone";
 
 export interface Env {
   DB: D1Database;
@@ -39,6 +47,13 @@ export const LIMITS = {
   vaultBytes: 8 * 1024,
   userBytes: 50 * 1024 * 1024,
   sessionsPerUser: 20,
+  /** Phone control */
+  phoneMessage: 24 * 1024,
+  phoneScreen: 900 * 1024,
+  phoneKeep: 300,
+  phoneScreensKeep: 2,
+  phonePerMinute: 60,
+  phoneTtl: DAY,
 };
 const KINDS = new Set(["memory", "note", "profile"]);
 
@@ -62,8 +77,8 @@ export async function sha256(text: string): Promise<string> {
   return b64url(await crypto.subtle.digest("SHA-256", enc.encode(text)));
 }
 
-/** Only loopback redirects (the desktop app) or a configured web origin. */
-export function redirectAllowed(redirect: string, env: Env): boolean {
+/** Only loopback redirects (the desktop app), this service's own phone page, or a configured web origin. */
+export function redirectAllowed(redirect: string, env: Env, self?: string): boolean {
   let u: URL;
   try {
     u = new URL(redirect);
@@ -71,6 +86,7 @@ export function redirectAllowed(redirect: string, env: Env): boolean {
     return false;
   }
   if (u.protocol === "http:" && (u.hostname === "127.0.0.1" || u.hostname === "localhost") && u.port !== "") return true;
+  if (self && u.origin === self && u.pathname === "/phone" && !u.search && !u.hash) return true;
   return webOrigins(env).includes(u.origin);
 }
 
@@ -163,7 +179,7 @@ async function startDiscord(url: URL, env: Env): Promise<Response> {
   const redirect = url.searchParams.get("redirect") ?? "";
   const appState = url.searchParams.get("state") ?? "";
   const challenge = url.searchParams.get("challenge") ?? "";
-  if (!redirectAllowed(redirect, env)) return page("Can't sign in", "This sign-in link didn't come from the BEV app.", 400);
+  if (!redirectAllowed(redirect, env, url.origin)) return page("Can't sign in", "This sign-in link didn't come from the BEV app.", 400);
   if (!/^[A-Za-z0-9_-]{16,128}$/.test(appState) || !/^[A-Za-z0-9_-]{43}$/.test(challenge)) {
     return page("Can't sign in", "This sign-in link is incomplete. Start again from BEV.", 400);
   }
@@ -344,6 +360,7 @@ async function handle(req: Request, env: Env, fetcher: typeof fetch): Promise<Re
   if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: c });
 
   if (req.method === "GET" && path === "/") return json({ service: "bev-accounts", ok: true }, 200, c);
+  if (req.method === "GET" && path === "/phone") return phonePage();
   if (req.method === "GET" && path === "/auth/discord") return startDiscord(url, env);
   if (req.method === "GET" && path === "/auth/discord/callback") return discordCallback(url, env, fetcher);
   if (req.method === "POST" && path === "/auth/token") {
@@ -422,13 +439,19 @@ async function handle(req: Request, env: Env, fetcher: typeof fetch): Promise<Re
     else for (const s of stmts) await s.run();
     return json({ ok: true, erased: rows.results.length }, 200, c);
   }
+  if (path === "/phone/messages" || path === "/phone/status") {
+    const r = await phoneApi(req, url, path, env, user);
+    Object.entries(c).forEach(([k, v]) => r.headers.set(k, v));
+    return r;
+  }
   if (req.method === "GET" && path === "/export") {
     const v = await env.DB.prepare("SELECT data FROM vaults WHERE user_id = ?").bind(user.id).first<{ data: string }>();
     const items = await env.DB.prepare("SELECT id, kind, deleted, iv, ct, updated_at FROM items WHERE user_id = ? ORDER BY seq").bind(user.id).all();
-    return json({ user: publicUser(user), vault: v ? JSON.parse(v.data) : null, items: items.results }, 200, c);
+    const phone = await env.DB.prepare("SELECT id, dir, iv, ct, created_at FROM phone_messages WHERE user_id = ? ORDER BY id").bind(user.id).all();
+    return json({ user: publicUser(user), vault: v ? JSON.parse(v.data) : null, items: items.results, phone_messages: phone.results }, 200, c);
   }
   if (req.method === "DELETE" && path === "/account") {
-    const stmts = ["items", "counters", "vaults", "sessions", "login_codes"].map((t) => env.DB.prepare(`DELETE FROM ${t} WHERE user_id = ?`).bind(user.id));
+    const stmts = ["items", "counters", "vaults", "sessions", "login_codes", "phone_messages", "phone_presence"].map((t) => env.DB.prepare(`DELETE FROM ${t} WHERE user_id = ?`).bind(user.id));
     stmts.push(env.DB.prepare("DELETE FROM users WHERE id = ?").bind(user.id));
     if (env.DB.batch) await env.DB.batch(stmts);
     else for (const s of stmts) await s.run();
@@ -441,6 +464,66 @@ export async function cleanup(env: Env, now = Date.now()): Promise<void> {
   await env.DB.prepare("DELETE FROM pending_logins WHERE created_at < ?").bind(now - PENDING_TTL).run();
   await env.DB.prepare("DELETE FROM login_codes WHERE created_at < ?").bind(now - CODE_TTL).run();
   await env.DB.prepare("DELETE FROM sessions WHERE expires_at < ?").bind(now).run();
+  await env.DB.prepare("DELETE FROM phone_messages WHERE created_at < ?").bind(now - LIMITS.phoneTtl).run();
+}
+
+// ---------------------------------------------------------------------------
+// phone control: a relay for ciphertext between the user's phone and PC
+
+const DIRS = new Set(["to_pc", "to_phone"]);
+
+async function phoneApi(req: Request, url: URL, path: string, env: Env, user: User): Promise<Response> {
+  const now = Date.now();
+  if (req.method === "GET" && path === "/phone/status") {
+    const p = await env.DB.prepare("SELECT last_seen FROM phone_presence WHERE user_id = ?").bind(user.id).first<{ last_seen: number }>();
+    return json({ pc_last_seen: p?.last_seen ?? null, now });
+  }
+  if (req.method === "GET" && path === "/phone/messages") {
+    const dir = url.searchParams.get("dir") ?? "";
+    if (!DIRS.has(dir)) return fail(400, "dir must be to_pc or to_phone");
+    // The PC listening is what makes it "online" on the phone.
+    if (dir === "to_pc") {
+      await env.DB.prepare("INSERT INTO phone_presence (user_id, last_seen) VALUES (?, ?) ON CONFLICT(user_id) DO UPDATE SET last_seen = excluded.last_seen")
+        .bind(user.id, now)
+        .run();
+    }
+    const since = Math.floor(Number(url.searchParams.get("since") ?? 0)) || 0;
+    const latest = (await env.DB.prepare("SELECT COALESCE(MAX(id), 0) AS n FROM phone_messages WHERE user_id = ? AND dir = ?").bind(user.id, dir).first<{ n: number }>())?.n ?? 0;
+    if (since < 0) return json({ messages: [], latest });
+    const rows = await env.DB.prepare("SELECT id, iv, ct, created_at FROM phone_messages WHERE user_id = ? AND dir = ? AND id > ? ORDER BY id LIMIT 100")
+      .bind(user.id, dir, since)
+      .all<{ id: number; iv: string; ct: string; created_at: number }>();
+    return json({ messages: rows.results, latest });
+  }
+  if (req.method === "POST" && path === "/phone/messages") {
+    const b = await body<{ dir?: string; iv?: string; ct?: string }>(req, LIMITS.phoneScreen + 1024);
+    if (!b || !DIRS.has(b.dir ?? "")) return fail(400, "dir must be to_pc or to_phone");
+    if (typeof b.iv !== "string" || !/^[A-Za-z0-9+/=]{12,32}$/.test(b.iv) || typeof b.ct !== "string" || !/^[A-Za-z0-9+/=]+$/.test(b.ct)) return fail(400, "expected encrypted { iv, ct }");
+    const big = b.ct.length > LIMITS.phoneMessage;
+    if (b.ct.length > LIMITS.phoneScreen || (big && b.dir !== "to_phone")) return fail(413, "message too large");
+    const recent = await env.DB.prepare("SELECT COUNT(*) AS n FROM phone_messages WHERE user_id = ? AND created_at > ?").bind(user.id, now - 60_000).first<{ n: number }>();
+    if ((recent?.n ?? 0) >= LIMITS.phonePerMinute) return fail(429, "too many messages; wait a moment");
+    const r = await env.DB.prepare("INSERT INTO phone_messages (user_id, dir, iv, ct, big, created_at) VALUES (?, ?, ?, ?, ?, ?)")
+      .bind(user.id, b.dir, b.iv, b.ct, big ? 1 : 0, now)
+      .run();
+    // Keep it small: the newest few screenshots and a few hundred messages.
+    if (big) {
+      await env.DB.prepare(
+        `DELETE FROM phone_messages WHERE user_id = ?1 AND big = 1 AND id NOT IN
+           (SELECT id FROM phone_messages WHERE user_id = ?1 AND big = 1 ORDER BY id DESC LIMIT ?2)`
+      )
+        .bind(user.id, LIMITS.phoneScreensKeep)
+        .run();
+    }
+    await env.DB.prepare(
+      `DELETE FROM phone_messages WHERE user_id = ?1 AND id NOT IN
+         (SELECT id FROM phone_messages WHERE user_id = ?1 ORDER BY id DESC LIMIT ?2)`
+    )
+      .bind(user.id, LIMITS.phoneKeep)
+      .run();
+    return json({ ok: true, id: (r as { meta?: { last_row_id?: number } }).meta?.last_row_id ?? null });
+  }
+  return fail(405, "method not allowed");
 }
 
 /** Exported for tests: the request handler with an injectable fetch (Discord). */

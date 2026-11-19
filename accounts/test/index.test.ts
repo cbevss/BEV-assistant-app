@@ -220,3 +220,80 @@ describe("devices, export and deletion", () => {
     expect(n?.n).toBe(0);
   });
 });
+
+describe("phone control", () => {
+  const msg = (dir: string, ct = "QUJDREVGR0g=") => ({ method: "POST", body: JSON.stringify({ dir, iv: "AAAAAAAAAAAAAAAA", ct }) });
+
+  it("serves the phone page with a strict content security policy", async () => {
+    const r = await app()(new Request(`${BASE}/phone`), env);
+    expect(r.status).toBe(200);
+    const csp = r.headers.get("content-security-policy")!;
+    expect(csp).toMatch(/default-src 'none'/);
+    const nonce = /script-src 'nonce-([^']+)'/.exec(csp)![1];
+    const html = await r.text();
+    expect(html).toContain(`<script nonce="${nonce}">`);
+    expect(html).not.toContain("__NONCE__");
+    expect(html).not.toMatch(/innerHTML/);
+  });
+
+  it("lets the phone page sign in on this service, nowhere else", () => {
+    expect(redirectAllowed(`${BASE}/phone`, env, BASE)).toBe(true);
+    expect(redirectAllowed(`${BASE}/phone?x=1`, env, BASE)).toBe(false);
+    expect(redirectAllowed(`${BASE}/other`, env, BASE)).toBe(false);
+    expect(redirectAllowed("https://evil.example/phone", env, BASE)).toBe(false);
+  });
+
+  it("relays ciphertext both ways and marks the PC online when it listens", async () => {
+    const { token } = await signIn();
+    const h = app();
+    expect((await h(new Request(`${BASE}/phone/messages?dir=to_pc`), env)).status).toBe(401);
+    expect((await h(req("/phone/messages", token, msg("to_pc")), env)).status).toBe(200);
+    expect((await h(req("/phone/messages", token, msg("to_phone")), env)).status).toBe(200);
+    let st = (await (await h(req("/phone/status", token), env)).json()) as { pc_last_seen: number | null };
+    expect(st.pc_last_seen).toBeNull();
+    const toPc = (await (await h(req("/phone/messages?dir=to_pc&since=0", token), env)).json()) as { messages: { id: number; ct: string }[]; latest: number };
+    expect(toPc.messages).toHaveLength(1);
+    expect(toPc.latest).toBe(toPc.messages[0].id);
+    st = (await (await h(req("/phone/status", token), env)).json()) as { pc_last_seen: number | null };
+    expect(st.pc_last_seen).toBeGreaterThan(0);
+    const after = (await (await h(req(`/phone/messages?dir=to_pc&since=${toPc.latest}`, token), env)).json()) as { messages: unknown[] };
+    expect(after.messages).toHaveLength(0);
+    const skip = (await (await h(req("/phone/messages?dir=to_pc&since=-1", token), env)).json()) as { messages: unknown[]; latest: number };
+    expect(skip).toEqual({ messages: [], latest: toPc.latest });
+  });
+
+  it("rejects bad messages, big ones to the PC, and floods", async () => {
+    const { token } = await signIn();
+    const h = app();
+    expect((await h(req("/phone/messages", token, msg("sideways")), env)).status).toBe(400);
+    expect((await h(req("/phone/messages", token, { method: "POST", body: JSON.stringify({ dir: "to_pc", iv: "x", ct: "<script>" }) }), env)).status).toBe(400);
+    expect((await h(req("/phone/messages", token, msg("to_pc", "A".repeat(LIMITS.phoneMessage + 4))), env)).status).toBe(413);
+    // A screenshot can go to the phone; only the newest few are kept.
+    for (let i = 0; i < 4; i++) expect((await h(req("/phone/messages", token, msg("to_phone", "A".repeat(LIMITS.phoneMessage + 4))), env)).status).toBe(200);
+    const got = (await (await h(req("/phone/messages?dir=to_phone&since=0", token), env)).json()) as { messages: unknown[] };
+    expect(got.messages).toHaveLength(LIMITS.phoneScreensKeep);
+    let last = 200;
+    for (let i = 0; i < LIMITS.phonePerMinute; i++) last = (await h(req("/phone/messages", token, msg("to_pc")), env)).status;
+    expect(last).toBe(429);
+  });
+
+  it("other accounts can't read your messages, and they go with the account", async () => {
+    const a = await signIn();
+    const b = await signIn(app(fakeDiscord({ id: "987654321", username: "other", global_name: "Other", avatar: "x" }).f));
+    const h = app();
+    await h(req("/phone/messages", a.token, msg("to_pc")), env);
+    const theirs = (await (await h(req("/phone/messages?dir=to_pc&since=0", b.token), env)).json()) as { messages: unknown[] };
+    expect(theirs.messages).toHaveLength(0);
+    await h(req("/account", a.token, { method: "DELETE" }), env);
+    const left = await env.DB.prepare("SELECT COUNT(*) AS n FROM phone_messages").first<{ n: number }>();
+    expect(left?.n).toBe(0);
+  });
+
+  it("old messages are cleaned up", async () => {
+    const { token } = await signIn();
+    await app()(req("/phone/messages", token, msg("to_pc")), env);
+    await cleanup(env, Date.now() + LIMITS.phoneTtl + 1000);
+    const n = await env.DB.prepare("SELECT COUNT(*) AS n FROM phone_messages").first<{ n: number }>();
+    expect(n?.n).toBe(0);
+  });
+});

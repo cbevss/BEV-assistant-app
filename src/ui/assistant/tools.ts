@@ -24,6 +24,7 @@ const LABELS: Record<string, string> = {
   tidy_folder: "Tidied a folder",
   undo_file_changes: "Undid file changes",
   search_documents: "Searched your documents",
+  phone_screenshot: "Sent your screen to your phone",
   set_audio_output: "Switched sound output",
   set_microphone: "Changed the microphone",
   set_power_plan: "Changed the power plan",
