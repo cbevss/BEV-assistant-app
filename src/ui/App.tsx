@@ -11,6 +11,7 @@ import { Assistant } from "./pages/Assistant";
 import { Automation } from "./pages/Automation";
 import { Memory } from "./pages/Memory";
 import { Onboarding } from "./pages/Onboarding";
+import { AccountGate } from "./account/AccountGate";
 import { ApprovalModal } from "./components/ApprovalModal";
 import { TitleBar } from "./components/TitleBar";
 import { SettingsHub } from "./pages/SettingsHub";
@@ -149,6 +150,7 @@ export function App() {
   }
   if (!settings.onboarded) {
     return (
+      <AccountGate>
       <Onboarding
         onDone={async () => {
           await useSettings.getState().update({ onboarded: true });
@@ -157,10 +159,12 @@ export function App() {
           maybeStartListening();
         }}
       />
+      </AccountGate>
     );
   }
 
   return (
+    <AccountGate>
     <div className="flex h-screen w-screen overflow-hidden bg-canvas text-ink">
       <Rail />
       <main className="flex min-w-0 flex-1 flex-col overflow-hidden">
@@ -201,6 +205,7 @@ export function App() {
         />
       )}
     </div>
+    </AccountGate>
   );
 }
 

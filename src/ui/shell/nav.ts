@@ -1,5 +1,5 @@
 /** Where everything lives: the rail, the settings categories and their routes. */
-import { Activity, AppWindow, Brain, Cpu, MessagesSquare, Mic, Palette, Plug, ShieldCheck, SlidersHorizontal, Workflow, Wrench, type LucideIcon } from "lucide-react";
+import { Activity, AppWindow, Brain, Cpu, MessagesSquare, Mic, Palette, Plug, ShieldCheck, SlidersHorizontal, Workflow, Wrench, type LucideIcon, CircleUserRound } from "lucide-react";
 
 export interface NavItem {
   to: string;
@@ -17,6 +17,7 @@ export const MAIN_NAV: NavItem[] = [
 ];
 
 export const SETTINGS_NAV: NavItem[] = [
+  { to: "/settings/account", label: "Account", icon: CircleUserRound, keywords: "sign in discord sync memories devices passphrase recovery delete export" },
   { to: "/settings/general", label: "General", icon: SlidersHorizontal, keywords: "startup tray personality briefing proactive monitoring alerts" },
   { to: "/settings/voice", label: "Voice & microphone", icon: Mic, keywords: "audio mic wake word speech whisper voice output speaker" },
   { to: "/settings/ai", label: "AI & models", icon: Cpu, keywords: "provider anthropic claude openai ollama api key model routing" },
