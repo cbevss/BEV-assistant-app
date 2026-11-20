@@ -11,7 +11,7 @@ import { feedItem, changedSince } from "./phone";
 /** The phone page's own encryption code, taken from the page the service serves. */
 function pageCrypto(userId: string) {
   const src = readFileSync(new URL("../../accounts/src/phone.ts", import.meta.url), "utf8");
-  const script = src.slice(src.indexOf('"use strict";'), src.indexOf("</script>"));
+  const script = src.slice(src.indexOf("var te = new TextEncoder()"), src.indexOf("</script>"));
   const helpers = script.slice(0, script.indexOf("// ---- tiny IndexedDB"));
   const enc = script.slice(script.indexOf("// ---- encryption"), script.indexOf("function sendToPc"));
   // eslint-disable-next-line @typescript-eslint/no-implied-eval
