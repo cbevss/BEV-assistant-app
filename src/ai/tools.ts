@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { findWindow, describeWindows } from "@/lib/windows";
+import { calculate, convertUnits, formatNumber } from "../lib/calc";
 import { native, type ReplayClip } from "@/lib/native";
 import { matchGame } from "@/lib/games";
 import { looksSensitive, looksLikeSecretValue } from "@/lib/sensitive";
@@ -173,6 +174,32 @@ export const tools: Record<string, RegisteredTool> = {
       const muted = bool(a.muted, "muted");
       await native.setMuted(muted);
       return muted ? "muted" : "unmuted";
+    },
+  },
+
+  calculate: {
+    spec: {
+      name: "calculate",
+      description:
+        "Exact maths and unit conversion. Use it for ANY arithmetic instead of working it out yourself: tips, splits, percentages, 'what's 17% of 240', '3.5 * 12 + 9', powers, square roots, factorials. For conversions give value, from and to ('5 miles in km', '180 lb to kg', '30 C in F', '100 Mbit in MB', 'cups to ml'). Trig takes degrees.",
+      parameters: {
+        type: "object",
+        properties: {
+          expression: { type: "string", description: "e.g. '(240 * 0.17) / 3' or '15% of 80'" },
+          value: { type: "number", description: "For a conversion" },
+          from: { type: "string", description: "Unit to convert from" },
+          to: { type: "string", description: "Unit to convert to" },
+        },
+      },
+    },
+    run: async (a) => {
+      if (typeof a.from === "string" && typeof a.to === "string") {
+        const v = a.value === undefined ? 1 : num(a.value, "value");
+        const r = convertUnits(v, a.from, a.to);
+        return `${formatNumber(v)} ${a.from} = ${formatNumber(r)} ${a.to}`;
+      }
+      if (typeof a.expression !== "string") throw new Error("give an expression, or value/from/to");
+      return `${a.expression} = ${formatNumber(calculate(a.expression))}`;
     },
   },
 

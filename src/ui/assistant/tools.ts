@@ -92,6 +92,7 @@ const LABELS: Record<string, string> = {
   set_volume: "Changed volume",
   set_muted: "Changed mute",
   app_volume: "App volume",
+  calculate: "Worked it out",
   get_system_stats: "Checked system",
   get_running_apps: "Checked running apps",
   diagnose_pc: "Ran diagnostics",
