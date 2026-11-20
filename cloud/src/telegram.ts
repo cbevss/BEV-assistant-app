@@ -30,7 +30,9 @@ export class Telegram {
 
   async call<T = unknown>(method: string, body: Record<string, unknown> | FormData): Promise<T> {
     const isForm = body instanceof FormData;
-    const res = await this.fetcher(`https://api.telegram.org/bot${this.token}/${method}`, {
+    // Called unbound: Workers throw "Illegal invocation" if fetch runs with `this` set to another object.
+    const f = this.fetcher;
+    const res = await f(`https://api.telegram.org/bot${this.token}/${method}`, {
       method: "POST",
       headers: isForm ? undefined : { "content-type": "application/json" },
       body: isForm ? body : JSON.stringify(body),
@@ -67,7 +69,8 @@ export class Telegram {
   async download(fileId: string): Promise<ArrayBuffer> {
     const f = await this.call<{ file_path: string; file_size?: number }>("getFile", { file_id: fileId });
     if ((f.file_size ?? 0) > 20 * 1024 * 1024) throw new Error("That file is too big.");
-    const res = await this.fetcher(`https://api.telegram.org/file/bot${this.token}/${f.file_path}`);
+    const get = this.fetcher;
+    const res = await get(`https://api.telegram.org/file/bot${this.token}/${f.file_path}`);
     if (!res.ok) throw new Error(`download ${res.status}`);
     return res.arrayBuffer();
   }
