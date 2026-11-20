@@ -25,6 +25,7 @@ import { useScreenTime, describeScreenTime } from "@/lib/screentime";
 import { layoutApi, useLayouts, findWindows, orderMonitors, monitorOf, snapRect, moveToMonitor, POSITIONS, type Position } from "@/lib/layouts";
 import { useTimers, dueFrom, nextRepeat, nextClock, describeTimer, formatDuration, clockTime, matchTimers } from "@/lib/timers";
 import { winMics } from "@/voice/mic";
+import { formatSize } from "@/lib/files";
 import { filesApi, describeEntries, describeBatch, recordChange, undoLast, tidyPlan, describePlan, baseName, dirName, joinPath } from "@/lib/files";
 import * as brain from "@/brain/memory";
 import { connectorTools } from "@/integrations/registry";
@@ -1375,6 +1376,24 @@ Object.assign(tools, {
       parameters: { type: "object", properties: { path: { type: "string" } }, required: ["path"] },
     },
     run: async (a) => hardwareApi.setWallpaper(str(a.path, "path")),
+  },
+
+  clean_temp_files: {
+    spec: {
+      name: "clean_temp_files",
+      description: "Free up disk space by deleting old temporary files (untouched for 2+ days) from Windows' temp folder. Files in use are skipped. The user sees how much will be freed and approves first.",
+      parameters: { type: "object", properties: {}, required: [] },
+    },
+    sensitiveCheck: async () => {
+      const r = await invoke<{ files: number; bytes: number }>("clean_temp", { apply: false });
+      return r.files ? `Permanently delete ${r.files.toLocaleString("en-GB")} old temporary files (${formatSize(r.bytes)}) from the Windows temp folder` : null;
+    },
+    timeoutMs: 300_000,
+    run: async () => {
+      const r = await invoke<{ files: number; bytes: number; skipped: number }>("clean_temp", { apply: true });
+      if (!r.files && !r.skipped) return "There were no old temporary files to clear.";
+      return `Cleared ${r.files.toLocaleString("en-GB")} temporary files, freeing ${formatSize(r.bytes)}.${r.skipped ? ` ${r.skipped} were in use and left alone.` : ""}`;
+    },
   },
 
   empty_recycle_bin: {

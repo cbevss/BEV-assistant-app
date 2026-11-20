@@ -5,7 +5,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import clsx from "clsx";
-import { CornerDownLeft, EyeOff, Gamepad2, Mic, MicOff, Plus, Search, Stethoscope, type LucideIcon } from "lucide-react";
+import { CalendarDays, CornerDownLeft, EyeOff, Gamepad2, LayoutGrid, Mic, MicOff, Plus, Search, Stethoscope, Timer, Workflow, type LucideIcon } from "lucide-react";
+import { useFocus, startFocus, stopFocus } from "@/lib/focus";
+import { useTimers } from "@/lib/timers";
+import { useLayouts } from "@/lib/layouts";
+import { useRoutines } from "@/routines/store";
 import { useAssistant } from "@/state/assistant";
 import { useSettings } from "@/state/settings";
 import { getController, setPrivacy } from "@/voice/bootstrap";
@@ -38,6 +42,10 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
   const nav = useNavigate();
   const { micEnabled, privacyMode } = useAssistant();
   const { settings, update } = useSettings();
+  const focus = useFocus((f) => f.session);
+  const routines = useRoutines((r) => r.routines);
+  const layouts = useLayouts((l) => l.layouts);
+  useEffect(() => void useLayouts.getState().load(), []);
   const [q, setQ] = useState("");
   const [sel, setSel] = useState(0);
   const input = useRef<HTMLInputElement>(null);
@@ -75,8 +83,24 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
       { id: "privacy", label: privacyMode ? "Turn privacy mode off" : "Turn privacy mode on", group: "Actions", icon: EyeOff, keywords: "privacy microphone off", run: () => setPrivacy(!privacyMode) },
       { id: "quiet", label: settings.gamingQuietMode ? "Turn quiet mode off" : "Turn quiet mode on", group: "Actions", icon: Gamepad2, keywords: "gaming quiet notifications", run: () => update({ gamingQuietMode: !settings.gamingQuietMode }) },
       { id: "diag", label: "Check my PC's health", group: "Actions", icon: Stethoscope, keywords: "diagnose slow problem troubleshoot", run: () => (nav("/assistant"), sendChat("Check my PC's health and tell me if anything needs attention.")) },
+      focus
+        ? { id: "focus", label: "Stop the focus session", group: "Actions", icon: Timer, keywords: "focus pomodoro stop end", run: () => void stopFocus() }
+        : { id: "focus", label: "Start a 25 minute focus session", group: "Actions", icon: Timer, keywords: "focus pomodoro concentrate work quiet", run: () => void startFocus({ minutes: 25 }) },
+      ...[5, 10, 25].map((m) => ({
+        id: `timer${m}`,
+        label: `Set a ${m} minute timer`,
+        group: "Actions" as const,
+        icon: Timer,
+        keywords: "timer countdown",
+        run: () => void useTimers.getState().add({ kind: "timer", label: "", due: Date.now() + m * 60_000, durationMs: m * 60_000 }),
+      })),
+      { id: "recap", label: "What did I do today?", group: "Actions", icon: CalendarDays, keywords: "recap summary day", run: () => (nav("/assistant"), sendChat("What did I do today?")) },
+      ...routines
+        .filter((r) => r.enabled)
+        .map((r) => ({ id: `routine:${r.id}`, label: `Run ${r.name}`, group: "Actions" as const, icon: Workflow, keywords: `routine ${r.triggers.join(" ")}`, run: () => (nav("/assistant"), sendChat(`Run the "${r.name}" routine.`)) })),
+      ...layouts.map((l) => ({ id: `layout:${l.name}`, label: `Restore the ${l.name} layout`, group: "Actions" as const, icon: LayoutGrid, keywords: "window layout monitors arrange", run: () => void useLayouts.getState().restore(l.name).catch(() => {}) })),
     ];
-  }, [nav, micEnabled, privacyMode, settings.gamingQuietMode, update]);
+  }, [nav, micEnabled, privacyMode, settings.gamingQuietMode, update, focus, routines, layouts]);
 
   const results = useMemo(() => {
     const scored = commands.map((c) => ({ c, s: matchScore(q, c.label, c.keywords) })).filter((x) => x.s > 0);

@@ -19,6 +19,7 @@ mod docs;
 mod gpu;
 mod hardware;
 mod clipboard;
+mod cleanup;
 mod journal;
 mod games;
 mod overlay;
@@ -166,6 +167,7 @@ pub fn run() {
             hardware::empty_recycle_bin,
             clipboard::clipboard_read,
             clipboard::clipboard_write,
+            cleanup::clean_temp,
             // Window management
             windows_mgmt::focus_window,
             windows_mgmt::window_placements,
