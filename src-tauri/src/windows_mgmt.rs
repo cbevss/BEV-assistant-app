@@ -1,7 +1,31 @@
-//! Minimal window management: enumerate top-level windows and focus one.
+//! Window management: enumerate top-level windows, focus one, and read or set
+//! where windows are (for snapping and saved layouts).
 
 use crate::error::{BevError, BevResult};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
+
+/// Where a window is, in screen pixels. state: "normal" | "maximized" | "minimized".
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct Placement {
+    pub hwnd: isize,
+    pub process: String,
+    pub title: String,
+    pub x: i32,
+    pub y: i32,
+    pub w: i32,
+    pub h: i32,
+    pub state: String,
+}
+
+/// A monitor's usable area (without the taskbar), in screen pixels.
+#[derive(Serialize, Clone, Debug)]
+pub struct WorkArea {
+    pub x: i32,
+    pub y: i32,
+    pub w: i32,
+    pub h: i32,
+    pub primary: bool,
+}
 
 #[derive(Serialize)]
 pub struct WinInfo {
@@ -99,6 +123,87 @@ mod imp {
             }
         }
     }
+
+    pub fn placements() -> BevResult<Vec<Placement>> {
+        use windows::Win32::UI::WindowsAndMessaging::{GetWindowPlacement, IsZoomed, WINDOWPLACEMENT};
+        let mut out = Vec::new();
+        for w in list()? {
+            unsafe {
+                let h = HWND(w.hwnd as *mut _);
+                let minimized = IsIconic(h).as_bool();
+                let maximized = IsZoomed(h).as_bool();
+                let mut r = RECT::default();
+                if minimized {
+                    // A minimised window's own rect is off-screen; use where it'll come back to.
+                    let mut wp = WINDOWPLACEMENT { length: std::mem::size_of::<WINDOWPLACEMENT>() as u32, ..Default::default() };
+                    if GetWindowPlacement(h, &mut wp).is_err() {
+                        continue;
+                    }
+                    r = wp.rcNormalPosition;
+                } else if GetWindowRect(h, &mut r).is_err() {
+                    continue;
+                }
+                out.push(Placement {
+                    hwnd: w.hwnd,
+                    process: w.process,
+                    title: w.title,
+                    x: r.left,
+                    y: r.top,
+                    w: r.right - r.left,
+                    h: r.bottom - r.top,
+                    state: if minimized { "minimized" } else if maximized { "maximized" } else { "normal" }.into(),
+                });
+            }
+        }
+        Ok(out)
+    }
+
+    /// Move a window. Maximised: put it on the monitor at (x, y) then maximise there.
+    pub fn place(hwnd: isize, x: i32, y: i32, w: i32, h: i32, state: &str) -> BevResult<()> {
+        use windows::Win32::UI::WindowsAndMessaging::{IsWindow, IsZoomed, SetWindowPos, SWP_NOACTIVATE, SWP_NOZORDER, SW_MAXIMIZE, SW_MINIMIZE};
+        unsafe {
+            let hw = HWND(hwnd as *mut _);
+            if !IsWindow(hw).as_bool() {
+                return Err(BevError::NotFound("that window has closed".into()));
+            }
+            if w < 100 || h < 80 || w > 20000 || h > 20000 {
+                return Err(BevError::Invalid("that size doesn't make sense".into()));
+            }
+            // A maximised or minimised window has to be restored before it can move.
+            if IsIconic(hw).as_bool() || IsZoomed(hw).as_bool() {
+                let _ = ShowWindow(hw, SW_RESTORE);
+            }
+            SetWindowPos(hw, HWND::default(), x, y, w, h, SWP_NOZORDER | SWP_NOACTIVATE).map_err(|e| BevError::Os(format!("Windows wouldn't move it: {e}")))?;
+            match state {
+                "maximized" => {
+                    let _ = ShowWindow(hw, SW_MAXIMIZE);
+                }
+                "minimized" => {
+                    let _ = ShowWindow(hw, SW_MINIMIZE);
+                }
+                _ => {}
+            }
+            Ok(())
+        }
+    }
+
+    pub fn work_areas() -> Vec<WorkArea> {
+        use windows::Win32::Graphics::Gdi::{EnumDisplayMonitors, GetMonitorInfoW, HDC, HMONITOR, MONITORINFO};
+        unsafe extern "system" fn cb(m: HMONITOR, _: HDC, _: *mut RECT, data: LPARAM) -> BOOL {
+            let out = &mut *(data.0 as *mut Vec<WorkArea>);
+            let mut mi = MONITORINFO { cbSize: std::mem::size_of::<MONITORINFO>() as u32, ..Default::default() };
+            if GetMonitorInfoW(m, &mut mi).as_bool() {
+                let r = mi.rcWork;
+                out.push(WorkArea { x: r.left, y: r.top, w: r.right - r.left, h: r.bottom - r.top, primary: mi.dwFlags & 1 != 0 });
+            }
+            TRUE
+        }
+        let mut out: Vec<WorkArea> = Vec::new();
+        unsafe {
+            let _ = EnumDisplayMonitors(HDC::default(), None, Some(cb), LPARAM(&mut out as *mut _ as isize));
+        }
+        out
+    }
 }
 
 #[cfg(not(windows))]
@@ -110,6 +215,15 @@ mod imp {
     pub fn focus(_h: isize) -> BevResult<()> {
         Err(BevError::Unsupported("window mgmt is Windows-only".into()))
     }
+    pub fn placements() -> BevResult<Vec<Placement>> {
+        Err(BevError::Unsupported("window mgmt is Windows-only".into()))
+    }
+    pub fn place(_h: isize, _x: i32, _y: i32, _w: i32, _hh: i32, _s: &str) -> BevResult<()> {
+        Err(BevError::Unsupported("window mgmt is Windows-only".into()))
+    }
+    pub fn work_areas() -> Vec<WorkArea> {
+        vec![]
+    }
 }
 
 #[tauri::command]
@@ -120,4 +234,19 @@ pub fn list_windows() -> BevResult<Vec<WinInfo>> {
 #[tauri::command]
 pub fn focus_window(hwnd: isize) -> BevResult<()> {
     imp::focus(hwnd)
+}
+
+#[tauri::command]
+pub fn window_placements() -> BevResult<Vec<Placement>> {
+    imp::placements()
+}
+
+#[tauri::command]
+pub fn place_window(hwnd: isize, x: i32, y: i32, w: i32, h: i32, state: Option<String>) -> BevResult<()> {
+    imp::place(hwnd, x, y, w, h, state.as_deref().unwrap_or("normal"))
+}
+
+#[tauri::command]
+pub fn monitor_work_areas() -> Vec<WorkArea> {
+    imp::work_areas()
 }

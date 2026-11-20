@@ -12,6 +12,9 @@ import { startPhoneControl } from "@/account/phone";
 import { configureAlerts } from "@/lib/alerts";
 import { startTimers } from "@/lib/timers";
 import { startWatches } from "@/lib/watches";
+import { startPlaytime } from "@/lib/playtime";
+import { startFocusClock } from "@/lib/focus";
+import { startRoutineHotkeys } from "@/routines/hotkeys";
 import { applyAppearance } from "@/lib/appearance";
 import { Dashboard } from "./pages/Dashboard";
 import { Assistant } from "./pages/Assistant";
@@ -100,6 +103,9 @@ export function App() {
       configureAlerts({ announce: async (t) => (await getController()?.announce(t)) ?? false });
       startTimers();
       startWatches();
+      startPlaytime();
+      startFocusClock();
+      startRoutineHotkeys();
 
       // Catch up on documents changed since BEV last read them (in the background).
       {

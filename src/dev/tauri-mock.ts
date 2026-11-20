@@ -17,6 +17,15 @@ if (params.get("timers")) {
     { id: "w2", kind: "gpu_temp_above", value: 90, message: "your GPU is getting hot", created: n, expires: n + 20 * 3600_000 },
   ]);
 }
+if (params.get("play")) {
+  const d = (daysAgo: number, h: number, mins: number, game: string) => {
+    const t = new Date();
+    t.setDate(t.getDate() - daysAgo);
+    t.setHours(h, 0, 0, 0);
+    return { game, start: t.getTime(), end: t.getTime() + mins * 60_000 };
+  };
+  store.set("settings.json:sessions", [d(6, 19, 95, "Elden Ring"), d(5, 20, 40, "Rocket League"), d(3, 18, 150, "Elden Ring"), d(2, 21, 60, "Rocket League"), d(1, 19, 120, "Elden Ring"), d(0, 0, 45, "Halo Infinite")]);
+}
 if (params.get("usage")) {
   const days: Record<string, Record<string, unknown>> = {};
   for (let i = 0; i < 14; i++) {

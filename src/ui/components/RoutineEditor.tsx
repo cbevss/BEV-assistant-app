@@ -1,4 +1,8 @@
 import { useState } from "react";
+import { HotkeyInput } from "./HotkeyInput";
+import { shortcutClash, tryShortcut } from "@/routines/hotkeys";
+import { useRoutines } from "@/routines/store";
+import { useSettings } from "@/state/settings";
 import { motion } from "framer-motion";
 import type { Routine, RoutineStep } from "@/routines/types";
 import { TextInput, Select, Button, Toggle } from "./Form";
@@ -39,6 +43,7 @@ export function RoutineEditor({
 }) {
   const [name, setName] = useState(routine?.name ?? "");
   const [triggers, setTriggers] = useState((routine?.triggers ?? []).join(", "));
+  const [hotkey, setHotkey] = useState(routine?.hotkey ?? "");
   const [steps, setSteps] = useState<RoutineStep[]>(routine?.steps.length ? routine.steps : [newStep()]);
   const [scheduleTime, setScheduleTime] = useState(routine?.schedule?.time ?? "");
   const [days, setDays] = useState<number[]>(routine?.schedule?.days ?? []);
@@ -69,6 +74,7 @@ export function RoutineEditor({
       enabled: routine?.enabled ?? true,
       builtIn: routine?.builtIn,
       handsOn: routine?.handsOn,
+      hotkey: hotkey.trim() || undefined,
       schedule: scheduleTime && !routine?.handsOn ? { time: scheduleTime, days } : undefined,
       lastRunAt: routine?.lastRunAt,
     });
@@ -90,6 +96,24 @@ export function RoutineEditor({
           Voice triggers (comma-separated)
         </label>
         <TextInput value={triggers} onChange={(e) => setTriggers(e.target.value)} placeholder="gaming mode, game time" />
+        <div className="mt-4 flex items-center justify-between gap-4">
+          <div>
+            <div className="text-xs text-ink-2">Keyboard shortcut (optional)</div>
+            <div className="text-2xs text-ink-4">Runs it from anywhere, even in a game.</div>
+          </div>
+          <HotkeyInput
+            ariaLabel="Keyboard shortcut for this routine"
+            value={hotkey}
+            onChange={async (a) => {
+              const s = useSettings.getState().settings;
+              const clash = shortcutClash(a, routine?.id, useRoutines.getState().routines, [s.pushToTalkShortcut, s.muteShortcut]);
+              if (clash) return clash;
+              const err = a && a.toLowerCase() !== (routine?.hotkey ?? "").toLowerCase() ? await tryShortcut(a) : null;
+              if (!err) setHotkey(a);
+              return err;
+            }}
+          />
+        </div>
 
         <label className="mb-2 mt-4 block text-xs text-ink-2">Steps</label>
         <div className="space-y-2">

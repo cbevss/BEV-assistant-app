@@ -7,6 +7,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { create } from "zustand";
 import { useSettings, type Settings } from "@/state/settings";
 import { native } from "./native";
+import { focusing } from "./focus";
 
 export interface GpuStats {
   name: string | null;
@@ -40,7 +41,7 @@ export function quietNow(s: Pick<Settings, "gamingQuietMode" | "autoGamingMode">
 }
 
 /** For call sites outside React. */
-export const isQuiet = () => quietNow(useSettings.getState().settings, useGaming.getState().game !== null);
+export const isQuiet = () => quietNow(useSettings.getState().settings, useGaming.getState().game !== null) || focusing();
 
 /**
  * Pure: the next gaming state from one look. A Steam game counts at once;

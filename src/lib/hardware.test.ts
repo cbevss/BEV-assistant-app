@@ -18,3 +18,17 @@ describe("matchDevice", () => {
     expect(matchDevice([{ name: "Headphones A" }, { name: "Headphones B" }], "headphones")).toBeNull();
   });
 });
+
+import { shortcutClash } from "@/routines/hotkeys";
+vi.mock("@tauri-apps/plugin-global-shortcut", () => ({ register: vi.fn(), unregister: vi.fn() }));
+vi.mock("@tauri-apps/plugin-store", () => ({ load: vi.fn() }));
+
+describe("routine shortcuts", () => {
+  const rs = [{ id: "a", name: "Gaming Mode", triggers: [], steps: [], enabled: true, hotkey: "CommandOrControl+Alt+G" }];
+  it("won't reuse BEV's shortcuts or another routine's", () => {
+    expect(shortcutClash("CommandOrControl+Alt+B", "x", rs, ["CommandOrControl+Alt+B"])).toMatch(/BEV's own/);
+    expect(shortcutClash("commandorcontrol+alt+g", "x", rs, [])).toMatch(/Gaming Mode/);
+    expect(shortcutClash("CommandOrControl+Alt+G", "a", rs, [])).toBeNull();
+    expect(shortcutClash("", "x", rs, [])).toBeNull();
+  });
+});

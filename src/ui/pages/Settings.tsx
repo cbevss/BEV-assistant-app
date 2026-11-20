@@ -108,6 +108,15 @@ export function Settings({ part = "general" }: { part?: "general" | "apps" | "ad
         <Field label="Go quiet when a game starts" hint="While a Steam game or any exclusive full-screen game is running, BEV keeps replies short, skips the spoken “Yeah?” and holds back pop-ups, then goes back to normal when you stop.">
           <Toggle label="Automatic gaming mode" checked={settings.autoGamingMode} onChange={(autoGamingMode) => update({ autoGamingMode })} />
         </Field>
+        <Field label="Daily play time nudge" hint="BEV mentions it once a day when your gaming passes this. Play time is on the Activity page.">
+          <Select
+            ariaLabel="Daily play time nudge"
+            className="w-40"
+            value={String(settings.playLimitMinutes ?? 0)}
+            onChange={(v) => update({ playLimitMinutes: Number(v) || null })}
+            options={[{ value: "0", label: "Off" }, ...[60, 90, 120, 180, 240, 300].map((m) => ({ value: String(m), label: m < 120 ? `${m} minutes` : `${m / 60} hours` }))]}
+          />
+        </Field>
         <Field
           label="Popup during fullscreen games"
           hint="The orb never takes focus from your game. Automatic shows it over borderless and windowed games, and hides it over exclusive fullscreen, where anything drawn on top can knock a game out of fullscreen. BEV still listens and talks either way."
