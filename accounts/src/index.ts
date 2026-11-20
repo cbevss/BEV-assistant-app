@@ -26,7 +26,7 @@
  * service never sees the key, so it can't read them.
  */
 
-import { phonePage } from "./phone";
+import { phonePage, phoneAsset } from "./phone";
 
 export interface Env {
   DB: D1Database;
@@ -361,6 +361,10 @@ async function handle(req: Request, env: Env, fetcher: typeof fetch): Promise<Re
 
   if (req.method === "GET" && path === "/") return json({ service: "bev-accounts", ok: true }, 200, c);
   if (req.method === "GET" && path === "/phone") return phonePage();
+  if (req.method === "GET" && path.startsWith("/phone/") && !path.startsWith("/phone/messages") && path !== "/phone/status") {
+    const asset = phoneAsset(path);
+    if (asset) return asset;
+  }
   if (req.method === "GET" && path === "/auth/discord") return startDiscord(url, env);
   if (req.method === "GET" && path === "/auth/discord/callback") return discordCallback(url, env, fetcher);
   if (req.method === "POST" && path === "/auth/token") {

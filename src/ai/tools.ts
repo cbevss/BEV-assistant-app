@@ -25,6 +25,7 @@ import { useScreenTime, describeScreenTime } from "@/lib/screentime";
 import { layoutApi, useLayouts, findWindows, orderMonitors, monitorOf, snapRect, moveToMonitor, POSITIONS, type Position } from "@/lib/layouts";
 import { useTimers, dueFrom, nextRepeat, nextClock, describeTimer, formatDuration, clockTime, matchTimers } from "@/lib/timers";
 import { winMics } from "@/voice/mic";
+import { formatSize } from "@/lib/files";
 import { filesApi, describeEntries, describeBatch, recordChange, undoLast, tidyPlan, describePlan, baseName, dirName, joinPath } from "@/lib/files";
 import * as brain from "@/brain/memory";
 import { connectorTools } from "@/integrations/registry";
@@ -1201,7 +1202,7 @@ export const tools: Record<string, RegisteredTool> = {
     spec: {
       name: "open_website",
       description:
-        "Open a URL or web search in the default browser. For a search, pass the query and it opens a web search.",
+        "Open a page in the user's default browser (never ask which browser). Only when the user wants something opened, e.g. after you've answered a search and they say yes to opening it: pass that source's url. Don't use this to look things up: searching is web_search, done in the background. `search` opens a browser search and is only for when the user explicitly asks for a search in their browser.",
       parameters: {
         type: "object",
         properties: {
@@ -1377,6 +1378,24 @@ Object.assign(tools, {
     run: async (a) => hardwareApi.setWallpaper(str(a.path, "path")),
   },
 
+  clean_temp_files: {
+    spec: {
+      name: "clean_temp_files",
+      description: "Free up disk space by deleting old temporary files (untouched for 2+ days) from Windows' temp folder. Files in use are skipped. The user sees how much will be freed and approves first.",
+      parameters: { type: "object", properties: {}, required: [] },
+    },
+    sensitiveCheck: async () => {
+      const r = await invoke<{ files: number; bytes: number }>("clean_temp", { apply: false });
+      return r.files ? `Permanently delete ${r.files.toLocaleString("en-GB")} old temporary files (${formatSize(r.bytes)}) from the Windows temp folder` : null;
+    },
+    timeoutMs: 300_000,
+    run: async () => {
+      const r = await invoke<{ files: number; bytes: number; skipped: number }>("clean_temp", { apply: true });
+      if (!r.files && !r.skipped) return "There were no old temporary files to clear.";
+      return `Cleared ${r.files.toLocaleString("en-GB")} temporary files, freeing ${formatSize(r.bytes)}.${r.skipped ? ` ${r.skipped} were in use and left alone.` : ""}`;
+    },
+  },
+
   empty_recycle_bin: {
     spec: {
       name: "empty_recycle_bin",
@@ -1508,7 +1527,7 @@ Object.assign(tools, {
     spec: {
       name: "web_search",
       description:
-        "Search the web for current information: news, prices, product comparisons, opening hours, how-tos, anything that may have changed. Returns titles, URLs and a short summary. Cite the sources you use.",
+        "Search the web in the background (nothing opens on the PC) for current information: news, prices, product comparisons, opening hours, how-tos, anything that may have changed. Use this whenever the user asks you to search or look something up. Returns titles, URLs and a short summary. Cite the sources you use.",
       parameters: { type: "object", properties: { query: { type: "string" } }, required: ["query"] },
     },
     untrustedOutput: true,

@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#18202a"/>
+      <stop offset="1" stop-color="#0a0d11"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#4fb8c4" stop-opacity="0.35"/>
+      <stop offset="0.6" stop-color="#4fb8c4" stop-opacity="0.08"/>
+      <stop offset="1" stop-color="#4fb8c4" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="core" cx="0.5" cy="0.45" r="0.55">
+      <stop offset="0" stop-color="#e6fbfd"/>
+      <stop offset="0.45" stop-color="#7fd6df"/>
+      <stop offset="1" stop-color="#3a9aa6"/>
+    </radialGradient>
+    <linearGradient id="ring" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#8be0e8"/>
+      <stop offset="1" stop-color="#3a9aa6"/>
+    </linearGradient>
+  </defs>
+  <rect x="32" y="32" width="960" height="960" rx="224" fill="url(#bg)"/>
+  <rect x="33.5" y="33.5" width="957" height="957" rx="222.5" fill="none" stroke="#ffffff" stroke-opacity="0.07" stroke-width="3"/>
+  <circle cx="512" cy="512" r="330" fill="url(#glow)"/>
+  <!-- outer hairline ring with four ticks -->
+  <circle cx="512" cy="512" r="318" fill="none" stroke="#4fb8c4" stroke-opacity="0.35" stroke-width="10"/>
+  <g stroke="#4fb8c4" stroke-width="18" stroke-linecap="round" stroke-opacity="0.8">
+    <line x1="512" y1="168" x2="512" y2="214"/>
+    <line x1="512" y1="810" x2="512" y2="856"/>
+    <line x1="168" y1="512" x2="214" y2="512"/>
+    <line x1="810" y1="512" x2="856" y2="512"/>
+  </g>
+  <!-- main ring: two bold arcs -->
+  <g fill="none" stroke="url(#ring)" stroke-width="58" stroke-linecap="round">
+    <path d="M 512 268 A 244 244 0 0 1 739 422"/>
+    <path d="M 756 512 A 244 244 0 1 1 512 268" stroke-opacity="0.0"/>
+    <path d="M 739 602 A 244 244 0 0 1 285 602"/>
+    <path d="M 285 422 A 244 244 0 0 1 432 280"/>
+  </g>
+  <!-- core -->
+  <circle cx="512" cy="512" r="104" fill="url(#core)"/>
+  <circle cx="512" cy="512" r="104" fill="none" stroke="#ffffff" stroke-opacity="0.35" stroke-width="4"/>
+</svg>

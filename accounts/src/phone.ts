@@ -1,3 +1,5 @@
+import { ICON_180, ICON_192, ICON_512 } from "./icons";
+
 /**
  * The phone page: talk to BEV on your PC from your phone, watch what it's
  * doing, approve actions (with a second confirmation) and see your screen.
@@ -21,6 +23,9 @@ const HTML = String.raw`<!doctype html>
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="BEV">
 <meta name="referrer" content="no-referrer">
+<link rel="icon" type="image/png" sizes="192x192" href="/phone/icon-192.png">
+<link rel="apple-touch-icon" sizes="180x180" href="/phone/icon-180.png">
+<link rel="manifest" href="/phone/manifest.webmanifest">
 <title>BEV</title>
 <style nonce="__NONCE__">
 :root{--bg:#0b0d10;--s1:#12161b;--s2:#181d23;--line:#232a32;--ink:#e7eaee;--ink2:#a3abb5;--ink3:#6f7883;--acc:#4fb8c4;--acc2:#2c7f89;--ok:#5cc28a;--bad:#e5656a;--warn:#e0b252}
@@ -61,8 +66,8 @@ textarea{flex:1;resize:none;max-height:120px;min-height:44px;border-radius:14px;
 textarea:focus{border-color:var(--acc2)}
 .send{height:44px;min-width:64px;border-radius:14px;border:0;background:var(--acc);color:#05262a;font-weight:600;cursor:pointer}
 .send:disabled{opacity:.4}
-.tools{display:flex;gap:8px;margin-bottom:8px}
-.chip{border:1px solid var(--line);background:var(--s1);border-radius:999px;padding:6px 12px;font-size:13px;color:var(--ink2);cursor:pointer}
+.tools{display:flex;gap:8px;margin-bottom:8px;overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch}.tools::-webkit-scrollbar{display:none}
+.chip{flex:none;white-space:nowrap;border:1px solid var(--line);background:var(--s1);border-radius:999px;padding:6px 12px;font-size:13px;color:var(--ink2);cursor:pointer}
 .gate{flex:1;display:flex;flex-direction:column;justify-content:center;padding:24px}
 .gate h1{font-size:22px;font-weight:600;margin:16px 0 6px}.gate p{color:var(--ink2);margin:0 0 18px}
 .gate input{width:100%;height:46px;border-radius:12px;border:1px solid var(--line);background:var(--s1);padding:0 14px;margin-bottom:10px;outline:none}
@@ -163,10 +168,12 @@ function startMain(){
   input.addEventListener("keydown",function(e){if(e.key==="Enter"&&!e.shiftKey&&window.matchMedia("(pointer:fine)").matches){e.preventDefault();send();}});
   sendBtn=h("button",{class:"send",disabled:true,on:{click:send}},["Send"]);
   var screenBtn=h("button",{class:"chip",on:{click:askScreen}},["Show my screen"]);
+  // One-tap requests; they go through BEV like typed ones.
+  var quick=[["Play / pause","Play or pause the music"],["Next track","Skip to the next track"],["Mute","Mute the PC's sound"],["Lock PC","Lock my PC"],["Today","What did I do today?"]].map(function(q){return h("button",{class:"chip",on:{click:function(){input.value=q[1];send();}}},[q[0]]);});
   show([
     h("header",{},[logo(),h("div",{class:"who"},[h("b",{text:"BEV"}),h("div",{class:"pc"},[statusDot,statusText])]),h("button",{class:"icon",on:{click:function(){if(confirm("Sign out of BEV on this phone?"))signOut();}}},["Sign out"])]),
     mainEl,
-    h("footer",{},[h("div",{class:"tools"},[screenBtn]),h("div",{class:"compose"},[input,sendBtn])])
+    h("footer",{},[h("div",{class:"tools"},[screenBtn].concat(quick)),h("div",{class:"compose"},[input,sendBtn])])
   ]);
   render();
   poll(true);
@@ -255,13 +262,40 @@ else gateSignIn();
 </body>
 </html>`;
 
+/** Home-screen icons and the web app manifest for the phone page. */
+export function phoneAsset(path: string): Response | null {
+  const png = (b64: string) =>
+    new Response(Uint8Array.from(atob(b64), (c) => c.charCodeAt(0)), { headers: { "content-type": "image/png", "cache-control": "public, max-age=86400" } });
+  if (path === "/phone/icon-180.png") return png(ICON_180);
+  if (path === "/phone/icon-192.png") return png(ICON_192);
+  if (path === "/phone/icon-512.png") return png(ICON_512);
+  if (path === "/phone/manifest.webmanifest")
+    return new Response(
+      JSON.stringify({
+        name: "BEV",
+        short_name: "BEV",
+        start_url: "/phone",
+        scope: "/phone",
+        display: "standalone",
+        background_color: "#0b0d10",
+        theme_color: "#0b0d10",
+        icons: [
+          { src: "/phone/icon-192.png", sizes: "192x192", type: "image/png", purpose: "any maskable" },
+          { src: "/phone/icon-512.png", sizes: "512x512", type: "image/png", purpose: "any maskable" },
+        ],
+      }),
+      { headers: { "content-type": "application/manifest+json", "cache-control": "public, max-age=86400" } },
+    );
+  return null;
+}
+
 export function phonePage(): Response {
   const nonce = btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(16))));
   return new Response(HTML.replaceAll("__NONCE__", nonce), {
     headers: {
       "content-type": "text/html; charset=utf-8",
       "cache-control": "no-store",
-      "content-security-policy": `default-src 'none'; script-src 'nonce-${nonce}'; style-src 'nonce-${nonce}'; img-src data:; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`,
+      "content-security-policy": `default-src 'none'; script-src 'nonce-${nonce}'; style-src 'nonce-${nonce}'; img-src data: 'self'; manifest-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`,
       "x-content-type-options": "nosniff",
       "referrer-policy": "no-referrer",
     },

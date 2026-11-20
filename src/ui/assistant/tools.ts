@@ -55,6 +55,7 @@ const LABELS: Record<string, string> = {
   window_layout: "Window layout",
   get_screen_time: "Checked screen time",
   manage_list: "Updated a list",
+  clean_temp_files: "Cleared temporary files",
   set_audio_output: "Switched sound output",
   set_microphone: "Changed the microphone",
   set_power_plan: "Changed the power plan",
@@ -141,7 +142,7 @@ export function toolIcon(name: string): LucideIcon {
   if (name === "scroll_screen") return Mouse;
   if (/^(press_keys|type_text)$/.test(name)) return Keyboard;
   if (/^(set_volume|set_muted|set_audio_output|set_microphone|media_control)$/.test(name)) return Volume2;
-  if (/^(set_power_plan|set_brightness|set_dark_mode|set_wallpaper|empty_recycle_bin)$/.test(name)) return Settings2;
+  if (/^(set_power_plan|set_brightness|set_dark_mode|set_wallpaper|empty_recycle_bin|clean_temp_files)$/.test(name)) return Settings2;
   if (/^(get_system_stats|get_running_apps|get_gpu_stats)$/.test(name)) return Cpu;
   if (/^(copy_to_clipboard|read_clipboard)$/.test(name)) return ClipboardList;
   if (/^(move_window|window_layout)$/.test(name)) return LayoutGrid;
