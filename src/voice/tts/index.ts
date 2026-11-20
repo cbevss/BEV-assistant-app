@@ -1,4 +1,5 @@
 import type { SpeechSynthesizer } from "../types";
+import { pronounce } from "../pronounce";
 import type { Settings } from "@/state/settings";
 import { WebSpeechSynthesizer } from "../webspeech";
 import { KokoroSynthesizer, kokoroStatus, preloadKokoro, setKokoroGpu } from "./kokoro";
@@ -93,7 +94,8 @@ export class ChainSynthesizer implements SpeechSynthesizer {
   }
 
   async speak(text: string, opts?: { signal?: AbortSignal; onLevel?: (l: number) => void }) {
-    let remaining = text;
+    // "16 GB" → "16 gigabytes" and so on, for every voice.
+    let remaining = pronounce(text);
     let lastErr: unknown = null;
     for (const { name, make } of await this.chain()) {
       if (opts?.signal?.aborted) return;
