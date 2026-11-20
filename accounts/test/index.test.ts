@@ -297,3 +297,17 @@ describe("phone control", () => {
     expect(n?.n).toBe(0);
   });
 });
+
+describe("phone icons", () => {
+  it("serves the home-screen icons and manifest", async () => {
+    const icon = await app()(new Request(`${BASE}/phone/icon-180.png`), env);
+    expect(icon.status).toBe(200);
+    expect(icon.headers.get("content-type")).toBe("image/png");
+    const bytes = new Uint8Array(await icon.arrayBuffer());
+    expect([...bytes.slice(1, 4)].map((c) => String.fromCharCode(c)).join("")).toBe("PNG");
+    const m = (await (await app()(new Request(`${BASE}/phone/manifest.webmanifest`), env)).json()) as { name: string; icons: unknown[] };
+    expect(m.name).toBe("BEV");
+    expect(m.icons).toHaveLength(2);
+    expect((await app()(new Request(`${BASE}/phone/nope.png`), env)).status).not.toBe(200);
+  });
+});
