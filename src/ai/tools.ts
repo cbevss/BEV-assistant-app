@@ -23,6 +23,7 @@ import { recap } from "@/lib/recap";
 import { manageList } from "@/lib/lists";
 import { randInt, makePassword } from "@/lib/random";
 import { BEV_SETTINGS, describeAll } from "@/lib/bevSettings";
+import { manageCountdown } from "@/lib/countdowns";
 import { useScreenTime, describeScreenTime } from "@/lib/screentime";
 import { layoutApi, useLayouts, findWindows, orderMonitors, monitorOf, snapRect, moveToMonitor, POSITIONS, type Position } from "@/lib/layouts";
 import { useTimers, dueFrom, nextRepeat, nextClock, describeTimer, formatDuration, clockTime, matchTimers } from "@/lib/timers";
@@ -1018,6 +1019,19 @@ export const tools: Record<string, RegisteredTool> = {
       await st.update(def.apply(st.settings, a.value));
       return `Changed ${def.label} to ${def.describe(useSettings.getState().settings)}.`;
     },
+  },
+
+  countdown: {
+    spec: {
+      name: "countdown",
+      description: "Saved countdowns to dates: add one (\"count down to my holiday on 2027-03-14\"; yearly for birthdays, Christmas), check one or all, or remove one. Use get_datetime if you need today's date to work out the date.",
+      parameters: {
+        type: "object",
+        properties: { action: { type: "string", enum: ["add", "check", "remove"] }, name: { type: "string" }, date: { type: "string", description: "YYYY-MM-DD" }, yearly: { type: "boolean" } },
+        required: ["action"],
+      },
+    },
+    run: async (a) => manageCountdown(str(a.action, "action"), typeof a.name === "string" ? a.name : "", typeof a.date === "string" ? a.date : "", a.yearly === true),
   },
 
   track_task: {

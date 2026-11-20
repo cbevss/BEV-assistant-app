@@ -10,7 +10,7 @@ import { ConfirmDialog } from "../components/ConfirmDialog";
 import { RoutineEditor } from "../components/RoutineEditor";
 import { TeachBev } from "../components/TeachBev";
 import { prettyAccelerator } from "@/lib/hotkeys";
-import { TimersSection, WatchesSection, LayoutsSection } from "../components/TimersSection";
+import { TimersSection, WatchesSection, LayoutsSection, CountdownsSection } from "../components/TimersSection";
 import { describeSteps } from "@/ai/learn";
 
 export function Automation() {
@@ -120,6 +120,7 @@ export function Automation() {
       <div className="mt-8">
         <TimersSection />
         <WatchesSection />
+        <CountdownsSection />
         <LayoutsSection />
         <TeachBev />
       </div>
