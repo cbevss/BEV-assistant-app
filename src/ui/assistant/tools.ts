@@ -48,6 +48,7 @@ const LABELS: Record<string, string> = {
   playtime: "Play time",
   copy_to_clipboard: "Copied to the clipboard",
   read_clipboard: "Read the clipboard",
+  look_at_clipboard_image: "Looked at the copied image",
   focus_session: "Focus session",
   focus: "Focus session",
   my_day: "Looked back over your day",
@@ -150,7 +151,7 @@ export function toolIcon(name: string): LucideIcon {
   if (/^(set_volume|set_muted|set_audio_output|set_microphone|media_control)$/.test(name)) return Volume2;
   if (/^(set_power_plan|set_brightness|set_dark_mode|set_wallpaper|empty_recycle_bin|clean_temp_files)$/.test(name)) return Settings2;
   if (/^(get_system_stats|get_running_apps|get_gpu_stats)$/.test(name)) return Cpu;
-  if (/^(copy_to_clipboard|read_clipboard)$/.test(name)) return ClipboardList;
+  if (/^(copy_to_clipboard|read_clipboard|look_at_clipboard_image)$/.test(name)) return ClipboardList;
   if (/^(move_window|window_layout)$/.test(name)) return LayoutGrid;
   if (/^(get_play_time|play_time_limit|playtime)$/.test(name)) return Gamepad2;
   if (name === "get_screen_time") return Clock;

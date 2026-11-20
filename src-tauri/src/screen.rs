@@ -45,7 +45,7 @@ pub(crate) fn fit(w: u32, h: u32) -> (u32, u32) {
     (((w as f64 * s).round() as u32).max(1), ((h as f64 * s).round() as u32).max(1))
 }
 
-fn encode(img: RgbaImage, label: String) -> BevResult<ScreenCapture> {
+pub(crate) fn encode(img: RgbaImage, label: String) -> BevResult<ScreenCapture> {
     let (w, h) = fit(img.width(), img.height());
     let rgb = DynamicImage::ImageRgba8(img).resize_exact(w, h, FilterType::Triangle).to_rgb8();
     let mut buf = Vec::with_capacity(256 * 1024);

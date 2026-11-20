@@ -1,6 +1,6 @@
 [package]
 name = "bev"
-version = "1.23.0"
+version = "1.24.0"
 description = "BEV — futuristic AI voice assistant for Windows 11"
 authors = ["cbevss"]
 edition = "2021"
@@ -18,7 +18,7 @@ tauri = { version = "2.1.1", features = ["tray-icon", "image-png"] }
 tauri-plugin-shell = "2.0.2"
 tauri-plugin-http = "2.0.4"
 trash = "5"
-arboard = { version = "3", default-features = false }
+arboard = { version = "3", default-features = false, features = ["image-data"] }
 pdf-extract = "0.9"
 zip = { version = "2", default-features = false, features = ["deflate"] }
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "http2", "charset"] }
