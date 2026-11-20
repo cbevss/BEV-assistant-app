@@ -25,6 +25,7 @@ import { randInt, makePassword } from "@/lib/random";
 import { BEV_SETTINGS, describeAll } from "@/lib/bevSettings";
 import { manageCountdown } from "@/lib/countdowns";
 import { runSpeedTest, describeSpeed } from "@/lib/speedtest";
+import { suggestGame } from "@/lib/suggestGame";
 import { useScreenTime, describeScreenTime } from "@/lib/screentime";
 import { layoutApi, useLayouts, findWindows, orderMonitors, monitorOf, snapRect, moveToMonitor, POSITIONS, type Position } from "@/lib/layouts";
 import { useTimers, dueFrom, nextRepeat, nextClock, describeTimer, formatDuration, clockTime, matchTimers } from "@/lib/timers";
@@ -1043,6 +1044,15 @@ export const tools: Record<string, RegisteredTool> = {
     },
     timeoutMs: 90_000,
     run: async () => describeSpeed(await runSpeedTest()),
+  },
+
+  suggest_game: {
+    spec: {
+      name: "suggest_game",
+      description: "Suggest a game to play from the user's installed games (\"what should I play?\", \"pick a game for me\"), favouring ones they haven't played lately. exclude: games they don't want. Offer to launch it with launch_game.",
+      parameters: { type: "object", properties: { exclude: { type: "array", items: { type: "string" } } }, required: [] },
+    },
+    run: async (a) => suggestGame(Array.isArray(a.exclude) ? a.exclude.map(String) : []),
   },
 
   track_task: {
