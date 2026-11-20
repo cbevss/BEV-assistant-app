@@ -31,7 +31,8 @@
         { "url": "https://api.deepseek.com/*" },
         { "url": "https://openrouter.ai/*" },
         { "url": "http://localhost:11434/*" },
-        { "url": "https://*.workers.dev/*" }
+        { "url": "https://*.workers.dev/*" },
+        { "url": "https://speed.cloudflare.com/*" }
       ]
     },
     "store:default",

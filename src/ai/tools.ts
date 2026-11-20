@@ -24,6 +24,7 @@ import { manageList } from "@/lib/lists";
 import { randInt, makePassword } from "@/lib/random";
 import { BEV_SETTINGS, describeAll } from "@/lib/bevSettings";
 import { manageCountdown } from "@/lib/countdowns";
+import { runSpeedTest, describeSpeed } from "@/lib/speedtest";
 import { useScreenTime, describeScreenTime } from "@/lib/screentime";
 import { layoutApi, useLayouts, findWindows, orderMonitors, monitorOf, snapRect, moveToMonitor, POSITIONS, type Position } from "@/lib/layouts";
 import { useTimers, dueFrom, nextRepeat, nextClock, describeTimer, formatDuration, clockTime, matchTimers } from "@/lib/timers";
@@ -1032,6 +1033,16 @@ export const tools: Record<string, RegisteredTool> = {
       },
     },
     run: async (a) => manageCountdown(str(a.action, "action"), typeof a.name === "string" ? a.name : "", typeof a.date === "string" ? a.date : "", a.yearly === true),
+  },
+
+  speed_test: {
+    spec: {
+      name: "speed_test",
+      description: "Test the internet connection: download and upload speed and ping, against Cloudflare's speed test (takes about 15 seconds, uses ~35 MB). For \"how fast is my internet\", \"is my connection slow\", lag in games.",
+      parameters: { type: "object", properties: {}, required: [] },
+    },
+    timeoutMs: 90_000,
+    run: async () => describeSpeed(await runSpeedTest()),
   },
 
   track_task: {
