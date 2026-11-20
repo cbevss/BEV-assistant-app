@@ -5,6 +5,18 @@
  */
 const store = new Map<string, unknown>();
 const params = new URLSearchParams(location.search);
+if (params.get("timers")) {
+  const n = Date.now();
+  store.set("settings.json:timers", [
+    { id: "a1", kind: "timer", label: "pasta", due: n + 7 * 60_000 + 12_000, created: n, durationMs: 12 * 60_000 },
+    { id: "b2", kind: "alarm", label: "", due: n + 9 * 3600_000, created: n, repeat: "weekdays" },
+    { id: "c3", kind: "reminder", label: "Call Mum", due: n + 3 * 3600_000, created: n },
+  ]);
+  store.set("settings.json:watches", [
+    { id: "w1", kind: "download_done", created: n, expires: n + 20 * 3600_000 },
+    { id: "w2", kind: "gpu_temp_above", value: 90, message: "your GPU is getting hot", created: n, expires: n + 20 * 3600_000 },
+  ]);
+}
 if (params.get("usage")) {
   const days: Record<string, Record<string, unknown>> = {};
   for (let i = 0; i < 14; i++) {

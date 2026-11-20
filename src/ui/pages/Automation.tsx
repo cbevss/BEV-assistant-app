@@ -9,6 +9,7 @@ import { PageHeader, Button, Toggle, IconButton, Card, EmptyState } from "../com
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { RoutineEditor } from "../components/RoutineEditor";
 import { TeachBev } from "../components/TeachBev";
+import { TimersSection, WatchesSection } from "../components/TimersSection";
 import { describeSteps } from "@/ai/learn";
 
 export function Automation() {
@@ -116,6 +117,8 @@ export function Automation() {
       )}
 
       <div className="mt-8">
+        <TimersSection />
+        <WatchesSection />
         <TeachBev />
       </div>
 

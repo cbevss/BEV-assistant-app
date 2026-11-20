@@ -15,6 +15,8 @@ import { diagnose, formatFindings, type Area } from "@/lib/diagnose";
 import { docsApi, formatHits } from "@/lib/documents";
 import { gpuApi, describeGpu, useGaming } from "@/lib/gaming";
 import { hardwareApi, matchDevice } from "@/lib/hardware";
+import { useWatches, WATCH_KINDS, describeWatch, type WatchKind } from "@/lib/watches";
+import { useTimers, dueFrom, nextRepeat, describeTimer, formatDuration, clockTime, matchTimers } from "@/lib/timers";
 import { winMics } from "@/voice/mic";
 import { filesApi, describeEntries, describeBatch, recordChange, undoLast, tidyPlan, describePlan, baseName, dirName, joinPath } from "@/lib/files";
 import * as brain from "@/brain/memory";
@@ -543,6 +545,200 @@ export const tools: Record<string, RegisteredTool> = {
         text: replayCaption(clip, seconds),
         images: clip.frames.map((f) => ({ mediaType: "image/jpeg" as const, data: f.data })),
       };
+    },
+  },
+
+  set_timer: {
+    spec: {
+      name: "set_timer",
+      description: "Start a countdown timer on this PC (\"set a timer for 10 minutes\", \"pasta timer, 12 minutes\"). BEV says and shows when it's done. Give hours, minutes and/or seconds, and a short label if the user named one.",
+      parameters: { type: "object", properties: { hours: { type: "number" }, minutes: { type: "number" }, seconds: { type: "number" }, label: { type: "string" } }, required: [] },
+    },
+    run: async (a) => {
+      const now = Date.now();
+      const due = dueFrom(a, now);
+      if (!due) throw new Error("give a length between 1 second and 7 days");
+      const t = await useTimers.getState().add({ kind: "timer", label: typeof a.label === "string" ? a.label.trim() : "", due, durationMs: due - now });
+      return `Timer set: ${formatDuration(t.durationMs!)}${t.label ? ` (${t.label})` : ""}, done at ${clockTime(due)}.`;
+    },
+  },
+
+  set_alarm: {
+    spec: {
+      name: "set_alarm",
+      description: "Set an alarm on this PC for a clock time (\"7:30\", \"6pm\", or \"YYYY-MM-DDTHH:MM\"), optionally repeating daily, on weekdays or at weekends. BEV announces it while running.",
+      parameters: {
+        type: "object",
+        properties: { at: { type: "string" }, label: { type: "string" }, repeat: { type: "string", enum: ["daily", "weekdays", "weekends"] } },
+        required: ["at"],
+      },
+    },
+    run: async (a) => {
+      const due = dueFrom({ at: a.at }, Date.now());
+      if (!due) throw new Error(`couldn't understand the time "${String(a.at)}"; use HH:MM or YYYY-MM-DDTHH:MM`);
+      const repeat = a.repeat === "daily" || a.repeat === "weekdays" || a.repeat === "weekends" ? a.repeat : undefined;
+      let first = due;
+      // A weekday alarm set on Friday evening shouldn't ring on Saturday.
+      if (repeat && repeat !== "daily") {
+        const day = new Date(first).getDay();
+        const ok = repeat === "weekdays" ? day >= 1 && day <= 5 : day === 0 || day === 6;
+        if (!ok) first = nextRepeat(first, repeat);
+      }
+      const t = await useTimers.getState().add({ kind: "alarm", label: typeof a.label === "string" ? a.label.trim() : "", due: first, repeat });
+      return `Alarm set: ${describeTimer(t, Date.now())}.`;
+    },
+  },
+
+  remind_me: {
+    spec: {
+      name: "remind_me",
+      description:
+        "Remind the user about something on this PC, at a time (at: \"HH:MM\" or \"YYYY-MM-DDTHH:MM\") or after a delay (hours/minutes). BEV says it out loud and shows a notification while it's running. For reminders that must reach them when the PC is off, use track_task instead.",
+      parameters: {
+        type: "object",
+        properties: { text: { type: "string" }, at: { type: "string" }, hours: { type: "number" }, minutes: { type: "number" } },
+        required: ["text"],
+      },
+    },
+    run: async (a) => {
+      const text = str(a.text, "text");
+      const due = dueFrom(a, Date.now());
+      if (!due) throw new Error("say when: at a time (HH:MM) or in some minutes/hours");
+      const t = await useTimers.getState().add({ kind: "reminder", label: text, due });
+      return `Reminder set: ${describeTimer(t, Date.now())}.`;
+    },
+  },
+
+  list_timers: {
+    spec: {
+      name: "list_timers",
+      description: "List running timers, alarms and reminders on this PC (with time left), and the stopwatch.",
+      parameters: { type: "object", properties: {}, required: [] },
+    },
+    run: async () => {
+      const { timers, stopwatch } = useTimers.getState();
+      const now = Date.now();
+      const sw = stopwatch.since || stopwatch.before ? `\nStopwatch: ${formatDuration(stopwatch.before + (stopwatch.since ? now - stopwatch.since : 0))}${stopwatch.since ? " (running)" : " (stopped)"}` : "";
+      return (timers.length ? timers.map((t) => describeTimer(t, now)).join("\n") : "No timers, alarms or reminders.") + sw;
+    },
+  },
+
+  cancel_timer: {
+    spec: {
+      name: "cancel_timer",
+      description: "Cancel timers, alarms or reminders: by id, by label (\"the pasta timer\"), by kind (\"alarms\") or \"all\".",
+      parameters: { type: "object", properties: { which: { type: "string" } }, required: ["which"] },
+    },
+    run: async (a) => {
+      const st = useTimers.getState();
+      const hits = matchTimers(st.timers, str(a.which, "which"));
+      if (!hits.length) return `Nothing matched. ${st.timers.length ? `Running: ${st.timers.map((t) => describeTimer(t, Date.now())).join("; ")}` : "Nothing is running."}`;
+      await st.cancel(hits.map((t) => t.id));
+      return `Cancelled ${hits.length}: ${hits.map((t) => t.label || t.kind).join(", ")}.`;
+    },
+  },
+
+  snooze: {
+    spec: {
+      name: "snooze",
+      description: "Snooze the alarm, timer or reminder that just went off, for some minutes (default 9).",
+      parameters: { type: "object", properties: { minutes: { type: "number" } }, required: [] },
+    },
+    run: async (a) => {
+      const st = useTimers.getState();
+      const last = st.lastFired;
+      if (!last) return "Nothing has gone off to snooze.";
+      const mins = typeof a.minutes === "number" && a.minutes > 0 ? Math.min(a.minutes, 180) : 9;
+      await st.add({ kind: last.kind === "timer" ? "reminder" : last.kind, label: last.label || (last.kind === "alarm" ? "Alarm" : "Timer"), due: Date.now() + mins * 60_000 });
+      useTimers.setState({ lastFired: null });
+      return `Snoozed for ${mins} minutes, until ${clockTime(Date.now() + mins * 60_000)}.`;
+    },
+  },
+
+  stopwatch: {
+    spec: {
+      name: "stopwatch",
+      description: "Start, stop, reset or check the stopwatch.",
+      parameters: { type: "object", properties: { action: { type: "string", enum: ["start", "stop", "reset", "status"] } }, required: ["action"] },
+    },
+    run: async (a) => {
+      const st = useTimers.getState();
+      const sw = st.stopwatch;
+      const now = Date.now();
+      const total = sw.before + (sw.since ? now - sw.since : 0);
+      switch (a.action) {
+        case "start":
+          if (sw.since) return `Already running: ${formatDuration(total)}.`;
+          await st.setStopwatch({ since: now, before: sw.before });
+          return sw.before ? `Stopwatch carried on from ${formatDuration(sw.before)}.` : "Stopwatch started.";
+        case "stop":
+          if (!sw.since) return `It isn't running (${formatDuration(total)} counted).`;
+          await st.setStopwatch({ since: null, before: total });
+          return `Stopped at ${formatDuration(total)}.`;
+        case "reset":
+          await st.setStopwatch({ since: null, before: 0 });
+          return total ? `Reset (it was at ${formatDuration(total)}).` : "Reset.";
+        default:
+          return sw.since || sw.before ? `${formatDuration(total)}${sw.since ? ", running" : ", stopped"}.` : "The stopwatch hasn't been started.";
+      }
+    },
+  },
+
+  watch_for: {
+    spec: {
+      name: "watch_for",
+      description:
+        "Tell the user when something happens on this PC (\"tell me when my download finishes\", \"let me know when Blender is done\" → cpu_below, \"when Steam closes\", \"if my GPU goes over 90°C\", \"when the internet's back\"). One-off; expires after `hours` (default 24). when is one of: " +
+        Object.entries(WATCH_KINDS).map(([k, v]) => `${k} = ${v}`).join("; ") +
+        ". message: what to say when it happens, if the user said (e.g. \"your render's done\").",
+      parameters: {
+        type: "object",
+        properties: {
+          when: { type: "string", enum: Object.keys(WATCH_KINDS) },
+          app: { type: "string", description: "for app_closes/app_opens: the app or .exe name" },
+          value: { type: "number", description: "the threshold, for the _above/_below kinds" },
+          message: { type: "string" },
+          hours: { type: "number" },
+        },
+        required: ["when"],
+      },
+    },
+    run: async (a) => {
+      const kind = str(a.when, "when") as WatchKind;
+      if (!(kind in WATCH_KINDS)) throw new Error(`when must be one of ${Object.keys(WATCH_KINDS).join(", ")}`);
+      if ((kind === "app_closes" || kind === "app_opens") && !(typeof a.app === "string" && a.app.trim())) throw new Error("say which app");
+      const w = await useWatches.getState().add({
+        kind,
+        app: typeof a.app === "string" ? a.app.trim() : undefined,
+        value: typeof a.value === "number" ? a.value : undefined,
+        message: typeof a.message === "string" && a.message.trim() ? a.message.trim() : undefined,
+        hours: typeof a.hours === "number" ? a.hours : undefined,
+      });
+      return `Watching: I'll tell you ${describeWatch(w)} (id ${w.id}, for up to ${Math.round((w.expires - w.created) / 3600_000)} h). BEV needs to stay open.`;
+    },
+  },
+
+  list_watches: {
+    spec: { name: "list_watches", description: "List the things BEV is watching for (\"tell me when…\").", parameters: { type: "object", properties: {}, required: [] } },
+    run: async () => {
+      const ws = useWatches.getState().watches;
+      return ws.length ? ws.map((w) => `${w.id}: ${describeWatch(w)}${w.message ? ` → "${w.message}"` : ""}`).join("\n") : "Not watching for anything.";
+    },
+  },
+
+  cancel_watch: {
+    spec: {
+      name: "cancel_watch",
+      description: "Stop watching for something: by id, a word from it (\"download\", \"Steam\"), or \"all\".",
+      parameters: { type: "object", properties: { which: { type: "string" } }, required: ["which"] },
+    },
+    run: async (a) => {
+      const st = useWatches.getState();
+      const w = str(a.which, "which").toLowerCase();
+      const hits = w === "all" ? st.watches : st.watches.filter((x) => x.id === w || describeWatch(x).toLowerCase().includes(w) || (x.message ?? "").toLowerCase().includes(w));
+      if (!hits.length) return "Nothing matched.";
+      await st.remove(hits.map((x) => x.id));
+      return `Stopped watching ${hits.map((x) => describeWatch(x).replace(/^when /, "for when ")).join("; ")}.`;
     },
   },
 

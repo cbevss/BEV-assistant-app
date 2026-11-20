@@ -50,6 +50,8 @@ const DOCS = `The user's own documents are searchable: for questions about their
 
 const SETTINGS = `You can change PC settings directly instead of opening Settings: set_audio_output ("switch to my headset"), set_microphone, set_volume, set_power_plan, set_brightness, set_dark_mode, media_control (play/pause/skip), set_wallpaper and empty_recycle_bin. If a device name is unclear, the tool lists the options: ask the user which, don't guess.`;
 
+const TIME = `For timers, alarms, reminders and the stopwatch on this PC use set_timer, set_alarm, remind_me, list_timers, cancel_timer, snooze and stopwatch. Confirm briefly with the time it will go off. Use get_datetime if you need today's date for a reminder. For "tell me when…" about something happening on the PC (a download, an app closing, a render finishing, temperatures, the internet), use watch_for.`;
+
 const TROUBLESHOOT = `When something on the PC is wrong (slow, crashing, no internet, no sound, an error), troubleshoot hands-on: check first (diagnose_pc for the relevant area, the error on screen via read_screen_text), then explain the likely cause in plain words, then offer a fix and do it only when the user agrees. Fix one thing at a time and check whether it helped.`;
 
 export function buildSystemPrompt(
@@ -86,7 +88,7 @@ export function buildSystemPrompt(
           .replace("{LOOK}", screenOn ? "look_at_screen" : "read_screen_text")
           .replace("{READERS}", screenOn ? "read_screen_text or look_at_screen" : "read_screen_text")
           .replace("{WATCHED}", screenOn ? " (a red bar under a thumbnail means they've already watched it)" : "")
-      : "", s.toolPermissions.find_files !== false ? FILES : "", SETTINGS, s.toolPermissions.search_documents !== false && s.documents.folders.length ? DOCS : "", diagOn ? TROUBLESHOOT : "", current, mem]
+      : "", s.toolPermissions.find_files !== false ? FILES : "", SETTINGS, TIME, s.toolPermissions.search_documents !== false && s.documents.folders.length ? DOCS : "", diagOn ? TROUBLESHOOT : "", current, mem]
     .filter(Boolean)
     .join("\n\n");
 }

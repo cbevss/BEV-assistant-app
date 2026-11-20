@@ -4,7 +4,8 @@ import {
   History,
   AppWindow,
   FolderOpen,
-  FileText, Brain, Calendar, Cpu, Globe, GitBranch, House, Keyboard, ListChecks, Mail, MessageCircle, MousePointerClick, Music, Puzzle, ScanEye, Settings2, Stethoscope, Volume2, Wrench, type LucideIcon,
+  Timer,
+  FileText, Brain, Calendar, Cpu, Globe, GitBranch, House, Keyboard, ListChecks, Mail, MessageCircle, MousePointerClick, Music, Puzzle, ScanEye, Eye, Settings2, Stethoscope, Volume2, Wrench, type LucideIcon,
 } from "lucide-react";
 
 const LABELS: Record<string, string> = {
@@ -25,6 +26,19 @@ const LABELS: Record<string, string> = {
   undo_file_changes: "Undid file changes",
   search_documents: "Searched your documents",
   phone_screenshot: "Sent your screen to your phone",
+  set_timer: "Set a timer",
+  set_alarm: "Set an alarm",
+  remind_me: "Set a reminder",
+  list_timers: "Checked timers",
+  cancel_timer: "Cancelled a timer",
+  snooze: "Snoozed",
+  stopwatch: "Used the stopwatch",
+  timer_done: "Time's up",
+  alert: "Alert",
+  watch_for: "Watching for something",
+  list_watches: "Checked what BEV is watching",
+  cancel_watch: "Stopped watching",
+  watch_done: "It happened",
   set_audio_output: "Switched sound output",
   set_microphone: "Changed the microphone",
   set_power_plan: "Changed the power plan",
@@ -113,6 +127,8 @@ export function toolIcon(name: string): LucideIcon {
   if (/^(set_volume|set_muted|set_audio_output|set_microphone|media_control)$/.test(name)) return Volume2;
   if (/^(set_power_plan|set_brightness|set_dark_mode|set_wallpaper|empty_recycle_bin)$/.test(name)) return Settings2;
   if (/^(get_system_stats|get_running_apps|get_gpu_stats)$/.test(name)) return Cpu;
+  if (/^(watch_for|list_watches|cancel_watch|watch_done)$/.test(name)) return Eye;
+  if (/^(set_timer|set_alarm|remind_me|list_timers|cancel_timer|snooze|stopwatch|timer_done)$/.test(name)) return Timer;
   if (name === "diagnose_pc") return Stethoscope;
   if (/^(remember|recall_memories|forget_memory|save_note|search_notes|read_note|delete_note|search_conversations)$/.test(name)) return Brain;
   if (/(plan|task|routine)/.test(name)) return ListChecks;
