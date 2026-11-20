@@ -32,7 +32,9 @@
         { "url": "https://openrouter.ai/*" },
         { "url": "http://localhost:11434/*" },
         { "url": "https://*.workers.dev/*" },
-        { "url": "https://speed.cloudflare.com/*" }
+        { "url": "https://speed.cloudflare.com/*" },
+        { "url": "https://api.open-meteo.com/*" },
+        { "url": "https://geocoding-api.open-meteo.com/*" }
       ]
     },
     "store:default",

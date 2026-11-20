@@ -135,6 +135,8 @@ export interface Settings {
   playLimitMinutes: number | null;
   /** Count time per app (local only). */
   screenTime: boolean;
+  /** Town or city for weather when none is named. */
+  homePlace: string;
   /** Spending limits (USD, null = none) and custom prices per model (USD per million tokens). */
   spending: { dailyUsd: number | null; monthlyUsd: number | null; prices: Record<string, { input: number; output: number }> };
   proactiveMonitoring: boolean;
@@ -211,6 +213,7 @@ export const defaultSettings: Settings = {
   phoneControl: false,
   playLimitMinutes: null,
   screenTime: true,
+  homePlace: "",
   spending: { dailyUsd: null, monthlyUsd: null, prices: {} },
   proactiveMonitoring: false,
   watch: { crashes: true, network: true, disk: true },

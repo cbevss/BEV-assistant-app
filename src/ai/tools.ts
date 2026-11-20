@@ -26,6 +26,7 @@ import { BEV_SETTINGS, describeAll } from "@/lib/bevSettings";
 import { manageCountdown } from "@/lib/countdowns";
 import { runSpeedTest, describeSpeed } from "@/lib/speedtest";
 import { suggestGame } from "@/lib/suggestGame";
+import { getForecast, describeForecast } from "@/lib/weather";
 import { useScreenTime, describeScreenTime } from "@/lib/screentime";
 import { layoutApi, useLayouts, findWindows, orderMonitors, monitorOf, snapRect, moveToMonitor, POSITIONS, type Position } from "@/lib/layouts";
 import { useTimers, dueFrom, nextRepeat, nextClock, describeTimer, formatDuration, clockTime, matchTimers } from "@/lib/timers";
@@ -1067,6 +1068,23 @@ export const tools: Record<string, RegisteredTool> = {
       parameters: { type: "object", properties: { exclude: { type: "array", items: { type: "string" } } }, required: [] },
     },
     run: async (a) => suggestGame(Array.isArray(a.exclude) ? a.exclude.map(String) : []),
+  },
+
+  get_weather: {
+    spec: {
+      name: "get_weather",
+      description: "Weather now and for the next few days (up to 7) for a town or city, or the user's home town if none is named. If they tell you where they live, pass save_as_home: true so it's remembered for next time.",
+      parameters: { type: "object", properties: { place: { type: "string" }, days: { type: "number" }, save_as_home: { type: "boolean" } }, required: [] },
+    },
+    run: async (a) => {
+      const st = useSettings.getState();
+      const place = typeof a.place === "string" && a.place.trim() ? a.place.trim() : st.settings.homePlace;
+      if (!place) return "I don't know where the user is yet. Ask which town or city, then call again with save_as_home: true.";
+      const days = typeof a.days === "number" ? Math.round(a.days) : 3;
+      const f = await getForecast(place, days);
+      if (a.save_as_home === true) await st.update({ homePlace: place });
+      return describeForecast(f, days) + (a.save_as_home === true ? ` (Saved ${place} as home.)` : "");
+    },
   },
 
   track_task: {
