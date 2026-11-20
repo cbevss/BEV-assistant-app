@@ -65,6 +65,8 @@ export class VoiceController {
   private stt = new WebSpeechRecognizer("en-GB");
   private whisper: WhisperRecognizer | null = null;
   private whisperKey = "";
+  /** Windows online recognition couldn't reach its service this session: use Whisper instead. */
+  private onlineSttDown = false;
   /** The mic actually in use ("" = Windows default) and whether that's a fallback. */
   private mic = { deviceId: "", fallback: false, label: "" };
   private tts: SpeechSynthesizer = this.makeTts();
@@ -205,7 +207,7 @@ export class VoiceController {
   /** The recogniser chosen in Voice & Audio. */
   private recognizer(): SpeechRecognizer {
     const s = settings();
-    if (s.sttEngine !== "whisper") return this.stt;
+    if (s.sttEngine !== "whisper" && !this.onlineSttDown) return this.stt;
     const key = `${s.whisperSize}|${s.kokoroUseGpu}`;
     if (!this.whisper || key !== this.whisperKey) {
       this.whisperKey = key;
@@ -376,6 +378,16 @@ export class VoiceController {
         } catch (e) {
           // Show real recogniser failures (no internet, mic blocked) instead of
           // quietly ending; a timeout/abort is just silence.
+          // Windows online recognition can't reach its service: switch to the
+          // on-device recogniser for the rest of this session and listen again.
+          if (e instanceof SttError && e.code === "network" && settings().sttEngine !== "whisper" && !this.onlineSttDown) {
+            this.onlineSttDown = true;
+            notify(
+              "BEV voice",
+              "Windows online speech recognition couldn't connect, so BEV switched to on-device recognition for now. The first time, it downloads a small speech model. To make this permanent, pick Whisper in Voice & Audio."
+            );
+            continue;
+          }
           if (e instanceof SttError) {
             this.setState("error", e.message);
             await pause(2500);
@@ -387,7 +399,7 @@ export class VoiceController {
 
         // The Windows recogniser wasn't sure about a short request: check
         // rather than act on a guess (once per turn).
-        if (settings().sttEngine !== "whisper" && !askedRepeat) {
+        if (settings().sttEngine !== "whisper" && !this.onlineSttDown && !askedRepeat) {
           const conf = this.stt.lastConfidence;
           if (conf > 0 && conf < LOW_CONFIDENCE && utterance.split(/\s+/).length <= 8) {
             askedRepeat = true;
