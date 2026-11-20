@@ -27,6 +27,7 @@ import { manageCountdown } from "@/lib/countdowns";
 import { runSpeedTest, describeSpeed } from "@/lib/speedtest";
 import { suggestGame } from "@/lib/suggestGame";
 import { getForecast, describeForecast } from "@/lib/weather";
+import { usePowerTimer, setPowerTimer, cancelPowerTimer } from "@/lib/powerTimer";
 import { useScreenTime, describeScreenTime } from "@/lib/screentime";
 import { layoutApi, useLayouts, findWindows, orderMonitors, monitorOf, snapRect, moveToMonitor, POSITIONS, type Position } from "@/lib/layouts";
 import { useTimers, dueFrom, nextRepeat, nextClock, describeTimer, formatDuration, clockTime, matchTimers } from "@/lib/timers";
@@ -1542,6 +1543,30 @@ Object.assign(tools, {
       sensitive: true,
     },
     run: async () => hardwareApi.emptyRecycleBin(),
+  },
+
+  sleep_timer: {
+    spec: {
+      name: "sleep_timer",
+      description: "Sleep, shut down or restart the PC later (\"shut down in an hour\", \"sleep at 1am\"), cancel it, or check it. Setting one asks the user first; a minute before, BEV warns them and they can cancel. For right now, use power_action.",
+      parameters: {
+        type: "object",
+        properties: { action: { type: "string", enum: ["set", "cancel", "status"] }, power: { type: "string", enum: ["sleep", "shutdown", "restart"] }, minutes: { type: "number" }, hours: { type: "number" }, at: { type: "string" } },
+        required: ["action"],
+      },
+    },
+    sensitiveFor: (a) => a.action === "set",
+    run: async (a) => {
+      if (a.action === "cancel") return cancelPowerTimer();
+      if (a.action === "status") {
+        const p = usePowerTimer.getState().pending;
+        return p ? `The PC will ${p.action === "sleep" ? "sleep" : p.action === "shutdown" ? "shut down" : "restart"} at ${clockTime(p.at)}.` : "No sleep timer is set.";
+      }
+      const power = a.power === "shutdown" || a.power === "restart" ? a.power : "sleep";
+      const at = dueFrom(a, Date.now());
+      if (!at || at - Date.now() < 60_000) throw new Error("give a time at least a minute away");
+      return setPowerTimer(power, at);
+    },
   },
 
   power_action: {
