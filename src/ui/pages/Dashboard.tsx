@@ -5,6 +5,7 @@ import { BackgroundTasks } from "../components/BackgroundTasks";
 import { Noticed } from "../components/Noticed";
 import { RecentTasks } from "../components/RecentTasks";
 import { PlayTime } from "../components/PlayTime";
+import { ScreenTime } from "../components/ScreenTime";
 import { gpuApi, type GpuStats } from "@/lib/gaming";
 import { PageHeader, Notice } from "../components/Form";
 import { HudLabel, Scale } from "../components/Hud";
@@ -73,6 +74,7 @@ export function Dashboard() {
         </div>
         <div>
           <Noticed />
+          <ScreenTime />
           <section className="mb-8">
             <div className="mb-2 px-1">
               <h2 className="flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.14em] text-ink-2">

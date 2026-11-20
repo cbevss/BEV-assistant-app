@@ -79,7 +79,7 @@ export function TimersSection() {
         <Field
           key={t.id}
           label={t.label || (t.kind === "timer" ? `${formatDuration(t.durationMs ?? 0)} timer` : t.kind === "alarm" ? "Alarm" : "Reminder")}
-          hint={`${t.kind === "timer" ? "Timer" : t.kind === "alarm" ? "Alarm" : "Reminder"} · ${t.kind === "timer" ? `done at ${clockTime(t.due)}` : `${new Date(t.due).toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" })} ${clockTime(t.due)}`}${t.repeat ? ` · ${t.repeat}` : ""}`}
+          hint={`${t.kind === "timer" ? "Timer" : t.kind === "alarm" ? "Alarm" : "Reminder"} · ${t.kind === "timer" ? `done at ${clockTime(t.due)}` : `${new Date(t.due).toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" })} ${clockTime(t.due)}`}${t.repeat ? ` · ${t.repeat}` : ""}${t.everyMin ? ` · every ${formatDuration(t.everyMin * 60_000)}${t.until ? ` until ${clockTime(t.until)}` : ""}` : ""}`}
         >
           <div className="flex items-center gap-3">
             <span className="tnum font-mono text-sm text-ink">{clockDown(t.due - now)}</span>

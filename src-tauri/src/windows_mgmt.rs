@@ -250,3 +250,21 @@ pub fn place_window(hwnd: isize, x: i32, y: i32, w: i32, h: i32, state: Option<S
 pub fn monitor_work_areas() -> Vec<WorkArea> {
     imp::work_areas()
 }
+
+/// Seconds since the last keyboard or mouse input (any app), for "is the user here?".
+#[tauri::command]
+pub fn idle_seconds() -> u64 {
+    #[cfg(windows)]
+    unsafe {
+        use windows::Win32::System::SystemInformation::GetTickCount;
+        use windows::Win32::UI::Input::KeyboardAndMouse::{GetLastInputInfo, LASTINPUTINFO};
+        let mut li = LASTINPUTINFO { cbSize: std::mem::size_of::<LASTINPUTINFO>() as u32, dwTime: 0 };
+        if GetLastInputInfo(&mut li).as_bool() {
+            // Tick counts wrap every ~49 days; wrapping_sub handles it.
+            return (GetTickCount().wrapping_sub(li.dwTime) / 1000) as u64;
+        }
+        0
+    }
+    #[cfg(not(windows))]
+    0
+}

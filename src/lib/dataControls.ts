@@ -18,6 +18,7 @@ import { useUsage } from "@/ai/usage";
 import { useTimers } from "./timers";
 import { useWatches } from "./watches";
 import { usePlaytime } from "./playtime";
+import { useScreenTime } from "./screentime";
 
 /**
  * Every secret BEV keeps in Windows Credential Manager. Keep in step with the
@@ -66,6 +67,7 @@ export const dataActions = {
     const w = useWatches.getState();
     await w.remove(w.watches.map((x) => x.id));
     await usePlaytime.getState().clear();
+    await useScreenTime.getState().clear();
   },
   /** What BEV read from your documents (the files themselves are untouched). */
   documents: () => invoke<void>("docs_clear"),

@@ -61,3 +61,27 @@ describe("running timers", () => {
     expect(r.keep[1].due).toBe(at("2026-11-21T07:30:00"));
   });
 });
+
+describe("repeating reminders", () => {
+  it("come back every so often until the end time", () => {
+    const r: Timer = { id: "w", kind: "reminder", label: "drink water", due: NOW, created: 0, everyMin: 60, until: NOW + 90 * 60_000 };
+    let x = dueNow([r], NOW);
+    expect(x.fire).toHaveLength(1);
+    expect(x.keep[0].due).toBe(NOW + 3600_000);
+    x = dueNow(x.keep, NOW + 3600_000);
+    expect(x.keep).toHaveLength(0); // the next one would be after "until"
+    // Missed several while closed: fires once and moves on to the next slot.
+    x = dueNow([{ ...r, until: undefined }], NOW + 3.5 * 3600_000);
+    expect(x.fire).toHaveLength(1);
+    expect(x.keep[0].due).toBe(NOW + 4 * 3600_000);
+  });
+});
+
+import { awaySummary } from "./alerts";
+describe("away summary", () => {
+  it("lists what happened, once each", () => {
+    expect(awaySummary([])).toBeNull();
+    expect(awaySummary(["your downloads have finished"])).toBe("While you were away: your downloads have finished.");
+    expect(awaySummary(["a", "b", "a", "c"])).toBe("While you were away: a, b and c.");
+  });
+});
