@@ -27,6 +27,32 @@ pub struct InputDevice {
     pub volume: Option<f32>,
 }
 
+/// One app currently holding an audio session on the default speakers.
+#[derive(Debug, Serialize, Clone)]
+pub struct AppAudio {
+    /// Executable name without ".exe", e.g. "Spotify". "System sounds" for pid 0.
+    pub app: String,
+    pub pid: u32,
+    /// 0..100, the app's own slider in the Windows volume mixer.
+    pub volume: f32,
+    pub muted: bool,
+}
+
+/// Lower-case, ".exe"-less, letters-and-digits form used to match a spoken app name.
+pub fn app_key(name: &str) -> String {
+    let n = name.trim().to_lowercase();
+    let n = n.strip_suffix(".exe").unwrap_or(&n);
+    n.chars().filter(|c| c.is_alphanumeric()).collect()
+}
+
+/// Does a session's app name match what the user asked for? Either side may
+/// contain the other ("discord" ~ "DiscordPTB"), but a short session name
+/// only matches inside a longer request when it's at least 4 characters.
+pub fn app_matches(session: &str, wanted: &str) -> bool {
+    let (a, b) = (app_key(session), app_key(wanted));
+    !a.is_empty() && !b.is_empty() && (a == b || a.contains(&b) || (a.len() >= 4 && b.contains(&a)))
+}
+
 #[cfg(windows)]
 mod imp {
     use super::*;
@@ -37,7 +63,8 @@ mod imp {
     use windows::Win32::Media::Audio::Endpoints::IAudioEndpointVolume;
     use windows::Win32::Media::Audio::{
         eCapture, eCommunications, eConsole, eMultimedia, eRender, EDataFlow, ERole, IMMDevice, IMMDeviceEnumerator,
-        MMDeviceEnumerator, DEVICE_STATE_ACTIVE,
+        MMDeviceEnumerator, DEVICE_STATE_ACTIVE, AudioSessionStateExpired, IAudioSessionControl2, IAudioSessionManager2,
+        ISimpleAudioVolume,
     };
     use windows::Win32::System::Com::{
         CoCreateInstance, CoInitializeEx, CoTaskMemFree, CoUninitialize, CLSCTX_ALL,
@@ -300,11 +327,118 @@ mod imp {
             Ok(ep.GetMute().map_err(|e| BevError::Os(format!("get mute: {e}")))?.as_bool())
         }
     }
+
+    fn process_name(pid: u32) -> String {
+        use windows::Win32::Foundation::CloseHandle;
+        use windows::Win32::System::Threading::{
+            OpenProcess, QueryFullProcessImageNameW, PROCESS_NAME_WIN32, PROCESS_QUERY_LIMITED_INFORMATION,
+        };
+        if pid == 0 {
+            return "System sounds".into();
+        }
+        unsafe {
+            let Ok(h) = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid) else {
+                return format!("pid {pid}");
+            };
+            let mut buf = vec![0u16; 1024];
+            let mut size = buf.len() as u32;
+            let mut out = format!("pid {pid}");
+            if QueryFullProcessImageNameW(h, PROCESS_NAME_WIN32, PWSTR(buf.as_mut_ptr()), &mut size).is_ok() {
+                let full = String::from_utf16_lossy(&buf[..size as usize]);
+                let file = full.rsplit(['\\', '/']).next().unwrap_or("").to_string();
+                let lower = file.to_lowercase();
+                out = if lower.ends_with(".exe") { file[..file.len() - 4].to_string() } else { file };
+            }
+            let _ = CloseHandle(h);
+            out
+        }
+    }
+
+    /// Every live session on the default playback device, with its volume control.
+    fn sessions() -> BevResult<Vec<(AppAudio, ISimpleAudioVolume)>> {
+        unsafe {
+            let device = enumerator()?
+                .GetDefaultAudioEndpoint(eRender, eMultimedia)
+                .map_err(|e| BevError::Os(format!("default endpoint: {e}")))?;
+            let mgr: IAudioSessionManager2 = device
+                .Activate(CLSCTX_ALL, None)
+                .map_err(|e| BevError::Os(format!("session manager: {e}")))?;
+            let list = mgr
+                .GetSessionEnumerator()
+                .map_err(|e| BevError::Os(format!("session list: {e}")))?;
+            let count = list.GetCount().map_err(|e| BevError::Os(format!("session count: {e}")))?;
+            let mut out = Vec::new();
+            for i in 0..count {
+                let Ok(ctl) = list.GetSession(i) else { continue };
+                if matches!(ctl.GetState(), Ok(s) if s == AudioSessionStateExpired) {
+                    continue;
+                }
+                let Ok(ctl2) = ctl.cast::<IAudioSessionControl2>() else { continue };
+                let Ok(vol) = ctl.cast::<ISimpleAudioVolume>() else { continue };
+                let pid = ctl2.GetProcessId().unwrap_or(0);
+                let volume = vol.GetMasterVolume().map(|v| (v * 100.0).round()).unwrap_or(0.0);
+                let muted = vol.GetMute().map(|m| m.as_bool()).unwrap_or(false);
+                out.push((AppAudio { app: process_name(pid), pid, volume, muted }, vol));
+            }
+            Ok(out)
+        }
+    }
+
+    pub fn list_apps() -> BevResult<Vec<AppAudio>> {
+        let _g = ComGuard::new()?;
+        let mut v: Vec<AppAudio> = sessions()?.into_iter().map(|(a, _)| a).collect();
+        // One app (Chrome, Discord) often owns several sessions; list it once.
+        v.sort_by(|a, b| a.app.to_lowercase().cmp(&b.app.to_lowercase()));
+        v.dedup_by(|a, b| a.app.eq_ignore_ascii_case(&b.app));
+        Ok(v)
+    }
+
+    pub fn set_app(app: &str, volume: Option<f32>, muted: Option<bool>) -> BevResult<Vec<AppAudio>> {
+        let _g = ComGuard::new()?;
+        let all = sessions()?;
+        let exact: Vec<&(AppAudio, ISimpleAudioVolume)> =
+            all.iter().filter(|(a, _)| app_key(&a.app) == app_key(app)).collect();
+        let hits = if exact.is_empty() {
+            all.iter().filter(|(a, _)| app_matches(&a.app, app)).collect()
+        } else {
+            exact
+        };
+        if hits.is_empty() {
+            return Err(BevError::NotFound(format!("no app called \"{app}\" is playing sound right now")));
+        }
+        let mut changed = Vec::new();
+        unsafe {
+            for (a, vol) in hits {
+                if let Some(v) = volume {
+                    vol.SetMasterVolume(v / 100.0, std::ptr::null())
+                        .map_err(|e| BevError::Os(format!("set {} volume: {e}", a.app)))?;
+                }
+                if let Some(m) = muted {
+                    vol.SetMute(m, std::ptr::null())
+                        .map_err(|e| BevError::Os(format!("mute {}: {e}", a.app)))?;
+                }
+                changed.push(AppAudio {
+                    app: a.app.clone(),
+                    pid: a.pid,
+                    volume: volume.map(|v| v.round()).unwrap_or(a.volume),
+                    muted: muted.unwrap_or(a.muted),
+                });
+            }
+        }
+        changed.dedup_by(|a, b| a.app.eq_ignore_ascii_case(&b.app));
+        Ok(changed)
+    }
 }
 
 #[cfg(not(windows))]
 mod imp {
     use super::*;
+    pub fn list_apps() -> BevResult<Vec<AppAudio>> {
+        Err(BevError::Unsupported("audio control is Windows-only".into()))
+    }
+    pub fn set_app(_a: &str, _v: Option<f32>, _m: Option<bool>) -> BevResult<Vec<AppAudio>> {
+        Err(BevError::Unsupported("audio control is Windows-only".into()))
+    }
     pub fn get() -> BevResult<f32> {
         Err(BevError::Unsupported("audio control is Windows-only".into()))
     }
@@ -385,4 +519,42 @@ pub fn set_output_device(id: String) -> BevResult<()> {
         return Err(BevError::Invalid("output device id is empty".into()));
     }
     imp::set_output(&id)
+}
+
+/// Apps playing sound right now, with their own mixer volume and mute state.
+#[tauri::command]
+pub fn list_app_audio() -> BevResult<Vec<AppAudio>> {
+    imp::list_apps()
+}
+
+/// Set one app's mixer volume (0..100) and/or mute it, matched by name.
+#[tauri::command]
+pub fn set_app_audio(app: String, volume: Option<f32>, muted: Option<bool>) -> BevResult<Vec<AppAudio>> {
+    if app_key(&app).is_empty() {
+        return Err(BevError::Invalid("app name is empty".into()));
+    }
+    if let Some(v) = volume {
+        if !(0.0..=100.0).contains(&v) {
+            return Err(BevError::Invalid("volume must be 0..100".into()));
+        }
+    }
+    if volume.is_none() && muted.is_none() {
+        return Err(BevError::Invalid("give a volume or a mute state".into()));
+    }
+    imp::set_app(&app, volume, muted)
+}
+
+#[cfg(test)]
+mod app_tests {
+    use super::*;
+    #[test]
+    fn matching() {
+        assert!(app_matches("Spotify", "spotify"));
+        assert!(app_matches("Spotify", "Spotify.exe"));
+        assert!(app_matches("DiscordPTB", "discord"));
+        assert!(app_matches("Discord", "discord app"));
+        assert!(!app_matches("vlc", "valorant"));
+        assert!(!app_matches("Spotify", ""));
+        assert!(!app_matches("pid 5", "chrome"));
+    }
 }

@@ -1,6 +1,6 @@
 [package]
 name = "bev"
-version = "1.27.0"
+version = "1.28.0"
 description = "BEV — futuristic AI voice assistant for Windows 11"
 authors = ["cbevss"]
 edition = "2021"

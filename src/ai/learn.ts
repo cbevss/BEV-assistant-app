@@ -26,6 +26,7 @@ const REPLAYABLE = new Set([
   "type_text",
   "set_volume",
   "set_muted",
+  "app_volume",
   "set_quiet_mode",
   "use_named_control",
 ]);
@@ -176,6 +177,9 @@ export function describeSteps(steps: RoutineStep[]): string[] {
         return `set the volume to ${a.percent}%`;
       case "set_muted":
         return a.muted === false ? "unmute the sound" : "mute the sound";
+      case "app_volume":
+        if (a.action !== "set") return "check app volumes";
+        return a.muted === true ? `mute ${a.app}` : a.muted === false && a.percent === undefined ? `unmute ${a.app}` : `set ${a.app} to ${a.percent}%`;
       case "set_quiet_mode":
         return a.enabled === false ? "turn quiet mode off" : "turn quiet mode on";
       default:

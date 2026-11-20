@@ -176,6 +176,47 @@ export const tools: Record<string, RegisteredTool> = {
     },
   },
 
+  app_volume: {
+    spec: {
+      name: "app_volume",
+      description:
+        "Per-app volume, like the Windows volume mixer: turn one app up or down or mute it without touching anything else ('turn Spotify down to 20', 'mute Discord', 'unmute Chrome', 'how loud is my game'). action 'list' shows every app playing sound with its level; 'set' changes one app by the name the user said. Only apps currently holding sound appear; if the app isn't listed, say it isn't playing anything right now. For the whole PC use set_volume / set_muted.",
+      parameters: {
+        type: "object",
+        properties: {
+          action: { type: "string", enum: ["list", "set"] },
+          app: { type: "string", description: "App as the user said it, for 'set'" },
+          percent: { type: "number", description: "0 to 100 (the app's own slider)" },
+          muted: { type: "boolean" },
+        },
+        required: ["action"],
+      },
+    },
+    run: async (a) => {
+      if (a.action === "list") {
+        const apps = await native.listAppAudio();
+        if (!apps.length) return "No apps are playing sound right now.";
+        return apps.map((x) => `${x.app}: ${x.muted ? "muted" : `${Math.round(x.volume)}%`}`).join("\n");
+      }
+      if (a.action !== "set") throw new Error("action must be list or set");
+      const app = typeof a.app === "string" ? a.app.trim() : "";
+      if (!app) throw new Error("say which app");
+      const p = a.percent === undefined || a.percent === null ? undefined : num(a.percent, "percent");
+      if (p !== undefined && (p < 0 || p > 100)) throw new Error("percent must be 0..100");
+      const m = a.muted === undefined || a.muted === null ? undefined : bool(a.muted, "muted");
+      if (p === undefined && m === undefined) throw new Error("give percent or muted");
+      try {
+        const done = await native.setAppAudio(app, p, m);
+        return done.map((x) => `${x.app} ${x.muted ? "muted" : "unmuted"}, at ${Math.round(x.volume)}%`).join("\n");
+      } catch (e) {
+        const msg = String((e as { message?: string })?.message ?? e);
+        if (!/playing sound/.test(msg)) throw e;
+        const apps = await native.listAppAudio().catch(() => []);
+        return `${msg}. Apps with sound now: ${apps.map((x) => x.app).join(", ") || "none"}.`;
+      }
+    },
+  },
+
   launch_app: {
     spec: {
       name: "launch_app",

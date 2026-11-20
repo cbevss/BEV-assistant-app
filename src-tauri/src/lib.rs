@@ -126,6 +126,8 @@ pub fn run() {
             audio::is_muted,
             audio::list_output_devices,
             audio::set_output_device,
+            audio::list_app_audio,
+            audio::set_app_audio,
             // Application control
             audio::list_input_devices,
             audio::set_default_input_device,
