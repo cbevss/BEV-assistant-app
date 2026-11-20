@@ -91,6 +91,7 @@ const LABELS: Record<string, string> = {
   type_text: "Typed text",
   set_volume: "Changed volume",
   set_muted: "Changed mute",
+  app_volume: "App volume",
   get_system_stats: "Checked system",
   get_running_apps: "Checked running apps",
   diagnose_pc: "Ran diagnostics",
@@ -150,7 +151,7 @@ export function toolIcon(name: string): LucideIcon {
   if (/^(use_control|use_named_control|click_on_screen|hover_on_screen|drag_on_screen)$/.test(name)) return MousePointerClick;
   if (name === "scroll_screen") return Mouse;
   if (/^(press_keys|type_text)$/.test(name)) return Keyboard;
-  if (/^(set_volume|set_muted|set_audio_output|set_microphone|media_control)$/.test(name)) return Volume2;
+  if (/^(set_volume|set_muted|app_volume|set_audio_output|set_microphone|media_control)$/.test(name)) return Volume2;
   if (/^(set_power_plan|set_brightness|set_dark_mode|set_wallpaper|empty_recycle_bin|clean_temp_files)$/.test(name)) return Settings2;
   if (/^(get_system_stats|get_running_apps|get_gpu_stats)$/.test(name)) return Cpu;
   if (/^(copy_to_clipboard|read_clipboard|look_at_clipboard_image)$/.test(name)) return ClipboardList;

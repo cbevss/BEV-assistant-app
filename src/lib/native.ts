@@ -25,6 +25,14 @@ export interface InstalledGame {
   source: "steam";
 }
 
+/** An app holding sound on the default speakers, as the Windows volume mixer shows it. */
+export interface AppAudio {
+  app: string;
+  pid: number;
+  volume: number;
+  muted: boolean;
+}
+
 export interface OutputDevice {
   id: string;
   name: string;
@@ -56,6 +64,10 @@ export const native = {
   listOutputDevices: () => invoke<OutputDevice[]>("list_output_devices"),
   /** Makes the device the Windows default, so all sound (BEV included) follows. */
   setOutputDevice: (id: string) => invoke<void>("set_output_device", { id }),
+  listAppAudio: () => invoke<AppAudio[]>("list_app_audio"),
+  /** One app's own mixer slider; matched by name ("spotify", "discord"). */
+  setAppAudio: (app: string, volume?: number, muted?: boolean) =>
+    invoke<AppAudio[]>("set_app_audio", { app, volume: volume ?? null, muted: muted ?? null }),
 
   // Apps
   /** Installed Steam games. Rejects if Steam isn't installed. */
