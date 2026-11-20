@@ -22,6 +22,7 @@ import { useFocus, startFocus, stopFocus } from "@/lib/focus";
 import { recap } from "@/lib/recap";
 import { manageList } from "@/lib/lists";
 import { randInt, makePassword } from "@/lib/random";
+import { BEV_SETTINGS, describeAll } from "@/lib/bevSettings";
 import { useScreenTime, describeScreenTime } from "@/lib/screentime";
 import { layoutApi, useLayouts, findWindows, orderMonitors, monitorOf, snapRect, moveToMonitor, POSITIONS, type Position } from "@/lib/layouts";
 import { useTimers, dueFrom, nextRepeat, nextClock, describeTimer, formatDuration, clockTime, matchTimers } from "@/lib/timers";
@@ -996,6 +997,26 @@ export const tools: Record<string, RegisteredTool> = {
       const pw = makePassword(typeof a.length === "number" ? a.length : 20, a.symbols !== false);
       await invoke("clipboard_write", { text: pw });
       return `Copied a ${pw.length}-character password to the clipboard${a.symbols === false ? " (letters and numbers only)" : ""}. Paste it where you need it, then save it in your password manager.`;
+    },
+  },
+
+  bev_setting: {
+    spec: {
+      name: "bev_setting",
+      description:
+        "Change one of BEV's own settings when the user asks (\"talk slower\" → speech_speed slower, \"be quieter\" → speech_volume quieter, \"call me Charlie\" → call_me Charlie, \"turn off screen time\"), or list them with no setting. Settings: " +
+        Object.keys(BEV_SETTINGS).join(", ") +
+        ". Values: on/off; speech_speed faster/slower/normal/1.2; speech_volume louder/quieter/60; follow_up smart/always/off; call_me any name or \"nothing\".",
+      parameters: { type: "object", properties: { setting: { type: "string", enum: Object.keys(BEV_SETTINGS) }, value: { type: "string" } }, required: [] },
+    },
+    run: async (a) => {
+      const st = useSettings.getState();
+      if (typeof a.setting !== "string" || !a.setting) return describeAll(st.settings);
+      const def = BEV_SETTINGS[a.setting];
+      if (!def) throw new Error(`no setting "${a.setting}"`);
+      if (typeof a.value !== "string" || !a.value.trim()) return `${def.label}: ${def.describe(st.settings)}`;
+      await st.update(def.apply(st.settings, a.value));
+      return `Changed ${def.label} to ${def.describe(useSettings.getState().settings)}.`;
     },
   },
 
