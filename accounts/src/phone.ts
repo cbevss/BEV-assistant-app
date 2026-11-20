@@ -17,7 +17,7 @@ const HTML = String.raw`<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="theme-color" content="#0b0d10">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
@@ -31,6 +31,9 @@ const HTML = String.raw`<!doctype html>
 :root{--bg:#0b0d10;--s1:#12161b;--s2:#181d23;--line:#232a32;--ink:#e7eaee;--ink2:#a3abb5;--ink3:#6f7883;--acc:#4fb8c4;--acc2:#2c7f89;--ok:#5cc28a;--bad:#e5656a;--warn:#e0b252}
 *{box-sizing:border-box}html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font:15px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;-webkit-font-smoothing:antialiased}
 button,input,textarea{font:inherit;color:inherit}
+html,body{touch-action:manipulation;-webkit-text-size-adjust:100%;text-size-adjust:100%}
+/* 16px stops iPhones zooming in when a box is tapped. */
+input,textarea{font-size:16px}
 .app{display:flex;flex-direction:column;height:100%;max-width:640px;margin:0 auto}
 header{display:flex;align-items:center;gap:10px;padding:calc(env(safe-area-inset-top) + 12px) 16px 12px;border-bottom:1px solid var(--line);background:var(--bg);position:sticky;top:0;z-index:2}
 .mark{width:26px;height:26px;border-radius:50%;border:1.5px solid var(--acc);display:grid;place-items:center}
@@ -86,6 +89,10 @@ textarea:focus{border-color:var(--acc2)}
 <div class="viewer" id="viewer"><img alt="Your screen"></div>
 <script nonce="__NONCE__">
 "use strict";
+// No pinch or double-tap zoom (iOS ignores user-scalable=no for pinches).
+["gesturestart","gesturechange","gestureend"].forEach(function(t){document.addEventListener(t,function(e){e.preventDefault();},{passive:false});});
+document.addEventListener("touchmove",function(e){if(e.touches&&e.touches.length>1)e.preventDefault();},{passive:false});
+var lastTouch=0;document.addEventListener("touchend",function(e){var n=Date.now();if(n-lastTouch<300&&!(e.target&&e.target.closest&&e.target.closest("textarea,input")))e.preventDefault();lastTouch=n;},{passive:false});
 var te = new TextEncoder(), td = new TextDecoder();
 function b64(u8){var s="";for(var i=0;i<u8.length;i+=0x8000)s+=String.fromCharCode.apply(null,u8.subarray(i,i+0x8000));return btoa(s);}
 function unb64(s){return Uint8Array.from(atob(s),function(c){return c.charCodeAt(0);});}
