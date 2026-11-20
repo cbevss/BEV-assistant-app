@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import { X, LayoutGrid } from "lucide-react";
 import { useLayouts } from "@/lib/layouts";
+import { useCountdowns, describeCountdown, daysUntil, nextDate } from "@/lib/countdowns";
 import { useTimers, clockDown, clockTime, formatDuration } from "@/lib/timers";
 import { useWatches, describeWatch } from "@/lib/watches";
 import { Section, Field, IconButton, Button } from "./Form";
@@ -54,6 +55,27 @@ export function LayoutsSection() {
         ))
       )}
       {msg && <p className="px-4 py-2 text-xs text-ink-3">{msg}</p>}
+    </Section>
+  );
+}
+
+/** Countdowns to dates. */
+export function CountdownsSection() {
+  const { items, set } = useCountdowns();
+  useEffect(() => void useCountdowns.getState().load(), []);
+  const now = Date.now();
+  const sorted = [...items].sort((a, b) => nextDate(a, now) - nextDate(b, now));
+  if (!sorted.length) return null;
+  return (
+    <Section title="Countdowns" description="Ask BEV to count down to a date (“count down to my holiday on 14 March”), then “how long until my holiday?”.">
+      {sorted.map((c) => (
+        <Field key={c.name} label={c.name} hint={describeCountdown(c, now)}>
+          <div className="flex items-center gap-3">
+            <span className="tnum font-mono text-sm text-ink">{Math.max(0, daysUntil(c, now))}d</span>
+            <IconButton icon={X} size="sm" label={`Remove ${c.name}`} onClick={() => set(items.filter((x) => x !== c))} />
+          </div>
+        </Field>
+      ))}
     </Section>
   );
 }
