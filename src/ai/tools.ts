@@ -21,6 +21,7 @@ import { usePlaytime, describePlay } from "@/lib/playtime";
 import { useFocus, startFocus, stopFocus } from "@/lib/focus";
 import { recap } from "@/lib/recap";
 import { manageList } from "@/lib/lists";
+import { randInt, makePassword } from "@/lib/random";
 import { useScreenTime, describeScreenTime } from "@/lib/screentime";
 import { layoutApi, useLayouts, findWindows, orderMonitors, monitorOf, snapRect, moveToMonitor, POSITIONS, type Position } from "@/lib/layouts";
 import { useTimers, dueFrom, nextRepeat, nextClock, describeTimer, formatDuration, clockTime, matchTimers } from "@/lib/timers";
@@ -947,6 +948,55 @@ export const tools: Record<string, RegisteredTool> = {
     },
     sensitiveFor: (a) => a.action === "clear",
     run: async (a) => manageList(str(a.action, "action"), typeof a.list === "string" ? a.list : "to-do", Array.isArray(a.items) ? a.items.map(String) : []),
+  },
+
+  random: {
+    spec: {
+      name: "random",
+      description: "Truly random results (don't make these up yourself): flip a coin, roll dice (e.g. \"2d6\"), pick from options, or a number in a range.",
+      parameters: {
+        type: "object",
+        properties: { kind: { type: "string", enum: ["coin", "dice", "pick", "number"] }, dice: { type: "string" }, options: { type: "array", items: { type: "string" } }, min: { type: "number" }, max: { type: "number" } },
+        required: ["kind"],
+      },
+    },
+    run: async (a) => {
+      switch (a.kind) {
+        case "coin":
+          return randInt(2) ? "Heads." : "Tails.";
+        case "dice": {
+          const m = /^(\d{0,2})d(\d{1,3})$/i.exec(typeof a.dice === "string" ? a.dice.trim() : "1d6") ?? ["", "1", "6"];
+          const count = Math.min(Math.max(Number(m[1] || 1), 1), 20);
+          const sides = Math.min(Math.max(Number(m[2]), 2), 1000);
+          const rolls = Array.from({ length: count }, () => randInt(sides) + 1);
+          return count === 1 ? `Rolled a ${rolls[0]} (d${sides}).` : `Rolled ${rolls.join(", ")}: total ${rolls.reduce((x, y) => x + y, 0)}.`;
+        }
+        case "pick": {
+          const opts = Array.isArray(a.options) ? a.options.map(String).filter((o) => o.trim()) : [];
+          if (opts.length < 2) throw new Error("give at least two options");
+          return `Picked: ${opts[randInt(opts.length)]}.`;
+        }
+        default: {
+          const lo = Math.ceil(typeof a.min === "number" ? a.min : 1);
+          const hi = Math.floor(typeof a.max === "number" ? a.max : 100);
+          if (hi < lo) throw new Error("max must be at least min");
+          return `${lo + randInt(hi - lo + 1)}.`;
+        }
+      }
+    },
+  },
+
+  generate_password: {
+    spec: {
+      name: "generate_password",
+      description: "Make a strong random password and copy it to the clipboard for the user to paste. You never see the password itself; tell them it's on their clipboard.",
+      parameters: { type: "object", properties: { length: { type: "number" }, symbols: { type: "boolean" } }, required: [] },
+    },
+    run: async (a) => {
+      const pw = makePassword(typeof a.length === "number" ? a.length : 20, a.symbols !== false);
+      await invoke("clipboard_write", { text: pw });
+      return `Copied a ${pw.length}-character password to the clipboard${a.symbols === false ? " (letters and numbers only)" : ""}. Paste it where you need it, then save it in your password manager.`;
+    },
   },
 
   track_task: {
