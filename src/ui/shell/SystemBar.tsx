@@ -10,6 +10,7 @@ import { useSettings } from "@/state/settings";
 import { useBackground } from "@/ai/background";
 import { stateMeta } from "../design";
 import { gpuApi, useGaming, type GpuStats } from "@/lib/gaming";
+import { useTimers, clockDown, clockTime } from "@/lib/timers";
 
 function useStats() {
   const [s, setS] = useState<SystemStats | null>(null);
@@ -64,9 +65,14 @@ export function SystemBar() {
   const bg = useBackground((b) => b.tasks.filter((t) => t.status === "running").length);
   const s = useStats();
   const gpu = useGpu();
+  const now = useClock();
+  const timers = useTimers((t) => t.timers);
+  const stopwatch = useTimers((t) => t.stopwatch);
+  // Countdown timers first, then whatever is soonest.
+  const nextTimer = timers.find((t) => t.kind === "timer") ?? timers[0];
+  const sw = stopwatch.since ? stopwatch.before + now.getTime() - stopwatch.since : 0;
   const game = useGaming((g) => g.game);
   const autoQuiet = useSettings((x) => x.settings.autoGamingMode || x.settings.gamingQuietMode);
-  const now = useClock();
   const active = state !== "idle";
   const label = privacyMode ? "PRIVACY" : state === "idle" ? (micEnabled ? "STANDBY" : "MIC OFF") : state === "error" ? "FAULT" : stateMeta[state].label.toUpperCase();
 
@@ -93,6 +99,8 @@ export function SystemBar() {
         </>
       )}
       {game && <Cell k="GAMING" v={autoQuiet ? "QUIET" : "ON"} tone="accent" title={`${game.name}${autoQuiet ? ": BEV is keeping it short" : ""}`} />}
+      {nextTimer && <Cell k={nextTimer.kind === "timer" ? "TIMER" : nextTimer.kind === "alarm" ? "ALARM" : "REMIND"} v={nextTimer.kind === "timer" ? clockDown(nextTimer.due - now.getTime()) : clockTime(nextTimer.due)} tone="accent" title={nextTimer.label || undefined} />}
+      {sw > 0 && <Cell k="STOPWATCH" v={clockDown(sw)} tone="accent" />}
       {bg > 0 && <Cell k="TASKS" v={String(bg)} tone="accent" />}
       {replay && <Cell k="REPLAY" v="ON" tone="accent" title="Screen replay is keeping the last 15 minutes of the screen your mouse is on, in memory only" />}
       <span className="flex-1" />

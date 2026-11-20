@@ -9,6 +9,9 @@ import { needsReindex, indexDocuments } from "@/lib/documents";
 import { startGamingWatch, isQuiet } from "@/lib/gaming";
 import { useUsage } from "@/ai/usage";
 import { startPhoneControl } from "@/account/phone";
+import { configureAlerts } from "@/lib/alerts";
+import { startTimers } from "@/lib/timers";
+import { startWatches } from "@/lib/watches";
 import { applyAppearance } from "@/lib/appearance";
 import { Dashboard } from "./pages/Dashboard";
 import { Assistant } from "./pages/Assistant";
@@ -93,6 +96,10 @@ export function App() {
       void useUsage.getState().load();
       // Phone control (only runs when switched on and signed in).
       startPhoneControl();
+      // Timers, alarms and reminders (local), announced through BEV's voice.
+      configureAlerts({ announce: async (t) => (await getController()?.announce(t)) ?? false });
+      startTimers();
+      startWatches();
 
       // Catch up on documents changed since BEV last read them (in the background).
       {
