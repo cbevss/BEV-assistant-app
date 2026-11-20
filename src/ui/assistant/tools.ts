@@ -63,6 +63,7 @@ const LABELS: Record<string, string> = {
   speed_test: "Tested the internet speed",
   suggest_game: "Picked a game",
   get_weather: "Checked the weather",
+  sleep_timer: "Sleep timer",
   clean_temp_files: "Cleared temporary files",
   set_audio_output: "Switched sound output",
   set_microphone: "Changed the microphone",

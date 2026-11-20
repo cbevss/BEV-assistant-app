@@ -12,6 +12,7 @@ import { stateMeta } from "../design";
 import { gpuApi, useGaming, type GpuStats } from "@/lib/gaming";
 import { useTimers, clockDown, clockTime } from "@/lib/timers";
 import { useFocus } from "@/lib/focus";
+import { usePowerTimer } from "@/lib/powerTimer";
 
 function useStats() {
   const [s, setS] = useState<SystemStats | null>(null);
@@ -69,6 +70,7 @@ export function SystemBar() {
   const now = useClock();
   const timers = useTimers((t) => t.timers);
   const focus = useFocus((f) => f.session);
+  const power = usePowerTimer((p) => p.pending);
   const stopwatch = useTimers((t) => t.stopwatch);
   // Countdown timers first, then whatever is soonest.
   const nextTimer = timers.find((t) => t.kind === "timer") ?? timers[0];
@@ -101,6 +103,7 @@ export function SystemBar() {
         </>
       )}
       {game && <Cell k="GAMING" v={autoQuiet ? "QUIET" : "ON"} tone="accent" title={`${game.name}${autoQuiet ? ": BEV is keeping it short" : ""}`} />}
+      {power && <Cell k={power.action === "sleep" ? "SLEEP" : power.action === "shutdown" ? "SHUTDOWN" : "RESTART"} v={clockDown(power.at - now.getTime())} tone="warn" title="Sleep timer: say “cancel the sleep timer” to stop it" />}
       {focus && <Cell k={focus.phase === "focus" ? "FOCUS" : "BREAK"} v={clockDown(focus.endsAt - now.getTime())} tone="accent" title={`${focus.label ? `${focus.label} · ` : ""}round ${focus.round} of ${focus.rounds}`} />}
       {nextTimer && <Cell k={nextTimer.kind === "timer" ? "TIMER" : nextTimer.kind === "alarm" ? "ALARM" : "REMIND"} v={nextTimer.kind === "timer" ? clockDown(nextTimer.due - now.getTime()) : clockTime(nextTimer.due)} tone="accent" title={nextTimer.label || undefined} />}
       {sw > 0 && <Cell k="STOPWATCH" v={clockDown(sw)} tone="accent" />}

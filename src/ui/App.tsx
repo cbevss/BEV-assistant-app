@@ -16,6 +16,7 @@ import { startPlaytime } from "@/lib/playtime";
 import { startFocusClock } from "@/lib/focus";
 import { startRoutineHotkeys } from "@/routines/hotkeys";
 import { startScreenTime } from "@/lib/screentime";
+import { startPowerTimer } from "@/lib/powerTimer";
 import { applyAppearance } from "@/lib/appearance";
 import { Dashboard } from "./pages/Dashboard";
 import { Assistant } from "./pages/Assistant";
@@ -108,6 +109,7 @@ export function App() {
       startFocusClock();
       startRoutineHotkeys();
       startScreenTime();
+      startPowerTimer();
 
       // Catch up on documents changed since BEV last read them (in the background).
       {
