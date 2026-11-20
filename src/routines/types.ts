@@ -34,6 +34,8 @@ export interface Routine {
   schedule?: RoutineSchedule;
   enabled: boolean;
   builtIn?: boolean;
+  /** Global keyboard shortcut that runs it (Tauri accelerator), if set. */
+  hotkey?: string;
   lastRunAt?: number;
   /**
    * Clicks and types in apps (a learned task or a "watch me" recording).

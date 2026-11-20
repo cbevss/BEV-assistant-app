@@ -4,6 +4,8 @@ import { native, SystemStats, RunningApp } from "@/lib/native";
 import { BackgroundTasks } from "../components/BackgroundTasks";
 import { Noticed } from "../components/Noticed";
 import { RecentTasks } from "../components/RecentTasks";
+import { PlayTime } from "../components/PlayTime";
+import { gpuApi, type GpuStats } from "@/lib/gaming";
 import { PageHeader, Notice } from "../components/Form";
 import { HudLabel, Scale } from "../components/Hud";
 
@@ -11,6 +13,7 @@ export function Dashboard() {
   const [stats, setStats] = useState<SystemStats | null>(null);
   const [apps, setApps] = useState<RunningApp[]>([]);
   const [err, setErr] = useState<string | null>(null);
+  const [gpu, setGpu] = useState<GpuStats | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -28,13 +31,19 @@ export function Dashboard() {
     };
     tick();
     const id = setInterval(tick, 2000); // modest poll; no busy loop
+    const gpuTick = () => gpuApi.stats().then((g) => alive && setGpu(g)).catch(() => {});
+    gpuTick();
+    const gid = setInterval(gpuTick, 4000);
     return () => {
       alive = false;
       clearInterval(id);
+      clearInterval(gid);
     };
   }, []);
 
   const memGb = stats ? stats.mem_used_mb / 1024 : 0;
+  const gpuPct = gpu?.usage ?? stats?.gpu_usage ?? null;
+
   return (
     <div>
       <PageHeader title="Activity" subtitle={stats?.host ? `${stats.host}, live` : "Your PC and BEV's work, live."} />
@@ -47,7 +56,12 @@ export function Dashboard() {
       <div className="mb-8 grid grid-cols-4 divide-x divide-line-subtle rounded-lg border border-line-subtle bg-surface-1 max-[900px]:grid-cols-2 max-[900px]:divide-x-0">
         <Stat label="CPU" value={stats ? `${stats.cpu_usage.toFixed(0)}%` : "—"} detail={stats ? `${stats.cpu_cores} cores` : ""} pct={stats?.cpu_usage} />
         <Stat label="Memory" value={stats ? `${memGb.toFixed(1)} GB` : "—"} detail={stats ? `of ${(stats.mem_total_mb / 1024).toFixed(0)} GB` : ""} pct={stats?.mem_percent} />
-        <Stat label="Graphics" value={stats?.gpu_usage != null ? `${stats.gpu_usage.toFixed(0)}%` : "—"} detail={stats?.gpu_usage == null ? "No sensor available" : stats.gpu_name ?? ""} pct={stats?.gpu_usage ?? undefined} />
+        <Stat
+          label="Graphics"
+          value={gpuPct != null ? `${gpuPct.toFixed(0)}%` : "—"}
+          detail={gpuPct == null ? "No sensor available" : [gpu?.name ?? stats?.gpu_name, gpu?.temp_c != null ? `${Math.round(gpu.temp_c)}°C` : null].filter(Boolean).join(" · ")}
+          pct={gpuPct ?? undefined}
+        />
         <Stat label="Uptime" value={stats ? fmtUptime(stats.uptime_secs) : "—"} detail="Since last restart" />
       </div>
 
@@ -55,6 +69,7 @@ export function Dashboard() {
         <div>
           <BackgroundTasks />
           <RecentTasks />
+          <PlayTime />
         </div>
         <div>
           <Noticed />

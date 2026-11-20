@@ -9,7 +9,8 @@ import { PageHeader, Button, Toggle, IconButton, Card, EmptyState } from "../com
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { RoutineEditor } from "../components/RoutineEditor";
 import { TeachBev } from "../components/TeachBev";
-import { TimersSection, WatchesSection } from "../components/TimersSection";
+import { prettyAccelerator } from "@/lib/hotkeys";
+import { TimersSection, WatchesSection, LayoutsSection } from "../components/TimersSection";
 import { describeSteps } from "@/ai/learn";
 
 export function Automation() {
@@ -70,7 +71,7 @@ export function Automation() {
                       <span className="block truncate text-sm font-medium text-ink">{r.name}</span>
                       <span className="block truncate text-xs text-ink-3">
                         {r.triggers.length ? r.triggers.map((t) => `“${t}”`).join(", ") : "No phrase"}
-                        {r.handsOn ? " · uses your apps" : r.schedule ? ` · daily at ${r.schedule.time}` : ""} · {r.steps.length} step{r.steps.length === 1 ? "" : "s"}
+                        {r.handsOn ? " · uses your apps" : r.schedule ? ` · daily at ${r.schedule.time}` : ""}{r.hotkey ? ` · ${prettyAccelerator(r.hotkey)}` : ""} · {r.steps.length} step{r.steps.length === 1 ? "" : "s"}
                       </span>
                     </span>
                   </button>
@@ -119,6 +120,7 @@ export function Automation() {
       <div className="mt-8">
         <TimersSection />
         <WatchesSection />
+        <LayoutsSection />
         <TeachBev />
       </div>
 

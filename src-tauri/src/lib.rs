@@ -18,6 +18,7 @@ mod filemgr;
 mod docs;
 mod gpu;
 mod hardware;
+mod clipboard;
 mod journal;
 mod games;
 mod overlay;
@@ -163,8 +164,13 @@ pub fn run() {
             hardware::media_key,
             hardware::set_wallpaper,
             hardware::empty_recycle_bin,
+            clipboard::clipboard_read,
+            clipboard::clipboard_write,
             // Window management
             windows_mgmt::focus_window,
+            windows_mgmt::window_placements,
+            windows_mgmt::place_window,
+            windows_mgmt::monitor_work_areas,
             windows_mgmt::list_windows,
             // Overlay control
             overlay::show_overlay,

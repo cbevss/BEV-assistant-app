@@ -1,9 +1,10 @@
 /** Automations → Timers & reminders: what's running on this PC, with cancel. */
 import { useEffect, useState } from "react";
-import { X } from "lucide-react";
+import { X, LayoutGrid } from "lucide-react";
+import { useLayouts } from "@/lib/layouts";
 import { useTimers, clockDown, clockTime, formatDuration } from "@/lib/timers";
 import { useWatches, describeWatch } from "@/lib/watches";
-import { Section, Field, IconButton } from "./Form";
+import { Section, Field, IconButton, Button } from "./Form";
 
 /** “Tell me when…” watches BEV is keeping an eye on. */
 export function WatchesSection() {
@@ -25,6 +26,34 @@ export function WatchesSection() {
           );
         })
       )}
+    </Section>
+  );
+}
+
+/** Saved window arrangements, with Restore. */
+export function LayoutsSection() {
+  const { layouts, remove, restore } = useLayouts();
+  const [msg, setMsg] = useState<string | null>(null);
+  useEffect(() => void useLayouts.getState().load(), []);
+  return (
+    <Section title="Window layouts" description="Arrange your windows across your monitors, then say “save this as my streaming layout”. “Restore my streaming layout” puts every app back where it was.">
+      {layouts.length === 0 ? (
+        <Field label="No layouts saved" hint="BEV can also move single windows: “put Discord on my second monitor”, “snap Chrome to the left”.">
+          <span />
+        </Field>
+      ) : (
+        layouts.map((l) => (
+          <Field key={l.name} label={l.name} hint={`${l.windows.length} windows: ${[...new Set(l.windows.map((w) => w.process.replace(/\.exe$/i, "")))].join(", ")}`}>
+            <div className="flex items-center gap-1">
+              <Button size="sm" icon={LayoutGrid} onClick={async () => setMsg(await restore(l.name).catch((e) => String(e instanceof Error ? e.message : e)))}>
+                Restore
+              </Button>
+              <IconButton icon={X} size="sm" label={`Delete ${l.name}`} onClick={() => remove(l.name)} />
+            </div>
+          </Field>
+        ))
+      )}
+      {msg && <p className="px-4 py-2 text-xs text-ink-3">{msg}</p>}
     </Section>
   );
 }

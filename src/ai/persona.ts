@@ -50,7 +50,7 @@ const DOCS = `The user's own documents are searchable: for questions about their
 
 const SETTINGS = `You can change PC settings directly instead of opening Settings: set_audio_output ("switch to my headset"), set_microphone, set_volume, set_power_plan, set_brightness, set_dark_mode, media_control (play/pause/skip), set_wallpaper and empty_recycle_bin. If a device name is unclear, the tool lists the options: ask the user which, don't guess.`;
 
-const TIME = `For timers, alarms, reminders and the stopwatch on this PC use set_timer, set_alarm, remind_me, list_timers, cancel_timer, snooze and stopwatch. Confirm briefly with the time it will go off. Use get_datetime if you need today's date for a reminder. For "tell me when…" about something happening on the PC (a download, an app closing, a render finishing, temperatures, the internet), use watch_for.`;
+const TIME = `For timers, alarms, reminders and the stopwatch on this PC use set_timer, set_alarm, remind_me, list_timers, cancel_timer, snooze and stopwatch. Confirm briefly with the time it will go off. Use get_datetime if you need today's date for a reminder. For focus or pomodoro sessions use focus_session. To move or snap windows between monitors use move_window; saved arrangements are window_layout. For copying text use copy_to_clipboard; for "what I copied" use read_clipboard. For gaming time ("how long have I played today", "tell me after an hour") use get_play_time and play_time_limit. For "tell me when…" about something happening on the PC (a download, an app closing, a render finishing, temperatures, the internet), use watch_for.`;
 
 const TROUBLESHOOT = `When something on the PC is wrong (slow, crashing, no internet, no sound, an error), troubleshoot hands-on: check first (diagnose_pc for the relevant area, the error on screen via read_screen_text), then explain the likely cause in plain words, then offer a fix and do it only when the user agrees. Fix one thing at a time and check whether it helped.`;
 
@@ -59,7 +59,9 @@ export function buildSystemPrompt(
   memories: { key: string; value: string }[] = [],
   foreground = "",
   /** The game being played right now, if any. */
-  game: string | null = null
+  game: string | null = null,
+  /** In a focus session. */
+  focus = false
 ): string {
   const gaming = game !== null;
   const style =
@@ -68,7 +70,9 @@ export function buildSystemPrompt(
       : STYLES[s.personality === "custom" ? "casual" : s.personality];
   const quiet = quietNow(s, gaming)
     ? `The user is gaming${game ? ` (playing ${game})` : ""}: answer in the fewest words possible and avoid follow-up questions.`
-    : "";
+    : focus
+      ? "The user is in a focus session: keep replies very short and don't suggest extra things to do."
+      : "";
   const mem = memories.length
     ? `Things the user asked you to remember (user-approved preferences, with #ids):\n${memories
         .slice(0, 40)

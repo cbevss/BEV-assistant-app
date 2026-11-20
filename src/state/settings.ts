@@ -131,6 +131,8 @@ export interface Settings {
   autoGamingMode: boolean;
   /** Take requests from the phone page (needs a signed-in account). */
   phoneControl: boolean;
+  /** Tell the user once a day when gaming passes this many minutes (null: off). */
+  playLimitMinutes: number | null;
   /** Spending limits (USD, null = none) and custom prices per model (USD per million tokens). */
   spending: { dailyUsd: number | null; monthlyUsd: number | null; prices: Record<string, { input: number; output: number }> };
   proactiveMonitoring: boolean;
@@ -205,6 +207,7 @@ export const defaultSettings: Settings = {
   gamingQuietMode: false,
   autoGamingMode: true,
   phoneControl: false,
+  playLimitMinutes: null,
   spending: { dailyUsd: null, monthlyUsd: null, prices: {} },
   proactiveMonitoring: false,
   watch: { crashes: true, network: true, disk: true },

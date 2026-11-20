@@ -4,6 +4,9 @@ import {
   History,
   AppWindow,
   FolderOpen,
+  LayoutGrid,
+  ClipboardList,
+  Gamepad2,
   Timer,
   FileText, Brain, Calendar, Cpu, Globe, GitBranch, House, Keyboard, ListChecks, Mail, MessageCircle, MousePointerClick, Music, Puzzle, ScanEye, Eye, Settings2, Stethoscope, Volume2, Wrench, type LucideIcon,
 } from "lucide-react";
@@ -39,6 +42,16 @@ const LABELS: Record<string, string> = {
   list_watches: "Checked what BEV is watching",
   cancel_watch: "Stopped watching",
   watch_done: "It happened",
+  get_play_time: "Checked play time",
+  play_time_limit: "Set a play time nudge",
+  playtime: "Play time",
+  copy_to_clipboard: "Copied to the clipboard",
+  read_clipboard: "Read the clipboard",
+  focus_session: "Focus session",
+  focus: "Focus session",
+  my_day: "Looked back over your day",
+  move_window: "Moved a window",
+  window_layout: "Window layout",
   set_audio_output: "Switched sound output",
   set_microphone: "Changed the microphone",
   set_power_plan: "Changed the power plan",
@@ -127,8 +140,11 @@ export function toolIcon(name: string): LucideIcon {
   if (/^(set_volume|set_muted|set_audio_output|set_microphone|media_control)$/.test(name)) return Volume2;
   if (/^(set_power_plan|set_brightness|set_dark_mode|set_wallpaper|empty_recycle_bin)$/.test(name)) return Settings2;
   if (/^(get_system_stats|get_running_apps|get_gpu_stats)$/.test(name)) return Cpu;
+  if (/^(copy_to_clipboard|read_clipboard)$/.test(name)) return ClipboardList;
+  if (/^(move_window|window_layout)$/.test(name)) return LayoutGrid;
+  if (/^(get_play_time|play_time_limit|playtime)$/.test(name)) return Gamepad2;
   if (/^(watch_for|list_watches|cancel_watch|watch_done)$/.test(name)) return Eye;
-  if (/^(set_timer|set_alarm|remind_me|list_timers|cancel_timer|snooze|stopwatch|timer_done)$/.test(name)) return Timer;
+  if (/^(set_timer|set_alarm|remind_me|list_timers|cancel_timer|snooze|stopwatch|timer_done|focus_session|focus)$/.test(name)) return Timer;
   if (name === "diagnose_pc") return Stethoscope;
   if (/^(remember|recall_memories|forget_memory|save_note|search_notes|read_note|delete_note|search_conversations)$/.test(name)) return Brain;
   if (/(plan|task|routine)/.test(name)) return ListChecks;
