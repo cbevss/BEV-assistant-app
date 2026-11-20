@@ -56,6 +56,7 @@ export const BEV_SETTINGS: Record<string, Def> = {
   stream_replies: bool("streamReplies", "speaking while still writing"),
   learn_tasks: bool("learnTasks", "learning tasks"),
   reduced_motion: bool("reducedMotion", "reduced animations"),
+  home_town: { label: "home town for weather", describe: (s) => s.homePlace || "not set", apply: (_s, v) => ({ homePlace: v.trim().slice(0, 60) }) },
 };
 
 export const describeAll = (s: Settings) =>
