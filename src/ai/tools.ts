@@ -1202,7 +1202,7 @@ export const tools: Record<string, RegisteredTool> = {
     spec: {
       name: "open_website",
       description:
-        "Open a URL or web search in the default browser. For a search, pass the query and it opens a web search.",
+        "Open a page in the user's default browser (never ask which browser). Only when the user wants something opened, e.g. after you've answered a search and they say yes to opening it: pass that source's url. Don't use this to look things up: searching is web_search, done in the background. `search` opens a browser search and is only for when the user explicitly asks for a search in their browser.",
       parameters: {
         type: "object",
         properties: {
@@ -1527,7 +1527,7 @@ Object.assign(tools, {
     spec: {
       name: "web_search",
       description:
-        "Search the web for current information: news, prices, product comparisons, opening hours, how-tos, anything that may have changed. Returns titles, URLs and a short summary. Cite the sources you use.",
+        "Search the web in the background (nothing opens on the PC) for current information: news, prices, product comparisons, opening hours, how-tos, anything that may have changed. Use this whenever the user asks you to search or look something up. Returns titles, URLs and a short summary. Cite the sources you use.",
       parameters: { type: "object", properties: { query: { type: "string" } }, required: ["query"] },
     },
     untrustedOutput: true,
