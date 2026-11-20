@@ -159,9 +159,15 @@ export default {
       if (!(await authorised(req, env))) return new Response("unauthorised", { status: 401 });
       const base = url.origin;
       const lines: string[] = [];
-      const tg = new Telegram(env.TELEGRAM_BOT_TOKEN);
-      await tg.setWebhook(`${base}/tg`, await webhookSecret(env));
-      lines.push("Telegram: connected.");
+      const tg = new Telegram((env.TELEGRAM_BOT_TOKEN ?? "").trim());
+      try {
+        await tg.setWebhook(`${base}/tg`, await webhookSecret(env));
+        lines.push("Telegram: connected.");
+      } catch (e) {
+        // Telegram's reason (e.g. "Unauthorized" for a wrong token); never includes the token.
+        const why = e instanceof Error ? e.message : String(e);
+        lines.push(`Telegram: couldn't connect: ${why}${/unauthori[sz]ed|not found/i.test(why) ? ". The TELEGRAM_BOT_TOKEN secret looks wrong: copy the token from @BotFather again." : ""}`);
+      }
       const owner = await store.get("owner_chat");
       // The pairing code is never printed here: setup output can end up in
       // public CI logs. The desktop app shows it (it has the admin key).

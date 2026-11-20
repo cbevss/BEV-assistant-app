@@ -19,10 +19,14 @@ export async function pairingCode(env: Env): Promise<string> {
 }
 
 export class Telegram {
+  private token: string;
   constructor(
-    private token: string,
+    token: string,
     private fetcher: typeof fetch = fetch
-  ) {}
+  ) {
+    // A pasted token often carries a stray space or line break.
+    this.token = (token ?? "").trim();
+  }
 
   async call<T = unknown>(method: string, body: Record<string, unknown> | FormData): Promise<T> {
     const isForm = body instanceof FormData;

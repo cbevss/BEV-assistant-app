@@ -131,6 +131,7 @@ jobs:
           done
           [ -n "$out" ] || { echo "::error::BEV Cloud deployed but didn't answer setup. Re-run this workflow in a minute."; exit 1; }
           echo "$out"
+          if echo "$out" | grep -q "couldn't connect"; then echo "::error::$(echo "$out" | grep "couldn't connect")"; fail=1; fi
           {
             echo "### BEV Cloud is live"
             echo ""
@@ -142,3 +143,4 @@ jobs:
             echo ""
             echo "Next: BEV → Integrations → BEV Cloud. Paste the address and your admin key, then press Connect."
           } >> "$GITHUB_STEP_SUMMARY"
+          [ -z "${fail:-}" ]
