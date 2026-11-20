@@ -171,6 +171,7 @@ pub fn run() {
             windows_mgmt::window_placements,
             windows_mgmt::place_window,
             windows_mgmt::monitor_work_areas,
+            windows_mgmt::idle_seconds,
             windows_mgmt::list_windows,
             // Overlay control
             overlay::show_overlay,

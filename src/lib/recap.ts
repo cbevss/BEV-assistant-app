@@ -9,6 +9,7 @@ import { allSessions, totalsSince, startOfDay } from "./playtime";
 import { useUsage, totals as usageTotals, dayKey, formatUsd } from "@/ai/usage";
 import { useNotices } from "@/proactive/notices";
 import { useTimers, clockTime, formatDuration } from "./timers";
+import { useScreenTime, sumApps } from "./screentime";
 
 interface ConvSession {
   session: string;
@@ -36,6 +37,9 @@ export async function recap(day: "today" | "yesterday", now = Date.now()): Promi
 
   const games = totalsSince(allSessions(now).filter((s) => s.start < to).map((s) => ({ ...s, end: Math.min(s.end, to) })), from);
   if (games.length) parts.push(`Gaming: ${formatDuration(games.reduce((n, g) => n + g.ms, 0))} (${games.map((g) => `${g.game} ${formatDuration(g.ms)}`).join(", ")})`);
+
+  const apps = sumApps(useScreenTime.getState().days, [dayKey(from)]);
+  if (apps.length) parts.push(`Time in apps: ${apps.slice(0, 6).map(([a, s]) => `${a} ${formatDuration(s * 1000)}`).join(", ")}`);
 
   await useUsage.getState().load();
   const u = usageTotals(useUsage.getState().days, dayKey(from), dayKey(from));

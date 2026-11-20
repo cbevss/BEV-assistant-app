@@ -4,6 +4,7 @@ import {
   History,
   AppWindow,
   FolderOpen,
+  Clock,
   LayoutGrid,
   ClipboardList,
   Gamepad2,
@@ -52,6 +53,8 @@ const LABELS: Record<string, string> = {
   my_day: "Looked back over your day",
   move_window: "Moved a window",
   window_layout: "Window layout",
+  get_screen_time: "Checked screen time",
+  manage_list: "Updated a list",
   set_audio_output: "Switched sound output",
   set_microphone: "Changed the microphone",
   set_power_plan: "Changed the power plan",
@@ -143,6 +146,8 @@ export function toolIcon(name: string): LucideIcon {
   if (/^(copy_to_clipboard|read_clipboard)$/.test(name)) return ClipboardList;
   if (/^(move_window|window_layout)$/.test(name)) return LayoutGrid;
   if (/^(get_play_time|play_time_limit|playtime)$/.test(name)) return Gamepad2;
+  if (name === "get_screen_time") return Clock;
+  if (name === "manage_list") return ListChecks;
   if (/^(watch_for|list_watches|cancel_watch|watch_done)$/.test(name)) return Eye;
   if (/^(set_timer|set_alarm|remind_me|list_timers|cancel_timer|snooze|stopwatch|timer_done|focus_session|focus)$/.test(name)) return Timer;
   if (name === "diagnose_pc") return Stethoscope;

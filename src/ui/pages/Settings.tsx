@@ -108,6 +108,9 @@ export function Settings({ part = "general" }: { part?: "general" | "apps" | "ad
         <Field label="Go quiet when a game starts" hint="While a Steam game or any exclusive full-screen game is running, BEV keeps replies short, skips the spoken “Yeah?” and holds back pop-ups, then goes back to normal when you stop.">
           <Toggle label="Automatic gaming mode" checked={settings.autoGamingMode} onChange={(autoGamingMode) => update({ autoGamingMode })} />
         </Field>
+        <Field label="Screen time" hint="Counts how long each app is in front while you're at the PC, shown on the Activity page. Stays on this PC.">
+          <Toggle label="Screen time" checked={settings.screenTime} onChange={(screenTime) => update({ screenTime })} />
+        </Field>
         <Field label="Daily play time nudge" hint="BEV mentions it once a day when your gaming passes this. Play time is on the Activity page.">
           <Select
             ariaLabel="Daily play time nudge"

@@ -20,8 +20,10 @@ import { useWatches, WATCH_KINDS, describeWatch, type WatchKind } from "@/lib/wa
 import { usePlaytime, describePlay } from "@/lib/playtime";
 import { useFocus, startFocus, stopFocus } from "@/lib/focus";
 import { recap } from "@/lib/recap";
+import { manageList } from "@/lib/lists";
+import { useScreenTime, describeScreenTime } from "@/lib/screentime";
 import { layoutApi, useLayouts, findWindows, orderMonitors, monitorOf, snapRect, moveToMonitor, POSITIONS, type Position } from "@/lib/layouts";
-import { useTimers, dueFrom, nextRepeat, describeTimer, formatDuration, clockTime, matchTimers } from "@/lib/timers";
+import { useTimers, dueFrom, nextRepeat, nextClock, describeTimer, formatDuration, clockTime, matchTimers } from "@/lib/timers";
 import { winMics } from "@/voice/mic";
 import { filesApi, describeEntries, describeBatch, recordChange, undoLast, tidyPlan, describePlan, baseName, dirName, joinPath } from "@/lib/files";
 import * as brain from "@/brain/memory";
@@ -598,18 +600,22 @@ export const tools: Record<string, RegisteredTool> = {
     spec: {
       name: "remind_me",
       description:
-        "Remind the user about something on this PC, at a time (at: \"HH:MM\" or \"YYYY-MM-DDTHH:MM\") or after a delay (hours/minutes). BEV says it out loud and shows a notification while it's running. For reminders that must reach them when the PC is off, use track_task instead.",
+        "Remind the user about something on this PC, at a time (at: \"HH:MM\" or \"YYYY-MM-DDTHH:MM\") or after a delay (hours/minutes). Repeating: every_minutes (\"drink water every hour\" → every_minutes 60, first one after that long unless a time is given), optionally until \"HH:MM\". BEV says it out loud and shows a notification while it's running. For reminders that must reach them when the PC is off, use track_task instead.",
       parameters: {
         type: "object",
-        properties: { text: { type: "string" }, at: { type: "string" }, hours: { type: "number" }, minutes: { type: "number" } },
+        properties: { text: { type: "string" }, at: { type: "string" }, hours: { type: "number" }, minutes: { type: "number" }, every_minutes: { type: "number" }, until: { type: "string" } },
         required: ["text"],
       },
     },
     run: async (a) => {
       const text = str(a.text, "text");
-      const due = dueFrom(a, Date.now());
+      const now = Date.now();
+      const every = typeof a.every_minutes === "number" && a.every_minutes >= 5 ? Math.min(Math.round(a.every_minutes), 24 * 60) : undefined;
+      if (typeof a.every_minutes === "number" && !every) throw new Error("repeat at most every 5 minutes");
+      const due = dueFrom(a, now) ?? (every ? now + every * 60_000 : null);
       if (!due) throw new Error("say when: at a time (HH:MM) or in some minutes/hours");
-      const t = await useTimers.getState().add({ kind: "reminder", label: text, due });
+      const until = typeof a.until === "string" && a.until.trim() ? nextClock(a.until, now) ?? undefined : undefined;
+      const t = await useTimers.getState().add({ kind: "reminder", label: text, due, everyMin: every, until });
       return `Reminder set: ${describeTimer(t, Date.now())}.`;
     },
   },
@@ -912,6 +918,34 @@ export const tools: Record<string, RegisteredTool> = {
           return useLayouts.getState().layouts.length ? `Layouts: ${useLayouts.getState().layouts.map((l) => `${l.name} (${l.windows.length} windows)`).join("; ")}` : "No saved layouts.";
       }
     },
+  },
+
+  get_screen_time: {
+    spec: {
+      name: "get_screen_time",
+      description: "How long the user spent in each app (time they were actually at the PC): today, yesterday or the last 7 days, optionally for one app (\"how long have I been on Discord today?\").",
+      parameters: { type: "object", properties: { period: { type: "string", enum: ["today", "yesterday", "week"] }, app: { type: "string" } }, required: [] },
+    },
+    run: async (a) => {
+      await useScreenTime.getState().load();
+      const period = a.period === "yesterday" || a.period === "week" ? a.period : "today";
+      return describeScreenTime(period, typeof a.app === "string" && a.app.trim() ? a.app.trim() : undefined);
+    },
+  },
+
+  manage_list: {
+    spec: {
+      name: "manage_list",
+      description:
+        "The user's lists (shopping, to-do, packing, films to watch…): add items, remove items (done or bought), show a list, clear it, or see all lists. \"add eggs and milk to my shopping list\" → add, list \"shopping\", items [\"eggs\", \"milk\"].",
+      parameters: {
+        type: "object",
+        properties: { action: { type: "string", enum: ["add", "remove", "show", "clear", "lists"] }, list: { type: "string" }, items: { type: "array", items: { type: "string" } } },
+        required: ["action"],
+      },
+    },
+    sensitiveFor: (a) => a.action === "clear",
+    run: async (a) => manageList(str(a.action, "action"), typeof a.list === "string" ? a.list : "to-do", Array.isArray(a.items) ? a.items.map(String) : []),
   },
 
   track_task: {

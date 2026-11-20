@@ -24,6 +24,9 @@ export interface Timer {
   /** For timers: the length asked for, to say "your 10 minute timer". */
   durationMs?: number;
   repeat?: Repeat;
+  /** Repeats every this many minutes (reminders), until `until` if set. */
+  everyMin?: number;
+  until?: number;
 }
 
 export interface Stopwatch {
@@ -107,7 +110,8 @@ export function describeTimer(t: Timer, now: number): string {
   const label = t.label ? ` “${t.label}”` : "";
   if (t.kind === "timer") return `${t.durationMs ? `${formatDuration(t.durationMs)} timer` : "Timer"}${label}: ${left} left (id ${t.id})`;
   const when = new Date(t.due).toDateString() === new Date(now).toDateString() ? clockTime(t.due) : `${new Date(t.due).toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" })} ${clockTime(t.due)}`;
-  return `${t.kind === "alarm" ? "Alarm" : "Reminder"}${label} at ${when}${t.repeat ? ` (${t.repeat})` : ""}, in ${left} (id ${t.id})`;
+  const every = t.everyMin ? `, then every ${formatDuration(t.everyMin * 60_000)}${t.until ? ` until ${clockTime(t.until)}` : ""}` : "";
+  return `${t.kind === "alarm" ? "Alarm" : "Reminder"}${label} at ${when}${t.repeat ? ` (${t.repeat})` : ""}${every}, in ${left} (id ${t.id})`;
 }
 
 /** Pure: which timers match "the pasta timer", an id, or "all". */
@@ -205,7 +209,11 @@ export function dueNow(timers: Timer[], now: number): { fire: Timer[]; keep: Tim
       continue;
     }
     fireList.push(t);
-    if (t.repeat) {
+    if (t.everyMin) {
+      let due = t.due + t.everyMin * 60_000;
+      while (due <= now) due += t.everyMin * 60_000;
+      if (!t.until || due <= t.until) keep.push({ ...t, due });
+    } else if (t.repeat) {
       let due = nextRepeat(t.due, t.repeat);
       while (due <= now) due = nextRepeat(due, t.repeat);
       keep.push({ ...t, due });
