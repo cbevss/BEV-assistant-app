@@ -7,6 +7,7 @@ import { runRoutine } from "@/routines/engine";
 import { useSettings, toolAllowed, autoApproveOn } from "@/state/settings";
 import { AiImage, AiMessage, AiProvider, ProviderError, ToolCall } from "./types";
 import { getTool, toolSpecs, sensitiveReason, ToolOutput } from "./tools";
+import { addRecent, recentNote, type Channel } from "./recent";
 import { memoriesForPrompt, recordExchange, startNewSession } from "@/brain/memory";
 import { buildSystemPrompt } from "./persona";
 import { noticesForPrompt } from "@/proactive/notices";
@@ -38,6 +39,8 @@ export interface OrchestratorOptions {
    * input tools, and anything sensitive is confirmed on the phone (even with auto-approve on).
    */
   remote?: boolean;
+  /** How the user is talking to this conversation, for the shared recent log. */
+  channel?: "voice" | "chat";
 }
 
 /** Tools a background task may not use: nobody is watching the screen. */
@@ -162,6 +165,10 @@ export class Orchestrator {
   private turnNeededApproval = false;
   /** From the phone: the user OK'd mouse and keyboard use for the current request. */
   private remoteInputGranted = false;
+  /** Identifies this conversation in the shared last-two-minutes log. */
+  private readonly recentId = `c${Math.random().toString(36).slice(2, 9)}`;
+  /** When this conversation was last reset; its own earlier lines come back via the log. */
+  private resetAt = 0;
 
   constructor(private provider: AiProvider, private hooks: OrchestratorHooks, private opts: OrchestratorOptions = {}) {}
 
@@ -171,6 +178,7 @@ export class Orchestrator {
 
   reset() {
     this.history = [];
+    this.resetAt = Date.now();
     startNewSession();
   }
 
@@ -183,6 +191,20 @@ export class Orchestrator {
   }
 
   async send(userText: string, signal?: AbortSignal): Promise<string> {
+    if (this.opts.background) return this.sendInner(userText, signal);
+    const channel: Channel = this.opts.remote ? "phone" : this.opts.channel ?? "chat";
+    // Note what was said elsewhere *before* adding this request to the log.
+    this.recentContext = recentNote(this.recentId, this.resetAt);
+    addRecent({ at: Date.now(), who: "user", text: userText, source: this.recentId, channel });
+    const reply = await this.sendInner(userText, signal);
+    addRecent({ at: Date.now(), who: "bev", text: reply, source: this.recentId });
+    return reply;
+  }
+
+  /** The last-two-minutes note for the current request. */
+  private recentContext = "";
+
+  private async sendInner(userText: string, signal?: AbortSignal): Promise<string> {
     const learning = !this.opts.background && !this.opts.remote && useSettings.getState().settings.learnTasks !== false;
     // Done this exact thing before: repeat the steps directly.
     let replayNote = "";
@@ -269,7 +291,7 @@ export class Orchestrator {
     const hint = similar
       ? `You've done a similar task before ("${similar.example}"). These steps worked then; adapt them if this request differs:\n${describeSteps(similar.steps).map((s, i) => `${i + 1}. ${s}`).join("\n")}`
       : "";
-    const system = [await currentSystemPrompt(userText), note, hint, replayNote, remote ? REMOTE_NOTE : bg ? BACKGROUND_NOTE : ""].filter(Boolean).join("\n\n");
+    const system = [await currentSystemPrompt(userText), this.recentContext, note, hint, replayNote, remote ? REMOTE_NOTE : bg ? BACKGROUND_NOTE : ""].filter(Boolean).join("\n\n");
     // Only advertise tools the user hasn't revoked (and, in the background, that don't need a watcher).
     const specs = toolSpecs().filter((t) => toolAllowed(t.name) && !(noInput && BACKGROUND_FORBIDDEN.has(t.name)) && !(remote && t.name === "start_background_task"));
     // A planned task gets room to work; a simple request stays short.
