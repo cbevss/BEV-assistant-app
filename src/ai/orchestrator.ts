@@ -55,9 +55,21 @@ export const BACKGROUND_FORBIDDEN = new Set([
   "start_background_task",
 ]);
 
+/** Tools that move the PC's mouse or press its keys: from the phone, the first one in a request asks there first. */
+export const REMOTE_INPUT_TOOLS = new Set([
+  "use_control",
+  "use_named_control",
+  "click_on_screen",
+  "scroll_screen",
+  "hover_on_screen",
+  "drag_on_screen",
+  "press_keys",
+  "type_text",
+]);
+
 const BACKGROUND_NOTE = `You are running as a BACKGROUND TASK: the user isn't watching and can't answer questions. Write a plan with update_plan, work through it, make sensible choices and say which ones you made. Actions that need the user's approval will be refused: note them for the user instead. End with a short report of what you found or did, including anything left for the user.`;
 
-const REMOTE_NOTE = `The user is messaging you from their PHONE and isn't at the PC, so they can't see the screen or approve anything. Keep replies short and plain (no markdown tables). You can't look at or control the screen, mouse or keyboard from here (they can tap "Show my screen" on their phone to see it). Anything that needs approval (deleting, sending messages, closing apps and so on) is sent to their phone, where they confirm it twice; if they say no or don't answer, accept that and don't try another way round.`;
+const REMOTE_NOTE = `The user is messaging you from their PHONE and isn't at the PC. Keep replies short and plain (no markdown tables). You CAN do anything you could do at the PC, including looking at the screen and using the mouse and keyboard (clicking, typing, sending a message in Discord and so on): do the task rather than telling them to do it themselves. They can't see the PC, so say briefly what happened even if they normally prefer short confirmations. Look at the screen to check each step worked, because they can't see it (they can tap "Show my screen" on their phone). The first time you use the mouse or keyboard in a request, BEV asks on their phone first; if they say no, stop. Anything that needs approval (deleting, sending messages, closing apps and so on) is sent to their phone, where they confirm it twice; if they say no or don't answer, accept that and don't try another way round.`;
 
 let interruptedChecked = false;
 
@@ -148,6 +160,8 @@ export class Orchestrator {
   /** This turn's steps, for learning the task when it succeeds. */
   private turnSteps: TurnStep[] = [];
   private turnNeededApproval = false;
+  /** From the phone: the user OK'd mouse and keyboard use for the current request. */
+  private remoteInputGranted = false;
 
   constructor(private provider: AiProvider, private hooks: OrchestratorHooks, private opts: OrchestratorOptions = {}) {}
 
@@ -245,6 +259,10 @@ export class Orchestrator {
     const remote = !!this.opts.remote;
     // Screen and input tools need someone at the PC: off in the background and from the phone.
     const bg = !!this.opts.background || remote;
+    this.remoteInputGranted = false;
+    // Screen and input tools need someone watching: off in background tasks.
+    // From the phone they're on, behind a one-time phone approval per request.
+    const noInput = !!this.opts.background;
     const note = bg ? "" : await interruptedNote();
     // A similar task done before: its steps as a head start.
     const similar = bg || replayNote || useSettings.getState().settings.learnTasks === false ? null : await similarTask(userText).catch(() => null);
@@ -253,7 +271,7 @@ export class Orchestrator {
       : "";
     const system = [await currentSystemPrompt(userText), note, hint, replayNote, remote ? REMOTE_NOTE : bg ? BACKGROUND_NOTE : ""].filter(Boolean).join("\n\n");
     // Only advertise tools the user hasn't revoked (and, in the background, that don't need a watcher).
-    const specs = toolSpecs().filter((t) => toolAllowed(t.name) && !(bg && BACKGROUND_FORBIDDEN.has(t.name)));
+    const specs = toolSpecs().filter((t) => toolAllowed(t.name) && !(noInput && BACKGROUND_FORBIDDEN.has(t.name)) && !(remote && t.name === "start_background_task"));
     // A planned task gets room to work; a simple request stays short.
     // Hands-on tasks (forms, browsing) take many small steps; a plan earns a bigger budget.
     const limit = () => (this.plan ? 40 : 12);
@@ -296,7 +314,7 @@ export class Orchestrator {
 
       this.hooks.onState("executing");
       for (const call of res.toolCalls) {
-        if (bg && BACKGROUND_FORBIDDEN.has(call.name)) {
+        if ((noInput && BACKGROUND_FORBIDDEN.has(call.name)) || (remote && call.name === "start_background_task")) {
           this.history.push({ role: "tool", toolCallId: call.id, toolName: call.name, content: `${call.name} isn't available ${remote ? "from the phone" : "in background tasks"}.` });
           continue;
         }
@@ -398,6 +416,18 @@ export class Orchestrator {
     if (!tool) return { ok: false, text: `unknown tool: ${call.name}` };
     if (!toolAllowed(call.name)) {
       return { ok: false, text: `permission for ${call.name} is revoked in Security settings` };
+    }
+
+    // From the phone, nobody may be watching the PC: the first mouse/keyboard
+    // action of a request is confirmed on the phone, then allowed for the rest of it.
+    if (this.opts.remote && REMOTE_INPUT_TOOLS.has(call.name) && !this.remoteInputGranted) {
+      this.turnNeededApproval = true;
+      const ok = await this.hooks.requestApproval(
+        call,
+        "BEV wants to use your PC's mouse and keyboard to do what you asked. Anyone at the PC will see it moving. It stops when this request is done."
+      );
+      if (!ok) return { ok: false, text: "user declined mouse and keyboard use from the phone: stop and tell them" };
+      this.remoteInputGranted = true;
     }
 
     // Auto-approve: when the setting is on, the user's request is the approval,
