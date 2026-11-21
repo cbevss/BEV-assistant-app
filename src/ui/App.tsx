@@ -44,6 +44,7 @@ import { notify } from "@/lib/notify";
 import { bootstrapVoice, getController, maybeStartListening } from "@/voice/bootstrap";
 import { startMonitor } from "@/lib/monitor";
 import { check } from "@tauri-apps/plugin-updater";
+import { upgradeStartWithWindows } from "../lib/startup";
 
 interface PendingApproval {
   id: string;
@@ -149,6 +150,8 @@ export function App() {
       });
       // CPU/RAM alerts, crash/network/disk watchers and the daily briefing.
       startMonitor();
+      // Older installs start via the slower Run key: move them to the logon task.
+      setTimeout(() => void upgradeStartWithWindows(), 15_000);
       startWatchers();
       startBriefings({
         announce: async (t) => (await getController()?.announce(t)) ?? false,

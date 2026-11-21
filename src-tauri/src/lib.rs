@@ -26,6 +26,7 @@ mod overlay;
 mod replay;
 mod screen;
 mod secrets;
+mod startup;
 mod sysmon;
 mod system;
 mod tray;
@@ -93,8 +94,9 @@ pub fn run() {
                 log::info!("{cut_off} task(s) were interrupted last session");
             }
 
-            let mut sys = sysinfo::System::new_all();
-            sys.refresh_all();
+            // Empty to start: each stats command refreshes just what it reads,
+            // so start-up doesn't pay for a full scan of every process and disk.
+            let sys = sysinfo::System::new();
 
             app.manage(AppState {
                 sys: std::sync::Mutex::new(sys),
@@ -127,6 +129,8 @@ pub fn run() {
             audio::list_output_devices,
             audio::set_output_device,
             audio::list_app_audio,
+            startup::fast_start_enabled,
+            startup::set_fast_start,
             audio::set_app_audio,
             // Application control
             audio::list_input_devices,
