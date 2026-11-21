@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { enable as enableAutostart, disable as disableAutostart, isEnabled as autostartEnabled } from "@tauri-apps/plugin-autostart";
+import { setStartWithWindows, startWithWindowsEnabled } from "../../lib/startup";
 import { getVersion } from "@tauri-apps/api/app";
 import { useSettings, Personality } from "@/state/settings";
 import { PageHeader, Section, Field, Select, Slider, Toggle, TextArea, TextInput, Button } from "../components/Form";
@@ -16,18 +16,17 @@ export function Settings({ part = "general" }: { part?: "general" | "apps" | "ad
 
   useEffect(() => {
     getVersion().then(setVersion).catch(() => setVersion("?"));
-    autostartEnabled().then(setAutostart).catch(() => setAutostart(null));
+    startWithWindowsEnabled().then(setAutostart).catch(() => setAutostart(null));
   }, []);
 
   const toggleAutostart = async (on: boolean) => {
     try {
-      if (on) await enableAutostart();
-      else await disableAutostart();
+      await setStartWithWindows(on);
       setAutostart(on);
       update({ startWithWindows: on });
     } catch {
       /* permission or platform issue — leave the real state as read */
-      setAutostart(await autostartEnabled().catch(() => false));
+      setAutostart(await startWithWindowsEnabled().catch(() => false));
     }
   };
 
