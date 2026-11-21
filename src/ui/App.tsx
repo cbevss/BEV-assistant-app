@@ -121,9 +121,19 @@ export function App() {
       // BEV is often hidden in the tray when a voice request needs approval;
       // bring the window up so the prompt isn't waiting where nobody can see it.
       useAssistant.getState().setApprovalHandler(
-        (description) =>
+        (description, signal) =>
           new Promise<boolean>((resolve) => {
-            setApprovals((q) => [...q, { id: crypto.randomUUID(), description, resolve }]);
+            const id = crypto.randomUUID();
+            setApprovals((q) => [...q, { id, description, resolve }]);
+            // Answered another way (out loud): take the prompt down.
+            signal?.addEventListener(
+              "abort",
+              () => {
+                setApprovals((q) => q.filter((a) => a.id !== id));
+                resolve(false);
+              },
+              { once: true }
+            );
             const w = getCurrentWindow();
             w.unminimize()
               .then(() => w.show())

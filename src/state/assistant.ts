@@ -41,8 +41,9 @@ interface AssistantStore {
   setPlan: (p: PlanStep[] | null) => void;
 
   /** Set by the UI to route sensitive-tool approvals through a modal. */
-  requestApproval?: (description: string) => Promise<boolean>;
-  setApprovalHandler: (fn: (description: string) => Promise<boolean>) => void;
+  /** Shows the approval prompt; aborting `signal` withdraws it (it then resolves false). */
+  requestApproval?: (description: string, signal?: AbortSignal) => Promise<boolean>;
+  setApprovalHandler: (fn: (description: string, signal?: AbortSignal) => Promise<boolean>) => void;
 
   setState: (s: AssistantState, statusText?: string) => void;
   setAudioLevel: (v: number) => void;

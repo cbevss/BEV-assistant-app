@@ -24,7 +24,7 @@ import { WhisperRecognizer } from "./stt/whisper";
 import { effectiveMic } from "./mic";
 import { listenForBargeIn } from "./bargein";
 import { SpeechStream } from "./speechStream";
-import { asksQuestion, followUpPlan, type FollowUpPlan } from "./turns";
+import { asksQuestion, followUpPlan, parseYesNo, spokenApproval, type FollowUpPlan } from "./turns";
 import { learnedWindow, loadStats, recordFollowUp, type ReplyKind } from "./followUpLearn";
 import { isForBev } from "./addressee";
 
@@ -475,7 +475,8 @@ export class VoiceController {
           if (barge || !settings().bargeIn) return;
           barge = new AbortController();
           watching = listenForBargeIn({ deviceId: this.mic.deviceId || undefined, noiseSuppression: settings().noiseSuppression }, barge.signal).then((hit) => {
-            if (!hit) return;
+            // Answering an approval out loud isn't talking over BEV.
+            if (!hit || this.approving) return;
             interrupted = true;
             speech?.cancel();
             this.tts.cancel();
@@ -595,7 +596,50 @@ export class VoiceController {
 
   private async approve(description: string): Promise<boolean> {
     // Routed to the UI approval modal via a global resolver; see App.tsx.
-    return useAssistant.getState().requestApproval?.(description) ?? Promise.resolve(false);
+    const ask = useAssistant.getState().requestApproval;
+    if (!ask) return false;
+    if (!settings().voiceApprovals || !this.active) return ask(description);
+    // Approve by voice: ask out loud as well; whichever answer comes first wins.
+    const done = new AbortController();
+    const onScreen = ask(description, done.signal);
+    const spoken = this.askAloud(description, done.signal).then((v) => (v === null ? onScreen : v));
+    const answer = await Promise.race([onScreen, spoken]);
+    done.abort();
+    return answer;
+  }
+
+  /** While BEV waits for a spoken yes/no, talking isn't a barge-in. */
+  private approving = false;
+
+  /** Ask for approval out loud. true/false for a clear answer; null to leave it to the screen. */
+  private async askAloud(description: string, signal: AbortSignal): Promise<boolean | null> {
+    this.approving = true;
+    const say = (t: string) => this.tts.speak(t, { signal, onLevel: (l) => this.setAudio(l) }).catch(() => {});
+    try {
+      // Let the sentence BEV is in the middle of finish first.
+      const t0 = Date.now();
+      while (this.liveSpeech?.speakingNow && !signal.aborted && Date.now() - t0 < 20_000) await pause(150);
+      if (signal.aborted) return null;
+      this.setState("speaking");
+      await say(spokenApproval(description));
+      for (let tries = 0; tries < 2 && !signal.aborted; tries++) {
+        await pause(ECHO_GAP_MS);
+        this.setState("listening", "");
+        const heard = await this.listenWithTimeout(signal, 8000).catch(() => "");
+        const v = parseYesNo(heard);
+        if (v !== null) {
+          if (heard.trim()) useAssistant.getState().pushMessage({ role: "user", content: heard.trim() });
+          return v;
+        }
+        if (!heard.trim() || signal.aborted) return null;
+        this.setState("speaking");
+        await say("Sorry, was that a yes or a no?");
+      }
+      return null;
+    } finally {
+      this.approving = false;
+      if (!signal.aborted) this.setState("executing");
+    }
   }
 
   private setState(s: AssistantState, text?: string) {
