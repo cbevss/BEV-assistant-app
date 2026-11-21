@@ -24,7 +24,8 @@ import { WhisperRecognizer } from "./stt/whisper";
 import { effectiveMic } from "./mic";
 import { listenForBargeIn } from "./bargein";
 import { SpeechStream } from "./speechStream";
-import { followUpPlan, type FollowUpPlan } from "./turns";
+import { asksQuestion, followUpPlan, type FollowUpPlan } from "./turns";
+import { learnedWindow, loadStats, recordFollowUp, type ReplyKind } from "./followUpLearn";
 import { isForBev } from "./addressee";
 
 /** Below this Windows-recogniser confidence, a short request is checked with the user. */
@@ -67,6 +68,8 @@ export class VoiceController {
   private whisperKey = "";
   /** Windows online recognition couldn't reach its service this session: use Whisper instead. */
   private onlineSttDown = false;
+  /** How long after listening started the user began talking (null: they didn't). */
+  private heardAfterMs: number | null = null;
   /** The mic actually in use ("" = Windows default) and whether that's a fallback. */
   private mic = { deviceId: "", fallback: false, label: "" };
   private tts: SpeechSynthesizer = this.makeTts();
@@ -345,10 +348,13 @@ export class VoiceController {
     const onOuterAbort = () => ctl.abort();
     signal.addEventListener("abort", onOuterAbort, { once: true });
     let timer: ReturnType<typeof setTimeout> | undefined = setTimeout(() => ctl.abort(), windowMs);
+    const started = Date.now();
+    this.heardAfterMs = null;
     try {
       return await this.recognizer().listenOnce({
         signal: ctl.signal,
         onPartial: (t) => {
+          if (this.heardAfterMs === null && t.trim()) this.heardAfterMs = Date.now() - started;
           if (timer) {
             clearTimeout(timer);
             timer = undefined;
@@ -367,6 +373,8 @@ export class VoiceController {
     // null on the first turn (the user just woke BEV, so whatever they say is
     // for it); after a reply, how long to listen and whether to check it's for BEV.
     let followUp: FollowUpPlan | null = null;
+    // Which kind of reply the current follow-up window is after, when BEV is learning from it.
+    let learnKind: ReplyKind | null = null;
     let lastReply = "";
     try {
       while (this.active) {
@@ -393,6 +401,12 @@ export class VoiceController {
             await pause(2500);
           }
           break;
+        }
+
+        // Learn from whether (and how fast) they followed up.
+        if (learnKind) {
+          recordFollowUp(learnKind, utterance ? (this.heardAfterMs ?? 0) : null);
+          learnKind = null;
         }
 
         if (!utterance) break; // silence → end conversation
@@ -528,6 +542,19 @@ export class VoiceController {
         followUp = followUpPlan(reply, settings());
         // They talked over BEV: they're mid-conversation with it, so listen properly.
         if (interruptedTurn) followUp = { listen: true, windowMs: settings().conversationTimeoutMs, expectAnswer: true };
+        // Smart mode: shape the window by how this user really follows up.
+        else if (settings().followUpMode === "smart" && followUp.listen) {
+          learnKind = asksQuestion(reply) ? "question" : "statement";
+          const w = learnedWindow(loadStats(), learnKind, followUp.windowMs);
+          if (w > 0) followUp = { ...followUp, windowMs: w };
+          // They almost never follow up after this kind of reply: stop waiting,
+          // but now and then still listen briefly so BEV notices if that changes.
+          else if (Math.random() < 0.15) followUp = { ...followUp, windowMs: 2500 };
+          else {
+            followUp = { ...followUp, listen: false };
+            learnKind = null;
+          }
+        }
         if (!followUp.listen) break;
       }
     } catch (e) {
