@@ -96,7 +96,7 @@ export class VoiceController {
         useAssistant.getState().pushMessage({ role: "tool", content: result, toolName: name, ok }),
       requestApproval: (_call, description) => this.approve(description),
       onPlan: (plan) => useAssistant.getState().setPlan(plan),
-    });
+    }, { channel: "voice" });
   }
 
   /** Rebuild provider + voice from current settings (called at the start of each conversation). */
