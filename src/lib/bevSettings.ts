@@ -55,6 +55,7 @@ export const BEV_SETTINGS: Record<string, Def> = {
   proactive: bool("proactiveMonitoring", "BEV keeping an eye on the PC"),
   stream_replies: bool("streamReplies", "speaking while still writing"),
   learn_tasks: bool("learnTasks", "learning tasks"),
+  quiet_actions: bool("quietActions", "short confirmations instead of describing what I did"),
   reduced_motion: bool("reducedMotion", "reduced animations"),
   home_town: { label: "home town for weather", describe: (s) => s.homePlace || "not set", apply: (_s, v) => ({ homePlace: v.trim().slice(0, 60) }) },
 };

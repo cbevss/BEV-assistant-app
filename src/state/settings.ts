@@ -57,6 +57,8 @@ export interface Settings {
   streamReplies: boolean;
   /** Remember the steps of hands-on tasks and repeat them next time. */
   learnTasks: boolean;
+  /** After doing something, just confirm it: don't narrate the steps (the user can see the PC). */
+  quietActions: boolean;
   /** "Ask about your documents": folders BEV reads, and when it last read them. */
   documents: { folders: string[]; lastIndexed?: number };
   ollamaHost: string;
@@ -167,6 +169,7 @@ export const defaultSettings: Settings = {
   modelRouting: true,
   streamReplies: true,
   learnTasks: true,
+  quietActions: false,
   documents: { folders: [] },
   ollamaHost: "http://localhost:11434",
   personality: "casual",

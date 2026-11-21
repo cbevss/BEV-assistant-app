@@ -89,7 +89,10 @@ export function buildSystemPrompt(
   const diagOn = s.toolPermissions.diagnose_pc !== false;
   const replayOn = s.screenReplay && s.toolPermissions.look_back !== false;
   const address = s.addressAs.trim() ? `Address the user as "${s.addressAs.trim().slice(0, 40)}" now and then, naturally, like a good butler ("Done, ${s.addressAs.trim().slice(0, 40)}."), not in every sentence.` : "";
-  return [BASE, style, address, LENGTH[s.responseLength], quiet, MEMORY, s.toolPermissions.web_search !== false ? RESEARCH : "", screenOn ? SCREEN : "", replayOn ? REPLAY : "", controlOn
+  const quietActions = s.quietActions
+    ? `The user can see their PC while you work. After doing something they asked, don't describe what you did, what you clicked or how: confirm in a word or two ("Done.", "Playing.", "Open.") or just say the one thing they need. Only explain when something failed, you need them to choose, or they asked a question.`
+    : "";
+  return [BASE, style, address, LENGTH[s.responseLength], quiet, quietActions, MEMORY, s.toolPermissions.web_search !== false ? RESEARCH : "", screenOn ? SCREEN : "", replayOn ? REPLAY : "", controlOn
       ? CONTROL.replace("{SHOT}", screenOn ? " As a last resort, look_at_screen and click_on_screen with x/y." : "")
           .replace("{LOOK}", screenOn ? "look_at_screen" : "read_screen_text")
           .replace("{READERS}", screenOn ? "read_screen_text or look_at_screen" : "read_screen_text")
