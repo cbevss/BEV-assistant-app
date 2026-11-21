@@ -1,6 +1,9 @@
 import { useEffect, useState } from "react";
 import { setStartWithWindows, startWithWindowsEnabled } from "../../lib/startup";
 import { getVersion } from "@tauri-apps/api/app";
+import { appDataDir } from "@tauri-apps/api/path";
+import { FolderOpen } from "lucide-react";
+import { native } from "@/lib/native";
 import { useSettings, Personality } from "@/state/settings";
 import { PageHeader, Section, Field, Select, Slider, Toggle, TextArea, TextInput, Button } from "../components/Form";
 import { ConfirmDialog } from "../components/ConfirmDialog";
@@ -13,9 +16,12 @@ export function Settings({ part = "general" }: { part?: "general" | "apps" | "ad
   const [version, setVersion] = useState("");
   const [autostart, setAutostart] = useState<boolean | null>(null);
   const [confirmReset, setConfirmReset] = useState(false);
+  const [dataDir, setDataDir] = useState("");
+  const [browseError, setBrowseError] = useState("");
 
   useEffect(() => {
     getVersion().then(setVersion).catch(() => setVersion("?"));
+    appDataDir().then(setDataDir).catch(() => setDataDir(""));
     startWithWindowsEnabled().then(setAutostart).catch(() => setAutostart(null));
   }, []);
 
@@ -178,6 +184,23 @@ export function Settings({ part = "general" }: { part?: "general" | "apps" | "ad
       <Section title="Diagnostics">
         <Field label="Version">
           <span className="font-mono text-sm text-ink-2">BEV {version}</span>
+        </Field>
+        <Field label="BEV folder" hint={browseError || "Where BEV keeps its database, memories and logs on this PC."}>
+          <div className="flex min-w-0 items-center gap-2">
+            <span className="min-w-0 truncate font-mono text-xs text-ink-2" title={dataDir}>
+              {dataDir || "Unknown"}
+            </span>
+            <Button
+              onClick={() => {
+                setBrowseError("");
+                native.openPath(dataDir).catch((e) => setBrowseError(`Couldn't open the folder: ${String((e as { message?: string })?.message ?? e)}`));
+              }}
+              disabled={!dataDir}
+              icon={FolderOpen}
+            >
+              Browse
+            </Button>
+          </div>
         </Field>
         <Field label="Reset all settings" hint="Puts every setting back to its default. Memories, routines and API keys are kept.">
           <Button variant="danger" onClick={() => setConfirmReset(true)}>
