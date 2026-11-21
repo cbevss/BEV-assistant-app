@@ -299,7 +299,10 @@ mod imp {
 
     pub fn close(a: &AppRecord, force: bool, pids: &[u32]) -> CloseOutcome {
         let mut cache = HashMap::new();
-        let targets: Vec<Win> = windows().into_iter().filter(|w| window_belongs(a, image(w.pid, &mut cache).as_deref(), &w.title)).collect();
+        let targets: Vec<Win> = windows()
+            .into_iter()
+            .filter(|w| pids.contains(&w.pid) || window_belongs(a, image(w.pid, &mut cache).as_deref(), &w.title))
+            .collect();
 
         if force {
             let mut all: HashSet<u32> = pids.iter().copied().collect();

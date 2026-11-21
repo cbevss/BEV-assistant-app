@@ -94,6 +94,36 @@ describe("prompt-injection guard", () => {
     expect(tool?.content).toBe("user declined this action");
   });
 
+  it("with trust on, everyday actions don't ask just because BEV read the screen", async () => {
+    const { h, asked } = hooks(true);
+    const o = new Orchestrator(
+      scripted([
+        { toolCalls: [tc("1", "look_at_screen")] },
+        { toolCalls: [tc("2", "close_app", { name: "Rocket League", force: true })] },
+        { text: "Closed." },
+      ]),
+      h
+    );
+    await o.send("close rocket league, force it");
+    expect(asked).toHaveLength(0);
+  });
+
+  it("outside content from an earlier request doesn't make later ones ask", async () => {
+    const { h, asked } = hooks(true);
+    const o = new Orchestrator(
+      scripted([
+        { toolCalls: [tc("1", "look_at_screen")] },
+        { text: "It's a web page." },
+        { toolCalls: [tc("2", "power_action", { action: "restart" })] },
+        { text: "Restarting." },
+      ]),
+      h
+    );
+    await o.send("what's on my screen?");
+    await o.send("restart my PC");
+    expect(asked).toHaveLength(0);
+  });
+
   it("live checks ask before risky input even with auto-approve off… and say why", async () => {
     useSettings.setState((s) => ({ settings: { ...s.settings, autoApproveActions: false } }));
     const { h, asked } = hooks(false);
