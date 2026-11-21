@@ -2,7 +2,8 @@ import { useEffect, useState } from "react";
 import { useLocation } from "react-router-dom";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { exit } from "@tauri-apps/plugin-process";
-import { Copy, Minus, Search, Square, X } from "lucide-react";
+import { Copy, Download, Loader2, Minus, Search, Square, X } from "lucide-react";
+import { installUpdate, useUpdate } from "@/lib/update";
 import { useSettings } from "@/state/settings";
 import { pageTitle, SETTINGS_NAV } from "../shell/nav";
 import { Kbd } from "./Form";
@@ -15,6 +16,7 @@ export function TitleBar({ onSearch }: { onSearch: () => void }) {
   const w = getCurrentWindow();
   const { closeToTray, minimizeToTray } = useSettings((s) => s.settings);
   const loc = useLocation();
+  const upd = useUpdate();
   const [maxed, setMaxed] = useState(false);
   useEffect(() => {
     let un: (() => void) | undefined;
@@ -35,6 +37,28 @@ export function TitleBar({ onSearch }: { onSearch: () => void }) {
         <span className="font-medium text-ink">{pageTitle(loc.pathname)}</span>
         {section && <span className="text-ink-3"> / {section.label}</span>}
       </div>
+      {upd.phase !== "none" && (
+        <button
+          onClick={() => void installUpdate()}
+          disabled={upd.phase === "downloading" || upd.phase === "installing"}
+          className="no-drag mr-2 flex h-7 items-center gap-1.5 rounded border border-accent/40 bg-accent/10 px-2 text-xs text-accent transition-colors duration-fast hover:bg-accent/20 disabled:cursor-default"
+          title={
+            upd.phase === "error"
+              ? `Update failed: ${upd.error}. Click to try again.`
+              : upd.phase === "available"
+                ? `Update to BEV ${upd.version}`
+                : `Updating to BEV ${upd.version}`
+          }
+          aria-label={upd.phase === "available" ? `Update to BEV ${upd.version}` : "Updating BEV"}
+        >
+          {upd.phase === "downloading" || upd.phase === "installing" ? (
+            <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
+          ) : (
+            <Download className="h-3.5 w-3.5" aria-hidden />
+          )}
+          {upd.phase === "downloading" && upd.progress !== null && <span className="tabular-nums">{upd.progress}%</span>}
+        </button>
+      )}
       <button
         onClick={onSearch}
         className="no-drag mr-3 flex h-7 w-[240px] items-center gap-2 rounded border border-line-subtle bg-surface-1 px-2.5 text-xs text-ink-3 transition-colors duration-fast hover:border-line hover:text-ink-2 max-[900px]:w-auto"

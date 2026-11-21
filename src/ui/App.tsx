@@ -43,7 +43,7 @@ import { makeAssistantProvider } from "@/ai/factory";
 import { notify } from "@/lib/notify";
 import { bootstrapVoice, getController, maybeStartListening } from "@/voice/bootstrap";
 import { startMonitor } from "@/lib/monitor";
-import { check } from "@tauri-apps/plugin-updater";
+import { startUpdateChecks } from "../lib/update";
 import { upgradeStartWithWindows } from "../lib/startup";
 
 interface PendingApproval {
@@ -175,11 +175,9 @@ export function App() {
       // Wire the full voice vertical slice (shortcut + tray + controller).
       bootstrapVoice().catch(() => {});
 
-      // Background auto-update: silently stage any newer signed release so it
-      // applies on next launch. No-op when offline or no release is published.
-      check()
-        .then((u) => u?.downloadAndInstall())
-        .catch(() => {});
+      // Updates: look for a newer signed release now and every half hour; the
+      // title bar shows a download button when one is ready.
+      startUpdateChecks();
     })();
 
   }, []);
