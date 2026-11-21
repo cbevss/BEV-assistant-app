@@ -2,7 +2,7 @@
  * Phone control, PC side. While it's on (Settings → Account → Phone control)
  * and the account is ready, BEV:
  * - checks the accounts service for messages from the phone page and runs
- *   requests in a "remote" conversation (no screen or input tools);
+ *   requests in a "remote" conversation (mouse and keyboard need a phone OK first);
  * - sends anything that needs approval to the phone and waits (5 minutes)
  *   for the user to confirm it there, twice;
  * - mirrors what BEV does (requests, steps, replies, from the phone or at
