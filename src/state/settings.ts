@@ -59,6 +59,8 @@ export interface Settings {
   learnTasks: boolean;
   /** After doing something, just confirm it: don't narrate the steps (the user can see the PC). */
   quietActions: boolean;
+  /** In a voice conversation, BEV also asks for approval out loud and accepts "yes"/"no". */
+  voiceApprovals: boolean;
   /** "Ask about your documents": folders BEV reads, and when it last read them. */
   documents: { folders: string[]; lastIndexed?: number };
   ollamaHost: string;
@@ -170,6 +172,7 @@ export const defaultSettings: Settings = {
   streamReplies: true,
   learnTasks: true,
   quietActions: false,
+  voiceApprovals: false,
   documents: { folders: [] },
   ollamaHost: "http://localhost:11434",
   personality: "casual",

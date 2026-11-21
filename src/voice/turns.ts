@@ -83,3 +83,22 @@ export function addresseeHeuristic(utterance: string, expectAnswer: boolean): Ad
   if (TO_BEV_START.test(u)) return expectAnswer ? "bev" : "unsure";
   return expectAnswer ? "unsure" : "unsure";
 }
+
+/**
+ * A spoken answer to "should I go ahead?". Anything with a no in it counts as
+ * no (safer when it's mixed, like "yeah, no"); null when it's neither.
+ */
+export function parseYesNo(heard: string): boolean | null {
+  const u = heard.toLowerCase().replace(/[^a-z' ]/g, " ").replace(/\s+/g, " ").trim();
+  if (!u) return null;
+  if (/\b(no|nope|nah|don't|dont|do not|stop|cancel|wait|hold on|leave it|never mind|nevermind|deny|not)\b/.test(u)) return false;
+  if (/\b(yes|yeah|yep|yup|ya|sure|ok|okay|go ahead|go for it|do it|allow|approve|confirm|correct|affirmative|please)\b/.test(u)) return true;
+  return null;
+}
+
+/** The approval prompt's text, shortened to one spoken question. */
+export function spokenApproval(description: string): string {
+  const first = description.split("(")[0].trim().split(/(?<=[.!?])\s+/)[0] ?? description;
+  const s = first.replace(/^BEV wants to\s+/i, "I need your OK to ").replace(/\.$/, "");
+  return `${s}. Should I go ahead?`;
+}

@@ -46,3 +46,22 @@ describe("who was that for", () => {
     expect(addresseeHeuristic("that was mad", false)).toBe("unsure");
   });
 });
+
+import { parseYesNo, spokenApproval } from "./turns";
+describe("voice approvals", () => {
+  it("reads yes and no", () => {
+    expect(parseYesNo("yes")).toBe(true);
+    expect(parseYesNo("Yeah go ahead.")).toBe(true);
+    expect(parseYesNo("do it")).toBe(true);
+    expect(parseYesNo("no")).toBe(false);
+    expect(parseYesNo("don't")).toBe(false);
+    expect(parseYesNo("yeah no, leave it")).toBe(false);
+    expect(parseYesNo("what was that")).toBeNull();
+    expect(parseYesNo("")).toBeNull();
+  });
+  it("turns the prompt into one question", () => {
+    expect(spokenApproval("BEV wants to force-close RocketLeague.exe. Anything unsaved in it will be lost. (BEV read content…)")).toBe(
+      "I need your OK to force-close RocketLeague.exe. Should I go ahead?"
+    );
+  });
+});
