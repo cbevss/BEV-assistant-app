@@ -64,7 +64,9 @@ pub async fn apps_close(
     blocking(move || {
         e.close(&query, force, |exe| {
             let exe = exe.to_lowercase();
-            procs.iter().filter(|(n, _)| *n == exe).map(|(_, p)| *p).collect()
+            let squashed = engine::squash_name(&exe);
+            // Exact image name, or the same name ignoring spaces and punctuation.
+            procs.iter().filter(|(n, _)| *n == exe || engine::squash_name(n) == squashed).map(|(_, p)| *p).collect()
         })
     })
     .await

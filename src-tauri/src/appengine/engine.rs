@@ -198,7 +198,16 @@ impl AppEngine {
         Ok(match self.resolve_fresh(query.trim())? {
             Resolution::Found { app, .. } => {
                 let name = app.name.clone();
-                let pids = app.exe_name.as_deref().map(&pids_for_exe).unwrap_or_default();
+                let mut pids = app.exe_name.as_deref().map(&pids_for_exe).unwrap_or_default();
+                // Games and launcher shortcuts often don't record their exe
+                // (or record the launcher's): fall back to a process named like
+                // the app, so "Rocket League" finds RocketLeague.exe.
+                if pids.is_empty() {
+                    let squashed = squash_name(&app.name);
+                    if squashed.len() >= 4 {
+                        pids = pids_for_exe(&format!("{squashed}.exe"));
+                    }
+                }
                 match (self.closer)(&app, force, &pids) {
                     CloseOutcome::Closed { .. } => CloseResult::Closed { app: name },
                     CloseOutcome::NotRunning => CloseResult::NotRunning { app: name },
@@ -210,5 +219,21 @@ impl AppEngine {
             Resolution::Ambiguous { options } => CloseResult::Ambiguous { options: options.into_iter().map(|c| c.app.name).collect() },
             Resolution::NotFound { .. } => CloseResult::NotInstalled { query: query.trim().to_string() },
         })
+    }
+}
+
+/// Lower-case letters and digits only: "Rocket League" → "rocketleague".
+pub fn squash_name(s: &str) -> String {
+    s.chars().filter(|c| c.is_alphanumeric()).flat_map(|c| c.to_lowercase()).collect()
+}
+
+#[cfg(test)]
+mod squash_tests {
+    use super::squash_name;
+    #[test]
+    fn squashes() {
+        assert_eq!(squash_name("Rocket League"), "rocketleague");
+        assert_eq!(squash_name("RocketLeague.exe"), "rocketleagueexe");
+        assert_eq!(squash_name("Counter-Strike 2"), "counterstrike2");
     }
 }

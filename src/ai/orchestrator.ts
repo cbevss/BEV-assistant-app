@@ -145,9 +145,34 @@ export function fenceUntrusted(tool: string, text: string): string {
 }
 
 /** Is outside content (screen, web, other apps) in the conversation? */
-export function tainted(history: readonly AiMessage[]): boolean {
-  return history.some((m) => m.role === "tool" && m.untrusted);
+export function tainted(history: readonly AiMessage[], from = 0): boolean {
+  return history.slice(from).some((m) => m.role === "tool" && m.untrusted);
 }
+
+/**
+ * Actions where text BEV read from the screen, the web or a file could do real
+ * harm if it were steering BEV: deleting or moving things, running files, and
+ * typing or clicking into apps (sending messages, buying things), and
+ * restarting or shutting down the PC. With "Trust
+ * my requests" on, only these still ask once outside content is in play;
+ * everyday actions like closing an app or a shutdown timer don't.
+ */
+export const OUTSIDE_RISK = new Set([
+  "delete_files",
+  "move_files",
+  "tidy_folder",
+  "open_path",
+  "empty_recycle_bin",
+  "power_action",
+  "forget_memory",
+  "delete_note",
+  "use_control",
+  "use_named_control",
+  "click_on_screen",
+  "drag_on_screen",
+  "press_keys",
+  "type_text",
+]);
 
 /** Drop history beyond this many messages to bound token use / latency. */
 const MAX_HISTORY = 30;
@@ -165,6 +190,8 @@ export class Orchestrator {
   private turnNeededApproval = false;
   /** From the phone: the user OK'd mouse and keyboard use for the current request. */
   private remoteInputGranted = false;
+  /** Where the current request starts in the history. */
+  private turnStartIdx = 0;
   /** Identifies this conversation in the shared last-two-minutes log. */
   private readonly recentId = `c${Math.random().toString(36).slice(2, 9)}`;
   /** When this conversation was last reset; its own earlier lines come back via the log. */
@@ -273,6 +300,7 @@ export class Orchestrator {
     this.history.push({ role: "user", content: userText });
     this.trimHistory();
     const turnStart = Math.max(0, this.history.length - 1);
+    this.turnStartIdx = turnStart;
     this.plan = null;
     this.hooks.onPlan?.([]);
     let finalText = "";
@@ -459,7 +487,9 @@ export class Orchestrator {
     if (reason !== null) {
       // Anything that needed (or could have needed) a yes isn't replayed silently.
       this.turnNeededApproval = true;
-      const fromOutside = tainted(this.history);
+      // Only content read during this request counts, and with "Trust my
+      // requests" on only for actions outside content could misuse.
+      const fromOutside = tainted(this.history, this.turnStartIdx) && (!autoApproveOn() || OUTSIDE_RISK.has(call.name));
       // From the phone, every sensitive action is confirmed there (twice), even with auto-approve on.
       if (this.opts.remote || !autoApproveOn() || fromOutside) {
         const desc = describeCall(call) + (reason ? ` This ${reason}.` : "") + (fromOutside ? " (BEV read content from your screen or the web in this conversation; make sure this is what you asked for.)" : "");
