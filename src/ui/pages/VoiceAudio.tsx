@@ -127,6 +127,9 @@ export function VoiceAudio() {
             ]}
           />
         </Field>
+        <Field label="What BEV says after doing something" hint="Short: just “Done.” when it finishes something you asked, because you can see what it did. It still explains if something goes wrong or it needs you to choose. From your phone it always says what happened.">
+          <Toggle label="Short confirmations" checked={!!settings.quietActions} onChange={(quietActions) => update({ quietActions })} />
+        </Field>
         <Field label="Follow-up window" hint="The longest BEV waits for you to start talking after it replies.">
           <Slider
             ariaLabel="Conversation timeout"
