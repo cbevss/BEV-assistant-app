@@ -6,6 +6,7 @@ import { setPrivacy } from "@/voice/bootstrap";
 import { allTools, getTool, isSensitive } from "@/ai/tools";
 import { PageHeader, Section, Field, Toggle, Button, StatusPill } from "../components/Form";
 import { ConfirmDialog } from "../components/ConfirmDialog";
+import { CardSettings } from "../components/CardSettings";
 
 export function Security() {
   const { settings, update } = useSettings();
@@ -72,6 +73,8 @@ export function Security() {
           />
         </div>
       </Section>
+
+      <CardSettings />
 
       <Section title="Tool permissions">
         <p className="text-xs text-ink-3">

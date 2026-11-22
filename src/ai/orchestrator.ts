@@ -45,6 +45,7 @@ export interface OrchestratorOptions {
 
 /** Tools a background task may not use: nobody is watching the screen. */
 export const BACKGROUND_FORBIDDEN = new Set([
+  "fill_card",
   "look_at_screen",
   "look_back",
   "use_control",
@@ -321,7 +322,7 @@ export class Orchestrator {
       : "";
     const system = [await currentSystemPrompt(userText), this.recentContext, note, hint, replayNote, remote ? REMOTE_NOTE : bg ? BACKGROUND_NOTE : ""].filter(Boolean).join("\n\n");
     // Only advertise tools the user hasn't revoked (and, in the background, that don't need a watcher).
-    const specs = toolSpecs().filter((t) => toolAllowed(t.name) && !(noInput && BACKGROUND_FORBIDDEN.has(t.name)) && !(remote && t.name === "start_background_task"));
+    const specs = toolSpecs().filter((t) => toolAllowed(t.name) && !(noInput && BACKGROUND_FORBIDDEN.has(t.name)) && !(remote && (t.name === "start_background_task" || t.name === "fill_card")));
     // A planned task gets room to work; a simple request stays short.
     // Hands-on tasks (forms, browsing) take many small steps; a plan earns a bigger budget.
     const limit = () => (this.plan ? 40 : 12);
@@ -364,7 +365,7 @@ export class Orchestrator {
 
       this.hooks.onState("executing");
       for (const call of res.toolCalls) {
-        if ((noInput && BACKGROUND_FORBIDDEN.has(call.name)) || (remote && call.name === "start_background_task")) {
+        if ((noInput && BACKGROUND_FORBIDDEN.has(call.name)) || (remote && (call.name === "start_background_task" || call.name === "fill_card"))) {
           this.history.push({ role: "tool", toolCallId: call.id, toolName: call.name, content: `${call.name} isn't available ${remote ? "from the phone" : "in background tasks"}.` });
           continue;
         }

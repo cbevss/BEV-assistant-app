@@ -43,6 +43,7 @@ import { makeAssistantProvider } from "@/ai/factory";
 import { notify } from "@/lib/notify";
 import { bootstrapVoice, getController, maybeStartListening } from "@/voice/bootstrap";
 import { startMonitor } from "@/lib/monitor";
+import { CardUnlock } from "./components/CardUnlock";
 import { startUpdateChecks } from "../lib/update";
 import { startAppScanning } from "../lib/appScan";
 import { upgradeStartWithWindows } from "../lib/startup";
@@ -241,6 +242,7 @@ export function App() {
       </main>
 
       <CommandPalette open={palette} onClose={() => setPalette(false)} />
+      <CardUnlock />
       {pendingApproval && (
         <ApprovalModal
           key={pendingApproval.id}
