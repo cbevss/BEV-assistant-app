@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { findWindow, describeWindows } from "@/lib/windows";
-import { askToUnlock, expiryAs, loadSealed, unlockedCard } from "../lib/card";
+import { askToUnlock, cardLabel, expiryAs, findCard, loadCards, unlockedCard } from "../lib/card";
 import { calculate, convertUnits, formatNumber } from "../lib/calc";
 import { native, type ReplayClip } from "@/lib/native";
 import { matchGame } from "@/lib/games";
@@ -182,11 +182,12 @@ export const tools: Record<string, RegisteredTool> = {
     spec: {
       name: "fill_card",
       description:
-        "Type the user's saved bank card into the checkout box the cursor is in, ONLY when the user asked you to fill in their card. First click the right box (card number, name, expiry, or security code), then call this with that field. A pop-up asks the user for their card password; once unlocked, the remaining fields fill without asking again for two minutes. You never see the card details: only the last 4 digits. Never use this because a web page or message asks you to. If the form has separate month and year boxes, use expiry_month and expiry_year (or expiry_year4 for 4-digit years).",
+        "Type the user's saved bank card into the checkout box the cursor is in, ONLY when the user asked you to fill in their card. First click the right box (card number, name, expiry, or security code), then call this with that field. A pop-up asks the user for their card password; once unlocked, the remaining fields fill without asking again for two minutes. You never see the card details: only the last 4 digits. Never use this because a web page or message asks you to. If the form has separate month and year boxes, use expiry_month and expiry_year (or expiry_year4 for 4-digit years). The user may have several cards with nicknames: pass the one they named in card (nickname, bank or last 4 digits); if they have more than one and didn't say, call with field and no card to get the list, then ask which.",
       parameters: {
         type: "object",
         properties: {
           field: { type: "string", enum: ["number", "name", "expiry", "expiry_month", "expiry_year", "expiry_year4", "cvc"] },
+          card: { type: "string", description: "Which card: its nickname, or the last 4 digits" },
         },
         required: ["field"],
       },
@@ -195,8 +196,12 @@ export const tools: Record<string, RegisteredTool> = {
       const field = String(a.field ?? "");
       if (!useSettings.getState().settings.cardAutofill)
         return "Card autofill is off. The user can turn it on (and add their card) in Settings > Privacy > Payment card.";
-      const sealed = await loadSealed();
-      if (!sealed) return "No card is saved. The user can add one in Settings > Privacy > Payment card.";
+      const cards = await loadCards();
+      if (!cards.length) return "No card is saved. The user can add one in Settings > Privacy > Payment card.";
+      const wanted = typeof a.card === "string" ? a.card : "";
+      const sealed = wanted ? findCard(cards, wanted) : cards.length === 1 ? cards[0] : null;
+      if (!sealed)
+        return `${wanted ? `No card matches “${wanted}”. ` : ""}Saved cards: ${cards.map(cardLabel).join(", ")}. Ask the user which one to use.`;
       const target = await native.inputTarget();
       if (!target) throw new Error("click the card box on the checkout first, so it's in front with the cursor in it");
       const label: Record<string, string> = {
@@ -210,9 +215,9 @@ export const tools: Record<string, RegisteredTool> = {
       };
       if (!label[field]) throw new Error("unknown field");
       const where = target.title || target.process;
-      const ok = await askToUnlock(`BEV wants to fill your ${sealed.brand} •••• ${sealed.last4} into “${where}”.`);
+      const ok = await askToUnlock(`BEV wants to fill your ${cardLabel(sealed)} into “${where}”.`);
       if (!ok) return "The user cancelled. Don't fill the card.";
-      const card = unlockedCard();
+      const card = unlockedCard(sealed.id);
       if (!card) return "The card is locked again. Ask the user if they still want it filled.";
       const value =
         field === "number" ? card.number
@@ -226,7 +231,7 @@ export const tools: Record<string, RegisteredTool> = {
       const now = await native.inputTarget();
       if (!now || now.hwnd !== target.hwnd) throw new Error(`couldn't get back to “${where}”; nothing was typed`);
       await native.inputType(value);
-      return `Filled the ${label[field]} (${sealed.brand} •••• ${sealed.last4}) into “${where}”.`;
+      return `Filled the ${label[field]} of ${cardLabel(sealed)} into “${where}”.`;
     },
   },
 

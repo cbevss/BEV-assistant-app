@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 vi.mock("@tauri-apps/plugin-store", () => ({ load: vi.fn() }));
-import { cardBrand, expiryAs, luhnOk, openCard, sealCard, validateCard } from "./card";
+import { cardBrand, expiryAs, findCard, luhnOk, openCard, sealCard, validateCard, type SavedCard } from "./card";
 
 const card = { number: "4242 4242 4242 4242", name: "Callum", expiry: "08/29", cvc: "123" };
 
@@ -32,5 +32,18 @@ describe("card vault", () => {
     expect(expiryAs("08/29", "month")).toBe("08");
     expect(expiryAs("08/29", "year4")).toBe("2029");
     expect(expiryAs("08/29", "full")).toBe("08/29");
+  });
+});
+
+describe("picking a card", () => {
+  const mk = (nickname: string, brand: string, last4: string) => ({ id: nickname, nickname, brand, last4 }) as SavedCard;
+  const cards = [mk("Monzo", "Mastercard", "4444"), mk("Work card", "Visa", "4242"), mk("Amex", "Amex", "0005")];
+  it("finds by nickname, part of it, or last 4 digits", () => {
+    expect(findCard(cards, "monzo")?.id).toBe("Monzo");
+    expect(findCard(cards, "my work card")?.id).toBe("Work card");
+    expect(findCard(cards, "4242")?.id).toBe("Work card");
+    expect(findCard(cards, "ending 0005")?.id).toBe("Amex");
+    expect(findCard(cards, "visa")?.id).toBe("Work card");
+    expect(findCard(cards, "barclays")).toBeNull();
   });
 });
