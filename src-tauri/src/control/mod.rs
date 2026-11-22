@@ -46,6 +46,8 @@ pub async fn screen_ocr(target: Option<String>) -> BevResult<ocr::OcrResult> {
 pub struct InputTarget {
     pub title: String,
     pub process: String,
+    /// The window's handle, so BEV can bring it back to the front.
+    pub hwnd: isize,
 }
 
 /// Checks before any synthetic keystroke: a window to receive it, not BEV
@@ -75,7 +77,7 @@ pub async fn input_keys(keys: String) -> BevResult<InputTarget> {
         }
         let fg = keyboard_target()?;
         input::press(&combos)?;
-        Ok(InputTarget { title: fg.title, process: fg.process })
+        Ok(InputTarget { title: fg.title, process: fg.process, hwnd: fg.hwnd })
     })
     .await
 }
@@ -94,7 +96,7 @@ pub async fn input_type(text: String) -> BevResult<InputTarget> {
             return Err("The cursor is in a password box. BEV never types passwords: please enter it yourself.".into());
         }
         input::type_text(&text)?;
-        Ok(InputTarget { title: fg.title, process: fg.process })
+        Ok(InputTarget { title: fg.title, process: fg.process, hwnd: fg.hwnd })
     })
     .await
 }
@@ -234,5 +236,5 @@ pub async fn point_info(x: f64, y: f64, space: Option<String>) -> BevResult<Opti
 /// The window keys would go to (for the app's confirmation checks).
 #[tauri::command]
 pub fn input_target() -> Option<InputTarget> {
-    win::foreground().filter(|w| !w.is_bev()).map(|w| InputTarget { title: w.title, process: w.process })
+    win::foreground().filter(|w| !w.is_bev()).map(|w| InputTarget { title: w.title, process: w.process, hwnd: w.hwnd })
 }

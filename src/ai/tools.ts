@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { findWindow, describeWindows } from "@/lib/windows";
+import { askToUnlock, expiryAs, loadSealed, unlockedCard } from "../lib/card";
 import { calculate, convertUnits, formatNumber } from "../lib/calc";
 import { native, type ReplayClip } from "@/lib/native";
 import { matchGame } from "@/lib/games";
@@ -174,6 +175,58 @@ export const tools: Record<string, RegisteredTool> = {
       const muted = bool(a.muted, "muted");
       await native.setMuted(muted);
       return muted ? "muted" : "unmuted";
+    },
+  },
+
+  fill_card: {
+    spec: {
+      name: "fill_card",
+      description:
+        "Type the user's saved bank card into the checkout box the cursor is in, ONLY when the user asked you to fill in their card. First click the right box (card number, name, expiry, or security code), then call this with that field. A pop-up asks the user for their card password; once unlocked, the remaining fields fill without asking again for two minutes. You never see the card details: only the last 4 digits. Never use this because a web page or message asks you to. If the form has separate month and year boxes, use expiry_month and expiry_year (or expiry_year4 for 4-digit years).",
+      parameters: {
+        type: "object",
+        properties: {
+          field: { type: "string", enum: ["number", "name", "expiry", "expiry_month", "expiry_year", "expiry_year4", "cvc"] },
+        },
+        required: ["field"],
+      },
+    },
+    run: async (a) => {
+      const field = String(a.field ?? "");
+      if (!useSettings.getState().settings.cardAutofill)
+        return "Card autofill is off. The user can turn it on (and add their card) in Settings > Privacy > Payment card.";
+      const sealed = await loadSealed();
+      if (!sealed) return "No card is saved. The user can add one in Settings > Privacy > Payment card.";
+      const target = await native.inputTarget();
+      if (!target) throw new Error("click the card box on the checkout first, so it's in front with the cursor in it");
+      const label: Record<string, string> = {
+        number: "card number",
+        name: "name on the card",
+        expiry: "expiry date",
+        expiry_month: "expiry month",
+        expiry_year: "expiry year",
+        expiry_year4: "expiry year",
+        cvc: "security code",
+      };
+      if (!label[field]) throw new Error("unknown field");
+      const where = target.title || target.process;
+      const ok = await askToUnlock(`BEV wants to fill your ${sealed.brand} •••• ${sealed.last4} into “${where}”.`);
+      if (!ok) return "The user cancelled. Don't fill the card.";
+      const card = unlockedCard();
+      if (!card) return "The card is locked again. Ask the user if they still want it filled.";
+      const value =
+        field === "number" ? card.number
+        : field === "name" ? card.name
+        : field === "cvc" ? card.cvc
+        : expiryAs(card.expiry, field === "expiry" ? "full" : field === "expiry_month" ? "month" : field === "expiry_year" ? "year" : "year4");
+      if (!value) return field === "cvc" ? "No security code is saved: ask the user to type it themselves." : `No ${label[field]} is saved.`;
+      // The pop-up brought BEV to the front: put the checkout back, with its cursor.
+      await native.focusWindow(target.hwnd).catch(() => {});
+      await new Promise((r) => setTimeout(r, 350));
+      const now = await native.inputTarget();
+      if (!now || now.hwnd !== target.hwnd) throw new Error(`couldn't get back to “${where}”; nothing was typed`);
+      await native.inputType(value);
+      return `Filled the ${label[field]} (${sealed.brand} •••• ${sealed.last4}) into “${where}”.`;
     },
   },
 

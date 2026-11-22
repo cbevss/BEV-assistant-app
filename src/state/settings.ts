@@ -65,6 +65,8 @@ export interface Settings {
   scanAppsOnLaunch: boolean;
   /** Rescan installed apps after something finishes downloading (likely an installer). */
   scanAfterDownloads: boolean;
+  /** Let BEV type your saved card into checkouts (always behind the card password). */
+  cardAutofill: boolean;
   /** "Ask about your documents": folders BEV reads, and when it last read them. */
   documents: { folders: string[]; lastIndexed?: number };
   ollamaHost: string;
@@ -179,6 +181,7 @@ export const defaultSettings: Settings = {
   voiceApprovals: false,
   scanAppsOnLaunch: true,
   scanAfterDownloads: true,
+  cardAutofill: false,
   documents: { folders: [] },
   ollamaHost: "http://localhost:11434",
   personality: "casual",

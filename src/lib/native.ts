@@ -264,6 +264,7 @@ export interface OcrResult {
 export interface InputTarget {
   title: string;
   process: string;
+  hwnd: number;
 }
 export interface PointInfo {
   name: string;
