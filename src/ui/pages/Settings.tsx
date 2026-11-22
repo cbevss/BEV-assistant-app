@@ -41,6 +41,14 @@ export function Settings({ part = "general" }: { part?: "general" | "apps" | "ad
       {part === "apps" && (
         <>
           <PageHeader title="Apps" subtitle="The installed apps BEV knows how to open. It rescans by itself when you ask for something new." />
+          <Section title="Automatic scanning">
+            <Field label="Scan for apps when BEV starts" hint="Looks for newly installed or removed apps every time BEV opens, in the background.">
+              <Toggle label="Scan when BEV starts" checked={!!settings.scanAppsOnLaunch} onChange={(scanAppsOnLaunch) => update({ scanAppsOnLaunch })} />
+            </Field>
+            <Field label="Scan after downloads" hint="When something finishes downloading to your Downloads folder, BEV rescans a few times over the next several minutes so apps you install show up straight away.">
+              <Toggle label="Scan after downloads" checked={!!settings.scanAfterDownloads} onChange={(scanAfterDownloads) => update({ scanAfterDownloads })} />
+            </Field>
+          </Section>
           <AppsIndex />
         </>
       )}
