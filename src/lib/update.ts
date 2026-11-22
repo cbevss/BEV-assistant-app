@@ -22,17 +22,30 @@ export const useUpdate = create<UpdateState>(() => ({ phase: "none", version: ""
 let pending: Update | null = null;
 const CHECK_EVERY_MS = 30 * 60_000;
 
-export async function checkForUpdate(): Promise<void> {
+export async function checkForUpdate(force = false): Promise<void> {
   const { phase } = useUpdate.getState();
-  if (phase === "downloading" || phase === "installing") return;
+  if (!force && (phase === "downloading" || phase === "installing")) return;
   try {
     const u = await check();
-    if (!u) return;
+    if (!u || !isNewer(u.version, u.currentVersion)) {
+      // Nothing newer (or it's been installed): no button.
+      pending = null;
+      useUpdate.setState({ phase: "none", version: "", progress: null, error: "" });
+      return;
+    }
     pending = u;
     useUpdate.setState({ phase: "available", version: u.version, progress: null, error: "" });
   } catch {
-    /* offline or no release published: try again later */
+    /* offline or no release published: keep whatever we last knew, try again later */
   }
+}
+
+/** Is version `a` newer than `b`? Plain x.y.z comparison; pre-release tags ignored. */
+export function isNewer(a: string, b: string): boolean {
+  const parse = (v: string) => v.replace(/^v/i, "").split(/[.+-]/).slice(0, 3).map((n) => parseInt(n, 10) || 0);
+  const [x, y] = [parse(a), parse(b)];
+  for (let i = 0; i < 3; i++) if ((x[i] ?? 0) !== (y[i] ?? 0)) return (x[i] ?? 0) > (y[i] ?? 0);
+  return false;
 }
 
 /** Check now and every half hour. */
@@ -43,8 +56,16 @@ export function startUpdateChecks() {
 
 /** Download, install and restart BEV. */
 export async function installUpdate(): Promise<void> {
-  if (!pending) return;
+  // Check again right before installing, so it's always the newest release,
+  // not whichever one was current when the button first appeared.
+  useUpdate.setState({ phase: "downloading", progress: null, error: "" });
+  await checkForUpdate(true).catch(() => {});
+  if (!pending) {
+    useUpdate.setState({ phase: "none", version: "", progress: null, error: "" });
+    return;
+  }
   const u = pending;
+  useUpdate.setState({ phase: "downloading", progress: null, error: "" });
   let total = 0;
   let got = 0;
   useUpdate.setState({ phase: "downloading", progress: null, error: "" });
