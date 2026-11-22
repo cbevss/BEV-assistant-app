@@ -87,7 +87,7 @@ export function AccountSettings() {
       <Section title="Signed in">
         <Field label={a.user?.name ?? "Signed in"} hint="With Discord.">
           <div className="flex items-center gap-3">
-            {a.user?.avatar && <img src={a.user.avatar} alt="" className="h-9 w-9 rounded-full border border-line" referrerPolicy="no-referrer" />}
+            <Avatar url={a.user?.avatar ?? null} name={a.user?.name ?? ""} />
             <Button icon={LogOut} onClick={() => setConfirm("signout")}>
               Sign out
             </Button>
@@ -204,5 +204,18 @@ export function AccountSettings() {
         />
       )}
     </>
+  );
+}
+
+/** Discord profile picture, or the first letter of the name if there isn't one or it won't load. */
+function Avatar({ url, name }: { url: string | null; name: string }) {
+  const [failed, setFailed] = useState(false);
+  useEffect(() => setFailed(false), [url]);
+  if (url && !failed)
+    return <img src={url} alt="" className="h-9 w-9 rounded-full border border-line object-cover" referrerPolicy="no-referrer" onError={() => setFailed(true)} />;
+  return (
+    <span aria-hidden className="grid h-9 w-9 place-items-center rounded-full border border-line bg-surface-2 text-sm font-medium text-ink-2">
+      {(name.trim()[0] ?? "?").toUpperCase()}
+    </span>
   );
 }
