@@ -61,6 +61,10 @@ export interface Settings {
   quietActions: boolean;
   /** In a voice conversation, BEV also asks for approval out loud and accepts "yes"/"no". */
   voiceApprovals: boolean;
+  /** Rescan installed apps every time BEV starts. */
+  scanAppsOnLaunch: boolean;
+  /** Rescan installed apps after something finishes downloading (likely an installer). */
+  scanAfterDownloads: boolean;
   /** "Ask about your documents": folders BEV reads, and when it last read them. */
   documents: { folders: string[]; lastIndexed?: number };
   ollamaHost: string;
@@ -173,6 +177,8 @@ export const defaultSettings: Settings = {
   learnTasks: true,
   quietActions: false,
   voiceApprovals: false,
+  scanAppsOnLaunch: true,
+  scanAfterDownloads: true,
   documents: { folders: [] },
   ollamaHost: "http://localhost:11434",
   personality: "casual",

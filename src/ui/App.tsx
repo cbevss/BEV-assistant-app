@@ -44,6 +44,7 @@ import { notify } from "@/lib/notify";
 import { bootstrapVoice, getController, maybeStartListening } from "@/voice/bootstrap";
 import { startMonitor } from "@/lib/monitor";
 import { startUpdateChecks } from "../lib/update";
+import { startAppScanning } from "../lib/appScan";
 import { upgradeStartWithWindows } from "../lib/startup";
 
 interface PendingApproval {
@@ -178,6 +179,9 @@ export function App() {
       // Updates: look for a newer signed release now and every half hour; the
       // title bar shows a download button when one is ready.
       startUpdateChecks();
+
+      // Keep the installed-app index fresh (launch scan, scans after downloads).
+      startAppScanning();
     })();
 
   }, []);
