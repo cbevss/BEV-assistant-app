@@ -410,21 +410,28 @@ export function BevBotCard() {
   const [code, setCode] = useState("");
   const [bump, setBump] = useState(0);
   const linked = useHasSecret(BEVBOT_TOKEN, bump);
+  const trust = useSettings((st) => st.settings.autoApproveActions);
   const [r, setR] = useState<{ ok: boolean; text: string } | null>(null);
   return (
-    <Section title="BEV bot (owner)" aside={linked ? <StatusPill ok label="linked" /> : undefined}>
+    <Section title="BEV bot: control this PC from Discord" aside={linked ? <StatusPill ok label={cfg.user ? `linked: ${cfg.user}` : "linked"} /> : undefined}>
       <p className="text-sm text-ink-2">
-        For the owner of the BEV Discord bot only: control every server's features and settings, global switches, dashboard buttons, posts and the bot's status by voice. DM the bot
-        “pc …” from anywhere to give this PC a job, and BEV tells you when servers join or leave or the bot hits errors. Only the bot's owner can get a link code.
+        DM the BEV bot “pc …” from anywhere (your phone, a friend's PC) and BEV does it here, then DMs you the answer. It works while this PC is on and BEV is open;
+        jobs sent while it's off wait up to a day.
       </p>
-      <Field label="Bot address" hint="Where the bot runs, e.g. your Render service URL.">
-        <TextInput placeholder="https://your-bot.onrender.com" value={url} onChange={(e) => setUrl(e.target.value)} />
-      </Field>
+      <p className="text-sm text-ink-2">
+        {trust
+          ? "Security → Trust my requests is on, so BEV just does what you DM, like at the PC. It still asks in Discord if it read something from the screen or the web first."
+          : "Security → Trust my requests is off, so when a job needs your OK, BEV asks in the DM and waits for you to reply yes or no."}
+      </p>
+      {cfg.owner && <p className="text-sm text-ink-2">You own the bot, so BEV can also run it for you: servers, features, settings, posts and its status, and it tells you about errors and new servers.</p>}
       {!linked && (
-        <Field label="Link code" hint="DM the bot “link” from your account. The code works once and lasts 10 minutes.">
+        <Field label="Link code" hint="Message the BEV bot “link” in Discord DMs. The code works once and lasts 10 minutes.">
           <TextInput placeholder="ABCD-EFGH" value={code} onChange={(e) => setCode(e.target.value)} />
         </Field>
       )}
+      <Field label="Bot address (advanced)" hint="Leave empty for bevbotdiscord.com. Only change this if you run your own copy of the bot.">
+        <TextInput placeholder="https://bevbotdiscord.com" value={url} onChange={(e) => setUrl(e.target.value)} />
+      </Field>
       <div className="flex justify-end gap-2">
         {linked && (
           <Button
@@ -432,7 +439,7 @@ export function BevBotCard() {
             onClick={() =>
               run(async () => {
                 await unlinkBot();
-                await patch("bevbot", { enabled: false, url });
+                await patch("bevbot", { enabled: false, url: url.trim(), owner: false, user: undefined });
                 setBump((b) => b + 1);
                 return "Unlinked. DM the bot “link” for a new code.";
               }, setR)
@@ -442,14 +449,20 @@ export function BevBotCard() {
           </Button>
         )}
         <Button
-          disabled={!url.trim() || (!linked && !code.trim())}
+          disabled={!linked && !code.trim()}
           onClick={() =>
             run(async () => {
-              const msg = linked ? (await native.integrationAllowOrigin(url.trim()), "Saved.") : await linkBot(url, code);
+              const clean = url.trim().replace(/\/+$/, "");
+              if (linked) {
+                if (clean) await native.integrationAllowOrigin(clean);
+                await patch("bevbot", { enabled: true, url: clean });
+                return "Saved.";
+              }
+              const res = await linkBot(clean, code);
               setCode("");
               setBump((b) => b + 1);
-              await patch("bevbot", { enabled: true, url: url.trim().replace(/\/+$/, "") });
-              return msg;
+              await patch("bevbot", { enabled: true, url: clean, owner: res.owner, user: res.user ?? undefined });
+              return res.message;
             }, setR)
           }
         >
