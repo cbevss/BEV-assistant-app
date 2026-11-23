@@ -1,9 +1,9 @@
 {
   "name": "bev-assistant",
   "private": true,
-  "version": "1.45.0",
+  "version": "1.46.0",
   "type": "module",
-  "description": "BEV \u2014 futuristic always-available AI voice assistant for Windows 11",
+  "description": "BEV \u2014 futuristic always-available AI voice assistant for Windows 11 and Linux",
   "author": "cbevss",
   "license": "MIT",
   "scripts": {

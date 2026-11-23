@@ -22,6 +22,8 @@ mod hardware;
 mod clipboard;
 mod cleanup;
 mod journal;
+#[cfg(target_os = "linux")]
+mod linux;
 mod games;
 mod overlay;
 mod replay;
