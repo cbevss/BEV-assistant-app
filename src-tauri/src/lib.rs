@@ -4,6 +4,7 @@
 //! Every command validates its arguments and fails closed: a broken input
 //! returns an `Err`, never a fabricated success.
 
+mod migrate;
 mod audio;
 mod integrations;
 mod brain;
@@ -53,6 +54,8 @@ pub(crate) fn show_main(app: &tauri::AppHandle) {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // Before anything opens BEV's folders: carry them over from the old name.
+    migrate::run();
     tauri::Builder::default()
         // Must be registered first: a second launch (Start menu, shortcut, or
         // autostart racing a manual start) focuses this instance and exits,
