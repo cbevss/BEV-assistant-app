@@ -39,6 +39,12 @@ export interface OrchestratorOptions {
    * input tools, and anything sensitive is confirmed on the phone (even with auto-approve on).
    */
   remote?: boolean;
+  /**
+   * With remote: approvals follow the user's "Trust my requests" setting, as at
+   * the PC (used for "pc …" jobs DMed to the BEV bot). Content from outside still
+   * needs an explicit yes.
+   */
+  followTrust?: boolean;
   /** How the user is talking to this conversation, for the shared recent log. */
   channel?: "voice" | "chat";
 }
@@ -471,7 +477,8 @@ export class Orchestrator {
 
     // From the phone, nobody may be watching the PC: the first mouse/keyboard
     // action of a request is confirmed on the phone, then allowed for the rest of it.
-    if (this.opts.remote && REMOTE_INPUT_TOOLS.has(call.name) && !this.remoteInputGranted) {
+    const trusted = !!this.opts.followTrust && autoApproveOn();
+    if (this.opts.remote && !trusted && REMOTE_INPUT_TOOLS.has(call.name) && !this.remoteInputGranted) {
       this.turnNeededApproval = true;
       const ok = await this.hooks.requestApproval(
         call,
@@ -492,7 +499,7 @@ export class Orchestrator {
       // requests" on only for actions outside content could misuse.
       const fromOutside = tainted(this.history, this.turnStartIdx) && (!autoApproveOn() || OUTSIDE_RISK.has(call.name));
       // From the phone, every sensitive action is confirmed there (twice), even with auto-approve on.
-      if (this.opts.remote || !autoApproveOn() || fromOutside) {
+      if ((this.opts.remote && !trusted) || !autoApproveOn() || fromOutside) {
         const desc = describeCall(call) + (reason ? ` This ${reason}.` : "") + (fromOutside ? " (BEV read content from your screen or the web in this conversation; make sure this is what you asked for.)" : "");
         const approved = await this.hooks.requestApproval(call, desc);
         if (!approved) return { ok: false, text: "user declined this action" };

@@ -101,3 +101,25 @@ describe("Discord", () => {
     expect(out.split("\n")[1]).toMatch(/b: second$/);
   });
 });
+
+import { describeOverview, describeConfig, noticeFor } from "./bevbot";
+describe("BEV bot owner link", () => {
+  it("summarises the bot", () => {
+    const t = describeOverview({ online: true, version: "4.81", uptime_s: 90000, latency_ms: 40, server_count: 2, member_count: 1500, servers: [{ id: "123456", name: "Hub", members: 1000 }, { id: "234567", name: "Test", members: 500 }], global_off: ["economy"], recent_errors: [] });
+    expect(t).toContain("online, up 1d");
+    expect(t).toContain("Hub (123456, 1000)");
+    expect(t).toContain("Switched off everywhere: economy");
+  });
+  it("shows one feature's settings with channel ids", () => {
+    const c = { guild: { name: "Hub" }, features: [{ key: "leveling", name: "Leveling", enabled: true, setup_ok: true, category: "x", settings: [{ key: "level_channel", kind: "channel", value: "99999" }] }], channels: [{ id: "99999", name: "levels", type: "text" }], roles: [] };
+    expect(describeConfig(c)).toContain("● leveling");
+    const one = describeConfig(c, "Leveling");
+    expect(one).toContain("level_channel [channel]");
+    expect(one).toContain("#levels=99999");
+    expect(describeConfig(c, "nope")).toContain("No feature");
+  });
+  it("groups repeated errors into one notice key", () => {
+    expect(noticeFor({ id: 1, kind: "error", text: "KeyError: x" }).key).toBe(noticeFor({ id: 2, kind: "error", text: "KeyError: x" }).key);
+    expect(noticeFor({ id: 3, kind: "server", text: "joined" }).key).not.toBe(noticeFor({ id: 4, kind: "server", text: "joined" }).key);
+  });
+});

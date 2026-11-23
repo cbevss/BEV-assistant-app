@@ -23,6 +23,7 @@ const KNOWN: &[&str] = &[
     "https://oauth2.googleapis.com",
     "https://api.search.brave.com",
     "https://discord.com",
+    "https://bevbotdiscord.com",
 ];
 
 /// scheme://host[:port], lower-cased; None if it isn't an http(s) URL.

@@ -5,6 +5,7 @@ import { useSettings, type IntegrationSettings, type McpServerConfig } from "@/s
 import { HA_TOKEN, testHomeAssistant } from "@/integrations/homeassistant";
 import { GH_TOKEN, testGitHub } from "@/integrations/github";
 import { DISCORD_TOKEN, testDiscord } from "@/integrations/discord";
+import { BEVBOT_TOKEN, linkBot, unlinkBot } from "@/integrations/bevbot";
 import { spotifyOAuth } from "@/integrations/spotify";
 import { googleOAuth, GOOGLE_SECRET } from "@/integrations/google";
 import { signIn, signOut, isSignedIn } from "@/integrations/oauth";
@@ -395,6 +396,77 @@ export function DiscordCard() {
           }
         >
           Save and test
+        </Button>
+      </div>
+      <Result r={r} />
+    </Section>
+  );
+}
+
+export function BevBotCard() {
+  const { i, patch } = usePatch();
+  const cfg = i.bevbot ?? { enabled: false, url: "" };
+  const [url, setUrl] = useState(cfg.url);
+  const [code, setCode] = useState("");
+  const [bump, setBump] = useState(0);
+  const linked = useHasSecret(BEVBOT_TOKEN, bump);
+  const trust = useSettings((st) => st.settings.autoApproveActions);
+  const [r, setR] = useState<{ ok: boolean; text: string } | null>(null);
+  return (
+    <Section title="BEV bot: control this PC from Discord" aside={linked ? <StatusPill ok label={cfg.user ? `linked: ${cfg.user}` : "linked"} /> : undefined}>
+      <p className="text-sm text-ink-2">
+        DM the BEV bot “pc …” from anywhere (your phone, a friend's PC) and BEV does it here, then DMs you the answer. It works while this PC is on and BEV is open;
+        jobs sent while it's off wait up to a day.
+      </p>
+      <p className="text-sm text-ink-2">
+        {trust
+          ? "Security → Trust my requests is on, so BEV just does what you DM, like at the PC. It still asks in Discord if it read something from the screen or the web first."
+          : "Security → Trust my requests is off, so when a job needs your OK, BEV asks in the DM and waits for you to reply yes or no."}
+      </p>
+      {cfg.owner && <p className="text-sm text-ink-2">You own the bot, so BEV can also run it for you: servers, features, settings, posts and its status, and it tells you about errors and new servers.</p>}
+      {!linked && (
+        <Field label="Link code" hint="Message the BEV bot “link” in Discord DMs. The code works once and lasts 10 minutes.">
+          <TextInput placeholder="ABCD-EFGH" value={code} onChange={(e) => setCode(e.target.value)} />
+        </Field>
+      )}
+      <Field label="Bot address (advanced)" hint="Leave empty for bevbotdiscord.com. Only change this if you run your own copy of the bot.">
+        <TextInput placeholder="https://bevbotdiscord.com" value={url} onChange={(e) => setUrl(e.target.value)} />
+      </Field>
+      <div className="flex justify-end gap-2">
+        {linked && (
+          <Button
+            variant="ghost"
+            onClick={() =>
+              run(async () => {
+                await unlinkBot();
+                await patch("bevbot", { enabled: false, url: url.trim(), owner: false, user: undefined });
+                setBump((b) => b + 1);
+                return "Unlinked. DM the bot “link” for a new code.";
+              }, setR)
+            }
+          >
+            Unlink
+          </Button>
+        )}
+        <Button
+          disabled={!linked && !code.trim()}
+          onClick={() =>
+            run(async () => {
+              const clean = url.trim().replace(/\/+$/, "");
+              if (linked) {
+                if (clean) await native.integrationAllowOrigin(clean);
+                await patch("bevbot", { enabled: true, url: clean });
+                return "Saved.";
+              }
+              const res = await linkBot(clean, code);
+              setCode("");
+              setBump((b) => b + 1);
+              await patch("bevbot", { enabled: true, url: clean, owner: res.owner, user: res.user ?? undefined });
+              return res.message;
+            }, setR)
+          }
+        >
+          {linked ? "Save" : "Link"}
         </Button>
       </div>
       <Result r={r} />

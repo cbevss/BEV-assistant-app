@@ -4,6 +4,7 @@ import { useSettings, type McpServerConfig } from "@/state/settings";
 import { homeAssistantTools } from "./homeassistant";
 import { githubTools } from "./github";
 import { discordTools } from "./discord";
+import { bevBotTools } from "./bevbot";
 import { spotifyTools } from "./spotify";
 import { googleTools } from "./google";
 import { McpClient, mcpTools } from "./mcp";
@@ -52,6 +53,7 @@ export function connectorTools(): Record<string, RegisteredTool> {
     ...(i.homeassistant.enabled && i.homeassistant.url ? homeAssistantTools() : {}),
     ...(i.github.enabled ? githubTools() : {}),
     ...(i.discord?.enabled ? discordTools() : {}),
+    ...(i.bevbot?.enabled && i.bevbot.owner ? bevBotTools() : {}),
     ...(i.spotify.enabled && i.spotify.clientId ? spotifyTools() : {}),
     ...(i.google.enabled && i.google.clientId ? googleTools() : {}),
     ...Object.assign({}, ...i.mcp.filter((m) => m.enabled).map((m) => (clients.get(m.id) ? mcpTools(clients.get(m.id)!) : {}))),

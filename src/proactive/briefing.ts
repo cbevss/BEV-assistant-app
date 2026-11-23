@@ -7,6 +7,7 @@ import { useSettings } from "@/state/settings";
 import { isQuiet } from "@/lib/gaming";
 import { startBackgroundTask, useBackground } from "@/ai/background";
 import { noticesForPrompt, raise } from "./notices";
+import { botEventsForPrompt } from "@/integrations/bevbot";
 
 const DONE_KEY = "bev.briefing.lastDay";
 const ls = {
@@ -42,9 +43,10 @@ export function briefingGoal(): string {
   const noticed = noticesForPrompt();
   return [
     "Prepare the user's daily briefing, to be read aloud. Under 120 words, friendly, no lists.",
-    "Include, where the tools are available: today's weather (get_weather, if their home town is set), today's calendar events (calendar_events), important unread email (gmail_search 'is:unread is:important newer_than:1d'), tracked tasks due soon (list_tracked_tasks), timers, alarms and reminders still to come today (list_timers), countdowns within a week (countdown check), and anything wrong with the PC.",
+    "Include, where the tools are available: today's weather (get_weather, if their home town is set), today's calendar events (calendar_events), important unread email (gmail_search 'is:unread is:important newer_than:1d'), tracked tasks due soon (list_tracked_tasks), timers, alarms and reminders still to come today (list_timers), countdowns within a week (countdown check), their Discord bot BEV in one sentence (bev_bot_overview: servers, members, offline or new errors), and anything wrong with the PC.",
     "Skip any source that isn't connected without mentioning it. Don't invent anything.",
     noticed,
+    botEventsForPrompt(),
   ]
     .filter(Boolean)
     .join("\n");
