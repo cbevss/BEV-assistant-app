@@ -69,8 +69,25 @@ pub fn fast_start_enabled() -> bool {
     {
         schtasks(&["/Query", "/TN", TASK]).map(|o| o.status.success()).unwrap_or(false)
     }
-    #[cfg(not(windows))]
+    #[cfg(target_os = "linux")]
+    {
+        autostart_path().exists()
+    }
+    #[cfg(not(any(windows, target_os = "linux")))]
     false
+}
+
+#[cfg(target_os = "linux")]
+fn autostart_path() -> std::path::PathBuf {
+    crate::linux::config_dir().join("autostart").join("bev.desktop")
+}
+
+/// XDG autostart entry, used by KDE Plasma (and GNOME) at sign-in.
+pub fn autostart_entry(exe: &str) -> String {
+    let q = exe.replace('\\', "\\\\").replace('"', "\\\"");
+    format!(
+        "[Desktop Entry]\nType=Application\nName=BEV\nComment=Starts BEV when you sign in.\nExec=\"{q}\" --minimized\nIcon=bev\nTerminal=false\nX-GNOME-Autostart-enabled=true\nX-KDE-autostart-phase=2\n"
+    )
 }
 
 /// Register (or remove) the logon task. Errors when Windows won't allow it,
@@ -104,10 +121,28 @@ pub fn set_fast_start(on: bool) -> BevResult<()> {
         }
         Ok(())
     }
-    #[cfg(not(windows))]
+    #[cfg(target_os = "linux")]
+    {
+        let path = autostart_path();
+        if !on {
+            let _ = std::fs::remove_file(&path);
+            return Ok(());
+        }
+        // An AppImage's own path changes each mount; $APPIMAGE is the real file.
+        let exe = std::env::var("APPIMAGE")
+            .map(std::path::PathBuf::from)
+            .or_else(|_| std::env::current_exe())
+            .map_err(|e| BevError::Os(format!("exe path: {e}")))?;
+        if let Some(dir) = path.parent() {
+            std::fs::create_dir_all(dir)?;
+        }
+        std::fs::write(&path, autostart_entry(&exe.to_string_lossy()))?;
+        Ok(())
+    }
+    #[cfg(not(any(windows, target_os = "linux")))]
     {
         let _ = on;
-        Err(BevError::Unsupported("Windows only".into()))
+        Err(BevError::Unsupported("start-up isn't supported on this OS".into()))
     }
 }
 
@@ -121,5 +156,12 @@ mod tests {
         assert!(x.contains(r"C:\Users\A&amp;B\BEV.exe"));
         assert!(x.contains("<Arguments>--minimized</Arguments>"));
         assert!(x.contains("<RunLevel>LeastPrivilege</RunLevel>"));
+    }
+
+    #[test]
+    fn autostart_entry_quotes_exe() {
+        let e = super::autostart_entry("/opt/My Apps/bev");
+        assert!(e.contains("Exec=\"/opt/My Apps/bev\" --minimized"));
+        assert!(e.starts_with("[Desktop Entry]"));
     }
 }

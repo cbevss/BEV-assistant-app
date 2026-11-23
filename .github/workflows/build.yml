@@ -58,6 +58,41 @@ jobs:
           path: BEV-Setup.exe
           if-no-files-found: error
 
+  build-linux:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20, cache: npm }
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: "src-tauri -> target"
+      - name: Linux build deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev libssl-dev libasound2-dev libdbus-1-dev libxdo-dev rpm patchelf
+      - run: npm ci
+        env:
+          # onnxruntime-node (via kokoro-js) otherwise fetches a CUDA build on Linux.
+          npm_config_onnxruntime_node_install_cuda: skip
+      - name: Rust tests
+        working-directory: src-tauri
+        run: cargo test --lib
+      - name: Build RPM + AppImage
+        run: npm run tauri:build
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
+      - name: Upload Linux packages
+        uses: actions/upload-artifact@v4
+        with:
+          name: BEV-Linux
+          path: |
+            src-tauri/target/release/bundle/rpm/*.rpm
+            src-tauri/target/release/bundle/appimage/*.AppImage
+          if-no-files-found: error
+
   # Decides whether this run publishes a release, and which version.
   # - Push to main: release if the version in the code (package.json) has no
   #   v<version> tag yet. Bumping the version in a PR and merging it is all it
@@ -102,9 +137,13 @@ jobs:
   # Build, sign, and publish the release with the installer plus the updater's
   # latest.json + .sig, so running apps auto-update to it.
   release:
-    needs: [build, version]
+    needs: [build, build-linux, version]
     if: needs.version.outputs.release == 'true'
-    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-22.04]
+    runs-on: ${{ matrix.os }}
     permissions:
       contents: write
     steps:
@@ -112,7 +151,15 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: 20, cache: npm }
       - uses: dtolnay/rust-toolchain@stable
+      - name: Linux build deps
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev libssl-dev libasound2-dev libdbus-1-dev libxdo-dev rpm patchelf
       - run: npm ci
+        env:
+          # onnxruntime-node (via kokoro-js) otherwise fetches a CUDA build on Linux.
+          npm_config_onnxruntime_node_install_cuda: skip
       - uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

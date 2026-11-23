@@ -10,6 +10,16 @@ use std::path::{Path, PathBuf};
 /// Expand %VAR% (e.g. %USERPROFILE%\Downloads) and trim stray quotes.
 pub(crate) fn expand(raw: &str) -> String {
     let s = raw.trim().trim_matches('"');
+    // "~/Downloads" on Linux.
+    #[cfg(unix)]
+    let home_expanded;
+    #[cfg(unix)]
+    let s = if s == "~" || s.starts_with("~/") {
+        home_expanded = format!("{}{}", std::env::var("HOME").unwrap_or_default(), &s[1..]);
+        home_expanded.as_str()
+    } else {
+        s
+    };
     let mut out = String::new();
     let mut rest = s;
     while let Some(start) = rest.find('%') {
@@ -45,7 +55,7 @@ pub(crate) fn resolve(raw: &str) -> BevResult<PathBuf> {
     }
     let p = PathBuf::from(expand(raw));
     if !p.is_absolute() {
-        return Err(BevError::Invalid(format!("use a full path, like C:\\Users\\you\\Downloads (got \"{}\")", p.display())));
+        return Err(BevError::Invalid(format!("use a full path, like C:\\Users\\you\\Downloads or ~/Downloads (got \"{}\")", p.display())));
     }
     if !p.exists() {
         return Err(BevError::NotFound(format!("{} doesn't exist", p.display())));
@@ -70,10 +80,16 @@ pub fn open_path(path: String) -> BevResult<String> {
             .map_err(|e| BevError::Os(format!("couldn't open {}: {e}", p.display())))?;
         Ok(format!("opened {}", display_name(&p)))
     }
-    #[cfg(not(windows))]
+    #[cfg(target_os = "linux")]
+    {
+        let s = p.to_string_lossy().into_owned();
+        crate::linux::spawn("xdg-open", &[&s])?;
+        Ok(format!("opened {}", display_name(&p)))
+    }
+    #[cfg(not(any(windows, target_os = "linux")))]
     {
         let _ = display_name(&p);
-        Err(BevError::Unsupported("opening files is Windows-only".into()))
+        Err(BevError::Unsupported("opening files isn't supported on this OS".into()))
     }
 }
 

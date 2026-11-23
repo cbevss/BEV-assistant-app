@@ -1,0 +1,9 @@
+[Desktop Entry]
+Categories=Utility;
+Comment=BEV personal AI assistant
+Exec={{exec}}
+StartupWMClass={{exec}}
+Icon={{icon}}
+Name=BEV
+Terminal=false
+Type=Application

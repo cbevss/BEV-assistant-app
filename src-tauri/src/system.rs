@@ -21,8 +21,15 @@ pub fn lock_pc() -> BevResult<()> {
         windows::Win32::System::Shutdown::LockWorkStation()
             .map_err(|e| BevError::Os(format!("LockWorkStation: {e}")))
     }
-    #[cfg(not(windows))]
-    Err(BevError::Unsupported("lock is Windows-only".into()))
+    #[cfg(target_os = "linux")]
+    {
+        // loginctl works under every systemd desktop; fall back to KDE's D-Bus call.
+        crate::linux::run("loginctl", &["lock-session"])
+            .or_else(|_| crate::linux::run("qdbus", &["org.freedesktop.ScreenSaver", "/ScreenSaver", "Lock"]))
+            .map(|_| ())
+    }
+    #[cfg(not(any(windows, target_os = "linux")))]
+    Err(BevError::Unsupported("lock isn't supported on this OS".into()))
 }
 
 /// `action`: "sleep" | "restart" | "shutdown" | "cancel".
@@ -64,10 +71,35 @@ pub fn power_action(action: String, delay_secs: Option<u32>) -> BevResult<String
             other => Err(BevError::Invalid(format!("unknown power action: {other}"))),
         }
     }
-    #[cfg(not(windows))]
+    #[cfg(target_os = "linux")]
+    {
+        use crate::linux::run;
+        // Restart/shutdown go through a transient systemd user timer named
+        // bev-power so "cancel" can stop it, like `shutdown /a` on Windows.
+        match action.as_str() {
+            "sleep" => run("systemctl", &["suspend"]).map(|_| "sleeping".into()),
+            "restart" | "shutdown" => {
+                let verb = if action == "restart" { "reboot" } else { "poweroff" };
+                let _ = run("systemctl", &["--user", "stop", "bev-power.timer"]);
+                let when = format!("--on-active={delay}s");
+                run("systemd-run", &["--user", "--unit=bev-power", &when, "systemctl", verb])?;
+                let _ = run(
+                    "notify-send",
+                    &["BEV", &format!("{action} in {delay}s. Say 'BEV, cancel shutdown' to abort.")],
+                );
+                Ok(format!("{action} in {delay}s"))
+            }
+            "cancel" => match run("systemctl", &["--user", "stop", "bev-power.timer"]) {
+                Ok(_) => Ok("pending shutdown cancelled".into()),
+                Err(_) => Err(BevError::NotFound("no shutdown was pending".into())),
+            },
+            other => Err(BevError::Invalid(format!("unknown power action: {other}"))),
+        }
+    }
+    #[cfg(not(any(windows, target_os = "linux")))]
     {
         let _ = (action, delay);
-        Err(BevError::Unsupported("power actions are Windows-only".into()))
+        Err(BevError::Unsupported("power actions aren't supported on this OS".into()))
     }
 }
 
@@ -134,10 +166,18 @@ pub fn open_settings_page(page: String) -> BevResult<String> {
             Err(BevError::NotFound(format!("could not open {uri}")))
         }
     }
-    #[cfg(not(windows))]
+    #[cfg(target_os = "linux")]
     {
         let _ = uri;
-        Err(BevError::Unsupported("settings pages are Windows-only".into()))
+        match crate::linux::kcm_for(&page) {
+            Some(kcm) => crate::linux::spawn("systemsettings", &[kcm]).map(|_| format!("opened {kcm}")),
+            None => crate::linux::spawn("systemsettings", &[]).map(|_| "opened System Settings".into()),
+        }
+    }
+    #[cfg(not(any(windows, target_os = "linux")))]
+    {
+        let _ = uri;
+        Err(BevError::Unsupported("settings pages aren't supported on this OS".into()))
     }
 }
 
