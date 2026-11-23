@@ -352,3 +352,91 @@ pub fn mpris(method: &str) -> Result<String, String> {
         Ok(chosen.trim_start_matches("org.mpris.MediaPlayer2.").split('.').next().unwrap_or("player").to_string())
     })
 }
+
+#[derive(Debug, Clone)]
+pub struct Display {
+    pub path: String,
+    pub label: String,
+    pub brightness: i32,
+    pub max: i32,
+}
+
+/// Screens whose brightness Plasma can change (laptop panels, and DDC/CI
+/// monitors through PowerDevil). Needs Plasma 6.1 or newer.
+pub fn displays() -> Result<Vec<Display>, String> {
+    block(async move {
+        let c = conn().await?;
+        let get = |path: String, prop: &'static str| async move {
+            c.call_method(Some("org.kde.ScreenBrightness"), path.as_str(), Some("org.freedesktop.DBus.Properties"), "Get", &(if prop == "DisplaysDBusNames" { "org.kde.ScreenBrightness" } else { "org.kde.ScreenBrightness.Display" }, prop))
+                .await
+                .map_err(|e| e.to_string())
+                .and_then(|r| r.body().deserialize::<zbus::zvariant::OwnedValue>().map_err(|e| e.to_string()))
+        };
+        let names: Vec<String> = get("/org/kde/ScreenBrightness".into(), "DisplaysDBusNames")
+            .await
+            .map_err(|_| "Plasma's brightness service isn't available (needs Plasma 6.1+)".to_string())
+            .and_then(|v| Vec::<String>::try_from(v).map_err(|e| e.to_string()))?;
+        let mut out = Vec::new();
+        for n in names {
+            let path = format!("/org/kde/ScreenBrightness/{n}");
+            let label = get(path.clone(), "Label").await.ok().and_then(|v| String::try_from(v).ok()).unwrap_or_else(|| n.clone());
+            let brightness = get(path.clone(), "Brightness").await.ok().and_then(|v| i32::try_from(v).ok()).unwrap_or(0);
+            let max = get(path.clone(), "MaxBrightness").await.ok().and_then(|v| i32::try_from(v).ok()).unwrap_or(0);
+            out.push(Display { path, label, brightness, max });
+        }
+        Ok(out)
+    })
+}
+
+pub fn set_display_brightness(path: &str, value: i32) -> Result<(), String> {
+    let path = path.to_string();
+    block(async move {
+        let c = conn().await?;
+        // flags 0x1 = SuppressIndicator off → Plasma shows its OSD.
+        c.call_method(Some("org.kde.ScreenBrightness"), path.as_str(), Some("org.kde.ScreenBrightness.Display"), "SetBrightness", &(value, 0u32))
+            .await
+            .map(|_| ())
+            .map_err(|e| e.to_string())
+    })
+}
+
+/// Power profiles over D-Bus (power-profiles-daemon and Fedora's tuned-ppd
+/// both serve this). Returns (profile ids, active id).
+pub fn power_profiles() -> Result<(Vec<String>, String), String> {
+    block(async move {
+        let c = system_conn().await?;
+        let get = |prop: &'static str| async move {
+            c.call_method(Some("org.freedesktop.UPower.PowerProfiles"), "/org/freedesktop/UPower/PowerProfiles", Some("org.freedesktop.DBus.Properties"), "Get", &("org.freedesktop.UPower.PowerProfiles", prop))
+                .await
+                .map_err(|e| format!("power profiles aren't available ({e})"))
+                .and_then(|r| r.body().deserialize::<zbus::zvariant::OwnedValue>().map_err(|e| e.to_string()))
+        };
+        let active = String::try_from(get("ActiveProfile").await?).map_err(|e| e.to_string())?;
+        let list: Vec<HashMap<String, zbus::zvariant::OwnedValue>> = get("Profiles").await?.try_into().map_err(|e: zbus::zvariant::Error| e.to_string())?;
+        let ids = list.into_iter().filter_map(|m| m.get("Profile").and_then(|v| String::try_from(v.clone()).ok())).collect();
+        Ok((ids, active))
+    })
+}
+
+pub fn set_power_profile(id: &str) -> Result<(), String> {
+    let id = id.to_string();
+    block(async move {
+        let c = system_conn().await?;
+        c.call_method(
+            Some("org.freedesktop.UPower.PowerProfiles"),
+            "/org/freedesktop/UPower/PowerProfiles",
+            Some("org.freedesktop.DBus.Properties"),
+            "Set",
+            &("org.freedesktop.UPower.PowerProfiles", "ActiveProfile", zbus::zvariant::Value::from(id.as_str())),
+        )
+        .await
+        .map(|_| ())
+        .map_err(|e| e.to_string())
+    })
+}
+
+static SYS: tokio::sync::OnceCell<zbus::Connection> = tokio::sync::OnceCell::const_new();
+
+async fn system_conn() -> Result<&'static zbus::Connection, String> {
+    SYS.get_or_try_init(|| async { zbus::Connection::system().await.map_err(|e| format!("system D-Bus: {e}")) }).await
+}
