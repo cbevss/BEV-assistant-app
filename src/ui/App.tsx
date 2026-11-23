@@ -9,6 +9,7 @@ import { needsReindex, indexDocuments } from "@/lib/documents";
 import { startGamingWatch, isQuiet } from "@/lib/gaming";
 import { useUsage } from "@/ai/usage";
 import { startPhoneControl } from "@/account/phone";
+import { startBevBotLink } from "@/integrations/bevbot";
 import { configureAlerts } from "@/lib/alerts";
 import { startTimers } from "@/lib/timers";
 import { startWatches } from "@/lib/watches";
@@ -104,6 +105,8 @@ export function App() {
       void useUsage.getState().load();
       // Phone control (only runs when switched on and signed in).
       startPhoneControl();
+      // The owner's BEV Discord bot: events and "pc …" DMs (only once linked).
+      startBevBotLink();
       // Timers, alarms and reminders (local), announced through BEV's voice.
       configureAlerts({ announce: async (t) => (await getController()?.announce(t)) ?? false });
       startTimers();

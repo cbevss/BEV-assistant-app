@@ -5,6 +5,7 @@ import { useSettings, type IntegrationSettings, type McpServerConfig } from "@/s
 import { HA_TOKEN, testHomeAssistant } from "@/integrations/homeassistant";
 import { GH_TOKEN, testGitHub } from "@/integrations/github";
 import { DISCORD_TOKEN, testDiscord } from "@/integrations/discord";
+import { BEVBOT_TOKEN, linkBot, unlinkBot } from "@/integrations/bevbot";
 import { spotifyOAuth } from "@/integrations/spotify";
 import { googleOAuth, GOOGLE_SECRET } from "@/integrations/google";
 import { signIn, signOut, isSignedIn } from "@/integrations/oauth";
@@ -395,6 +396,64 @@ export function DiscordCard() {
           }
         >
           Save and test
+        </Button>
+      </div>
+      <Result r={r} />
+    </Section>
+  );
+}
+
+export function BevBotCard() {
+  const { i, patch } = usePatch();
+  const cfg = i.bevbot ?? { enabled: false, url: "" };
+  const [url, setUrl] = useState(cfg.url);
+  const [code, setCode] = useState("");
+  const [bump, setBump] = useState(0);
+  const linked = useHasSecret(BEVBOT_TOKEN, bump);
+  const [r, setR] = useState<{ ok: boolean; text: string } | null>(null);
+  return (
+    <Section title="BEV bot (owner)" aside={linked ? <StatusPill ok label="linked" /> : undefined}>
+      <p className="text-sm text-ink-2">
+        For the owner of the BEV Discord bot only: control every server's features and settings, global switches, dashboard buttons, posts and the bot's status by voice. DM the bot
+        “pc …” from anywhere to give this PC a job, and BEV tells you when servers join or leave or the bot hits errors. Only the bot's owner can get a link code.
+      </p>
+      <Field label="Bot address" hint="Where the bot runs, e.g. your Render service URL.">
+        <TextInput placeholder="https://your-bot.onrender.com" value={url} onChange={(e) => setUrl(e.target.value)} />
+      </Field>
+      {!linked && (
+        <Field label="Link code" hint="DM the bot “link” from your account. The code works once and lasts 10 minutes.">
+          <TextInput placeholder="ABCD-EFGH" value={code} onChange={(e) => setCode(e.target.value)} />
+        </Field>
+      )}
+      <div className="flex justify-end gap-2">
+        {linked && (
+          <Button
+            variant="ghost"
+            onClick={() =>
+              run(async () => {
+                await unlinkBot();
+                await patch("bevbot", { enabled: false, url });
+                setBump((b) => b + 1);
+                return "Unlinked. DM the bot “link” for a new code.";
+              }, setR)
+            }
+          >
+            Unlink
+          </Button>
+        )}
+        <Button
+          disabled={!url.trim() || (!linked && !code.trim())}
+          onClick={() =>
+            run(async () => {
+              const msg = linked ? (await native.integrationAllowOrigin(url.trim()), "Saved.") : await linkBot(url, code);
+              setCode("");
+              setBump((b) => b + 1);
+              await patch("bevbot", { enabled: true, url: url.trim().replace(/\/+$/, "") });
+              return msg;
+            }, setR)
+          }
+        >
+          {linked ? "Save" : "Link"}
         </Button>
       </div>
       <Result r={r} />

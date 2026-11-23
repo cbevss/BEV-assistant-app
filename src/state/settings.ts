@@ -37,6 +37,8 @@ export interface IntegrationSettings {
   homeassistant: { enabled: boolean; url: string };
   github: { enabled: boolean };
   discord?: { enabled: boolean };
+  /** The user's own BEV Discord bot, linked as its owner (bot address; the device token is in the keyring). */
+  bevbot?: { enabled: boolean; url: string };
   spotify: { enabled: boolean; clientId: string };
   google: { enabled: boolean; clientId: string };
   mcp: McpServerConfig[];
