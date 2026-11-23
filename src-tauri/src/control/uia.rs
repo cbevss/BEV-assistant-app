@@ -360,10 +360,174 @@ mod imp {
     }
 }
 
-#[cfg(not(windows))]
+/// Linux: AT-SPI, mapped onto the same element list as Windows.
+#[cfg(target_os = "linux")]
+mod imp {
+    use super::super::atspi::{self, bus};
+    use super::super::elements;
+    use super::super::{guard, input};
+    use super::*;
+    use crate::kwin::{self, KWindow};
+    use std::sync::Mutex;
+    use std::time::Duration;
+
+    struct Last {
+        refs: Vec<bus::Ref>,
+        elements: Vec<elements::UiElement>,
+        process: String,
+    }
+    static LAST: Mutex<Option<Last>> = Mutex::new(None);
+
+    fn target(hwnd: Option<isize>) -> Result<KWindow, String> {
+        let me = std::process::id();
+        let list = kwin::windows()?;
+        match hwnd {
+            Some(h) => {
+                let id = kwin::uuid_for(h).ok_or("that window isn't open any more")?;
+                list.into_iter().find(|w| w.id == id).ok_or_else(|| "that window isn't open any more".into())
+            }
+            None => list
+                .iter()
+                .find(|w| w.active && w.pid != me && !w.min)
+                .or_else(|| list.iter().find(|w| w.pid != me && !w.min && !w.title.is_empty()))
+                .cloned()
+                .ok_or_else(|| "There's no window to read.".into()),
+        }
+    }
+
+    pub fn read(hwnd: Option<isize>) -> Result<UiSnapshot, String> {
+        let w = target(hwnd)?;
+        let (pid, title, cx, cy) = (w.pid, w.title.clone(), w.cx, w.cy);
+        let walked = kwin::block(async move {
+            let win = bus::window_for(pid, &title).await?;
+            bus::walk(&win, cx, cy).await
+        })?;
+        let (picked, shaped, truncated) = elements::shape(&walked.raw);
+        let process = w.process();
+        if let Ok(mut g) = LAST.lock() {
+            *g = Some(Last { refs: picked.iter().map(|&i| walked.refs[i].clone()).collect(), elements: shaped.clone(), process: process.clone() });
+        }
+        Ok(UiSnapshot { title: w.title.clone(), process, hwnd: w.handle(), elements: shaped, truncated })
+    }
+
+    pub fn act(id: usize, action: String, text: Option<String>) -> Result<ActResult, String> {
+        let (r, el) = {
+            let g = LAST.lock().map_err(|_| "lock")?;
+            let last = g.as_ref().ok_or("Read the window first.")?;
+            (last.refs.get(id).cloned().ok_or("That control isn't in the last reading. Read the window again.")?, last.elements[id].clone())
+        };
+        let label = if el.name.is_empty() { format!("the {}", el.role) } else { format!("\"{}\"", el.name) };
+        match action.as_str() {
+            "focus" => {
+                let r2 = r.clone();
+                kwin::block(async move { bus::grab_focus(&r2).await })?;
+                Ok(ActResult { done: format!("Focused {label}."), verified: true, detail: String::new() })
+            }
+            "type" => {
+                let text = text.ok_or("say what to type")?;
+                if el.password {
+                    return Err("That's a password box. BEV never types passwords: please enter it yourself.".into());
+                }
+                let (r2, t2) = (r.clone(), text.clone());
+                let set = kwin::block(async move {
+                    let ok = bus::set_text(&r2, &t2).await.unwrap_or(false);
+                    let back = if ok { bus::get_text(&r2).await } else { None };
+                    (ok, back)
+                });
+                if set.0 {
+                    let ok = set.1.as_deref() == Some(text.as_str());
+                    return Ok(ActResult { done: format!("Typed into {label}."), verified: ok, detail: if ok { "The box now contains that text.".into() } else { "The box didn't read back the same text; check it.".into() } });
+                }
+                if let Some(why) = guard::game_blocks_input(crate::overlay::fullscreen_state()) {
+                    return Err(why.into());
+                }
+                let r2 = r.clone();
+                kwin::block(async move { bus::grab_focus(&r2).await })?;
+                std::thread::sleep(Duration::from_millis(80));
+                input::type_text(&text)?;
+                Ok(ActResult { done: format!("Typed into {label}."), verified: false, detail: "Typed as keystrokes; this box can't be read back.".into() })
+            }
+            verb @ ("click" | "toggle" | "select" | "expand" | "collapse") => {
+                let (r2, v) = (r.clone(), verb.to_string());
+                let done = kwin::block(async move {
+                    let names = bus::action_names(&r2).await;
+                    match atspi::pick_action(&names, &v) {
+                        Some(i) => bus::do_action(&r2, i).await.map(Some),
+                        None => Ok(None),
+                    }
+                })?;
+                if done == Some(true) {
+                    std::thread::sleep(Duration::from_millis(200));
+                    let detail = if verb == "toggle" {
+                        let r3 = r.clone();
+                        let st = kwin::block(async move { bus::state_of(&r3).await });
+                        format!("It's now {}.", if atspi::has(&st, 4) { "on" } else { "off" })
+                    } else {
+                        "The control accepted it.".into()
+                    };
+                    return Ok(ActResult { done: format!("{} {label}.", capital(verb)), verified: true, detail });
+                }
+                if verb != "click" && verb != "toggle" {
+                    return Err(format!("{label} can't be {verb}ed."));
+                }
+                // No usable action: a real click on its centre.
+                if let Some(why) = guard::game_blocks_input(crate::overlay::fullscreen_state()) {
+                    return Err(why.into());
+                }
+                let [x, y, w, h] = el.rect;
+                if w < 2 || h < 2 {
+                    return Err(format!("{label} has no position to click."));
+                }
+                input::click(x + w / 2, y + h / 2, false, false)?;
+                Ok(ActResult { done: format!("Clicked {label} with the mouse."), verified: false, detail: "It has no accessibility action, so BEV clicked its centre. Check the result if it matters.".into() })
+            }
+            other => Err(format!("unknown action \"{other}\" (use click, toggle, select, expand, collapse, focus or type)")),
+        }
+    }
+
+    fn capital(s: &str) -> String {
+        let past = match s {
+            "click" => "Clicked",
+            "toggle" => "Toggled",
+            "select" => "Selected",
+            "expand" => "Expanded",
+            _ => "Collapsed",
+        };
+        past.to_string()
+    }
+
+    /// What's under a point, from the last reading (AT-SPI can't hit-test
+    /// screen positions on Wayland).
+    pub fn element_at(x: i32, y: i32) -> Result<Option<PointInfo>, String> {
+        let g = LAST.lock().map_err(|_| "lock")?;
+        let Some(last) = g.as_ref() else { return Ok(None) };
+        Ok(last
+            .elements
+            .iter()
+            .filter(|e| {
+                let [l, t, w, h] = e.rect;
+                x >= l && y >= t && x < l + w && y < t + h
+            })
+            .min_by_key(|e| e.rect[2] as i64 * e.rect[3] as i64)
+            .map(|e| PointInfo { name: e.name.clone(), role: e.role, process: last.process.clone(), password: e.password }))
+    }
+
+    pub fn focused_is_password() -> Result<bool, String> {
+        let Ok(w) = target(None) else { return Ok(false) };
+        let (pid, title) = (w.pid, w.title);
+        Ok(kwin::block(async move {
+            match bus::window_for(pid, &title).await {
+                Ok(win) => bus::focused_is_password(&win).await,
+                Err(_) => false,
+            }
+        }))
+    }
+}
+
+#[cfg(not(any(windows, target_os = "linux")))]
 mod imp {
     use super::*;
-    const NO: &str = "reading app controls is Windows-only";
+    const NO: &str = "reading app controls isn't supported on this OS";
     pub fn read(_h: Option<isize>) -> Result<UiSnapshot, String> {
         Err(NO.into())
     }

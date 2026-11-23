@@ -6,6 +6,8 @@
 //! search or the Registry Editor; never into password boxes; no Win+R/Win+X;
 //! no input into an exclusive-fullscreen game.
 
+#[allow(dead_code)]
+pub mod atspi;
 pub mod elements;
 pub mod guard;
 pub mod input;
