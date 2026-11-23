@@ -128,12 +128,82 @@ mod imp {
     }
 }
 
-#[cfg(not(windows))]
+/// Group Tesseract's TSV word rows into lines (pure, tested on any OS).
+pub fn parse_tsv(tsv: &str, scale: f64, ox: i32, oy: i32) -> Vec<OcrLine> {
+    let mut lines: Vec<((u32, u32, u32, u32), Vec<OcrWord>)> = Vec::new();
+    for row in tsv.lines().skip(1) {
+        let c: Vec<&str> = row.split('\t').collect();
+        if c.len() < 12 || c[0] != "5" {
+            continue;
+        }
+        let text = c[11].trim();
+        let conf: f32 = c[10].parse().unwrap_or(-1.0);
+        if text.is_empty() || conf < 0.0 {
+            continue;
+        }
+        let n = |i: usize| c[i].parse::<f32>().unwrap_or(0.0);
+        let key = (n(1) as u32, n(2) as u32, n(3) as u32, n(4) as u32);
+        let word = OcrWord { text: text.to_string(), rect: to_desktop(n(6), n(7), n(8), n(9), scale, ox, oy) };
+        match lines.last_mut() {
+            Some((k, ws)) if *k == key => ws.push(word),
+            _ => lines.push((key, vec![word])),
+        }
+    }
+    lines
+        .into_iter()
+        .map(|(_, words)| OcrLine {
+            text: words.iter().map(|w| w.text.as_str()).collect::<Vec<_>>().join(" "),
+            rect: union(&words.iter().map(|w| w.rect).collect::<Vec<_>>()),
+            words,
+        })
+        .collect()
+}
+
+/// Linux: Tesseract (installed with BEV's RPM), run on this PC.
+#[cfg(target_os = "linux")]
+mod imp {
+    use super::super::win;
+    use super::*;
+    use crate::error::{BevError, BevResult};
+    use image::{imageops::FilterType, DynamicImage};
+
+    pub fn read(target: &str) -> BevResult<OcrResult> {
+        let (img, ox, oy, source) = match target {
+            "screen" => crate::screen::capture_raw("current")?,
+            "all" => crate::screen::capture_raw("all")?,
+            t if t.starts_with("window:") => crate::screen::capture_raw(t)?,
+            _ => {
+                let w = win::user_window().ok_or_else(|| BevError::NotFound("there's no window to read".into()))?;
+                let (i, x, y, _) = crate::screen::capture_window(w.hwnd)?;
+                (i, x, y, format!("{} ({})", w.title, w.process))
+            }
+        };
+        // Tesseract reads small UI text far better at 2x.
+        let scale = if img.width().max(img.height()) < 2000 { 2.0 } else { 1.0 };
+        let img = if scale > 1.0 {
+            DynamicImage::ImageRgba8(img.clone()).resize_exact(img.width() * 2, img.height() * 2, FilterType::Triangle).to_rgba8()
+        } else {
+            img
+        };
+        let stamp = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or(0);
+        let path = std::env::temp_dir().join(format!("bev-ocr-{stamp}.png"));
+        img.save(&path).map_err(|e| BevError::Os(format!("OCR image: {e}")))?;
+        let out = std::process::Command::new("tesseract").arg(&path).args(["-", "--psm", "3", "tsv"]).output();
+        let _ = std::fs::remove_file(&path);
+        let out = out.map_err(|_| BevError::NotFound("text recognition needs Tesseract: sudo dnf install tesseract".into()))?;
+        if !out.status.success() {
+            return Err(BevError::Os(format!("Tesseract failed: {}", String::from_utf8_lossy(&out.stderr).trim())));
+        }
+        Ok(OcrResult { source, lines: parse_tsv(&String::from_utf8_lossy(&out.stdout), scale, ox, oy) })
+    }
+}
+
+#[cfg(not(any(windows, target_os = "linux")))]
 mod imp {
     use super::*;
     use crate::error::{BevError, BevResult};
     pub fn read(_t: &str) -> BevResult<OcrResult> {
-        Err(BevError::Invalid("text recognition is Windows-only".into()))
+        Err(BevError::Invalid("text recognition isn't supported on this OS".into()))
     }
 }
 
@@ -153,5 +223,19 @@ mod tests {
     fn unions_boxes() {
         assert_eq!(union(&[[10, 10, 5, 5], [20, 8, 10, 4]]), [10, 8, 20, 7]);
         assert_eq!(union(&[]), [0, 0, 0, 0]);
+    }
+
+    #[test]
+    fn groups_tesseract_words_into_lines() {
+        let tsv = "level\tpage_num\tblock_num\tpar_num\tline_num\tword_num\tleft\ttop\twidth\theight\tconf\ttext\n\
+4\t1\t1\t1\t1\t0\t10\t10\t200\t20\t-1\t\n\
+5\t1\t1\t1\t1\t1\t10\t10\t80\t20\t95.1\tSave\n\
+5\t1\t1\t1\t1\t2\t100\t10\t110\t20\t93.0\tchanges?\n\
+5\t1\t1\t1\t2\t1\t10\t40\t60\t20\t90.0\tCancel\n";
+        let l = parse_tsv(tsv, 2.0, 100, 0);
+        assert_eq!(l.len(), 2);
+        assert_eq!(l[0].text, "Save changes?");
+        assert_eq!(l[0].words[0].rect, [105, 5, 40, 10]);
+        assert_eq!(l[1].text, "Cancel");
     }
 }

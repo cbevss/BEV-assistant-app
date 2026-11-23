@@ -430,42 +430,190 @@ mod imp {
     }
 }
 
-#[cfg(not(windows))]
+/// Pure parsers for `pactl -f json` output (unit-tested on any OS).
+pub mod pa {
+    use super::*;
+    use serde_json::Value;
+
+    /// Average of a PulseAudio volume object's channel percentages.
+    pub fn volume_percent(v: &Value) -> Option<f32> {
+        let chans = v.as_object()?;
+        let vals: Vec<f32> = chans
+            .values()
+            .filter_map(|c| c.get("value_percent")?.as_str()?.trim_end_matches('%').trim().parse().ok())
+            .collect();
+        (!vals.is_empty()).then(|| vals.iter().sum::<f32>() / vals.len() as f32)
+    }
+
+    fn prop<'a>(o: &'a Value, k: &str) -> Option<&'a str> {
+        o.get("properties")?.get(k)?.as_str()
+    }
+
+    pub fn outputs(json: &str, default: &str) -> Vec<OutputDevice> {
+        let v: Value = serde_json::from_str(json).unwrap_or(Value::Null);
+        v.as_array()
+            .map(|a| {
+                a.iter()
+                    .filter_map(|d| {
+                        let id = d.get("name")?.as_str()?.to_string();
+                        let name = d.get("description").and_then(Value::as_str).unwrap_or(&id).to_string();
+                        Some(OutputDevice { is_default: id == default, id, name })
+                    })
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
+    pub fn inputs(json: &str, default: &str) -> Vec<InputDevice> {
+        let v: Value = serde_json::from_str(json).unwrap_or(Value::Null);
+        v.as_array()
+            .map(|a| {
+                a.iter()
+                    .filter_map(|d| {
+                        let id = d.get("name")?.as_str()?.to_string();
+                        // Monitors of outputs aren't microphones.
+                        if id.ends_with(".monitor") || prop(d, "device.class") == Some("monitor") {
+                            return None;
+                        }
+                        Some(InputDevice {
+                            is_default: id == default,
+                            name: d.get("description").and_then(Value::as_str).unwrap_or(&id).to_string(),
+                            muted: d.get("mute").and_then(Value::as_bool),
+                            volume: d.get("volume").and_then(volume_percent).map(|p| p / 100.0),
+                            id,
+                        })
+                    })
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
+    /// App streams (sink-inputs) with their pactl index.
+    pub fn apps(json: &str) -> Vec<(u32, AppAudio)> {
+        let v: Value = serde_json::from_str(json).unwrap_or(Value::Null);
+        v.as_array()
+            .map(|a| {
+                a.iter()
+                    .filter_map(|d| {
+                        let idx = d.get("index")?.as_u64()? as u32;
+                        let app = prop(d, "application.name")
+                            .or_else(|| prop(d, "application.process.binary"))
+                            .or_else(|| prop(d, "node.name"))?
+                            .to_string();
+                        let pid = prop(d, "application.process.id").and_then(|p| p.parse().ok()).unwrap_or(0);
+                        Some((
+                            idx,
+                            AppAudio {
+                                app,
+                                pid,
+                                volume: d.get("volume").and_then(volume_percent).unwrap_or(100.0),
+                                muted: d.get("mute").and_then(Value::as_bool).unwrap_or(false),
+                            },
+                        ))
+                    })
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
+    /// "Volume: front-left: 26214 /  40% / ..." → 40.
+    pub fn first_percent(text: &str) -> Option<f32> {
+        let i = text.find('%')?;
+        let start = text[..i].rfind(|c: char| !c.is_ascii_digit() && c != '.').map(|j| j + 1).unwrap_or(0);
+        text[start..i].parse().ok()
+    }
+}
+
+#[cfg(target_os = "linux")]
 mod imp {
     use super::*;
-    pub fn list_apps() -> BevResult<Vec<AppAudio>> {
-        Err(BevError::Unsupported("audio control is Windows-only".into()))
+    use crate::linux::run;
+
+    fn pactl(args: &[&str]) -> BevResult<String> {
+        run("pactl", args).map_err(|e| BevError::Os(format!("{e} (BEV uses PipeWire's pactl for sound)")))
     }
-    pub fn set_app(_a: &str, _v: Option<f32>, _m: Option<bool>) -> BevResult<Vec<AppAudio>> {
-        Err(BevError::Unsupported("audio control is Windows-only".into()))
+    fn pct(p: f32) -> String {
+        format!("{}%", p.clamp(0.0, 150.0).round() as i32)
+    }
+
+    pub fn list_apps() -> BevResult<Vec<AppAudio>> {
+        Ok(pa::apps(&pactl(&["-f", "json", "list", "sink-inputs"])?).into_iter().map(|(_, a)| a).collect())
+    }
+    pub fn set_app(app: &str, volume: Option<f32>, muted: Option<bool>) -> BevResult<Vec<AppAudio>> {
+        let all = pa::apps(&pactl(&["-f", "json", "list", "sink-inputs"])?);
+        let hits: Vec<&(u32, AppAudio)> = all.iter().filter(|(_, a)| app_matches(&a.app, app)).collect();
+        if hits.is_empty() {
+            let playing: Vec<&str> = all.iter().map(|(_, a)| a.app.as_str()).collect();
+            return Err(BevError::NotFound(if playing.is_empty() {
+                format!("{app} isn't playing any sound right now")
+            } else {
+                format!("{app} isn't playing sound. Apps with sound: {}", playing.join(", "))
+            }));
+        }
+        for (idx, _) in &hits {
+            let i = idx.to_string();
+            if let Some(v) = volume {
+                pactl(&["set-sink-input-volume", &i, &pct(v)])?;
+            }
+            if let Some(m) = muted {
+                pactl(&["set-sink-input-mute", &i, if m { "1" } else { "0" }])?;
+            }
+        }
+        list_apps().map(|l| l.into_iter().filter(|a| app_matches(&a.app, app)).collect())
     }
     pub fn get() -> BevResult<f32> {
-        Err(BevError::Unsupported("audio control is Windows-only".into()))
+        pa::first_percent(&pactl(&["get-sink-volume", "@DEFAULT_SINK@"])?).ok_or_else(|| BevError::Os("couldn't read the volume".into()))
     }
-    pub fn set(_p: f32) -> BevResult<()> {
-        Err(BevError::Unsupported("audio control is Windows-only".into()))
+    pub fn set(p: f32) -> BevResult<()> {
+        pactl(&["set-sink-volume", "@DEFAULT_SINK@", &pct(p.min(100.0))]).map(|_| ())
     }
-    pub fn set_mute(_m: bool) -> BevResult<()> {
-        Err(BevError::Unsupported("audio control is Windows-only".into()))
+    pub fn set_mute(m: bool) -> BevResult<()> {
+        pactl(&["set-sink-mute", "@DEFAULT_SINK@", if m { "1" } else { "0" }]).map(|_| ())
     }
     pub fn muted() -> BevResult<bool> {
-        Err(BevError::Unsupported("audio control is Windows-only".into()))
+        Ok(pactl(&["get-sink-mute", "@DEFAULT_SINK@"])?.to_lowercase().contains("yes"))
     }
     pub fn list_outputs() -> BevResult<Vec<OutputDevice>> {
-        Err(BevError::Unsupported("audio control is Windows-only".into()))
+        let def = pactl(&["get-default-sink"])?.trim().to_string();
+        Ok(pa::outputs(&pactl(&["-f", "json", "list", "sinks"])?, &def))
     }
-    pub fn set_output(_id: &str) -> BevResult<()> {
-        Err(BevError::Unsupported("audio control is Windows-only".into()))
+    pub fn set_output(id: &str) -> BevResult<()> {
+        pactl(&["set-default-sink", id]).map(|_| ())
     }
     pub fn list_inputs() -> BevResult<Vec<InputDevice>> {
-        Err(BevError::Unsupported("audio control is Windows-only".into()))
+        let def = pactl(&["get-default-source"])?.trim().to_string();
+        Ok(pa::inputs(&pactl(&["-f", "json", "list", "sources"])?, &def))
     }
-    pub fn set_default_input(_id: &str) -> BevResult<()> {
-        Err(BevError::Unsupported("audio control is Windows-only".into()))
+    pub fn set_default_input(id: &str) -> BevResult<()> {
+        pactl(&["set-default-source", id]).map(|_| ())
     }
-    pub fn set_input_level(_id: &str, _v: Option<f32>, _m: Option<bool>) -> BevResult<()> {
-        Err(BevError::Unsupported("audio control is Windows-only".into()))
+    pub fn set_input_level(id: &str, volume: Option<f32>, muted: Option<bool>) -> BevResult<()> {
+        if let Some(v) = volume {
+            // Callers pass 0..1 like Windows.
+            pactl(&["set-source-volume", id, &pct(v * 100.0)])?;
+        }
+        if let Some(m) = muted {
+            pactl(&["set-source-mute", id, if m { "1" } else { "0" }])?;
+        }
+        Ok(())
     }
+}
+
+#[cfg(not(any(windows, target_os = "linux")))]
+mod imp {
+    use super::*;
+    const NO: &str = "audio control isn't supported on this OS";
+    pub fn list_apps() -> BevResult<Vec<AppAudio>> { Err(BevError::Unsupported(NO.into())) }
+    pub fn set_app(_a: &str, _v: Option<f32>, _m: Option<bool>) -> BevResult<Vec<AppAudio>> { Err(BevError::Unsupported(NO.into())) }
+    pub fn get() -> BevResult<f32> { Err(BevError::Unsupported(NO.into())) }
+    pub fn set(_p: f32) -> BevResult<()> { Err(BevError::Unsupported(NO.into())) }
+    pub fn set_mute(_m: bool) -> BevResult<()> { Err(BevError::Unsupported(NO.into())) }
+    pub fn muted() -> BevResult<bool> { Err(BevError::Unsupported(NO.into())) }
+    pub fn list_outputs() -> BevResult<Vec<OutputDevice>> { Err(BevError::Unsupported(NO.into())) }
+    pub fn set_output(_id: &str) -> BevResult<()> { Err(BevError::Unsupported(NO.into())) }
+    pub fn list_inputs() -> BevResult<Vec<InputDevice>> { Err(BevError::Unsupported(NO.into())) }
+    pub fn set_default_input(_id: &str) -> BevResult<()> { Err(BevError::Unsupported(NO.into())) }
+    pub fn set_input_level(_id: &str, _v: Option<f32>, _m: Option<bool>) -> BevResult<()> { Err(BevError::Unsupported(NO.into())) }
 }
 
 /// Recording devices with Windows' mute state and input level.
@@ -556,5 +704,35 @@ mod app_tests {
         assert!(!app_matches("vlc", "valorant"));
         assert!(!app_matches("Spotify", ""));
         assert!(!app_matches("pid 5", "chrome"));
+    }
+}
+
+#[cfg(test)]
+mod pa_tests {
+    use super::pa;
+    const SINK_INPUTS: &str = r#"[{"index":42,"mute":false,"volume":{"front-left":{"value":26214,"value_percent":"40%"},"front-right":{"value":26214,"value_percent":"40%"}},"properties":{"application.name":"Spotify","application.process.id":"1234"}}]"#;
+    #[test]
+    fn parses_app_streams() {
+        let a = pa::apps(SINK_INPUTS);
+        assert_eq!(a.len(), 1);
+        assert_eq!(a[0].0, 42);
+        assert_eq!(a[0].1.app, "Spotify");
+        assert_eq!(a[0].1.pid, 1234);
+        assert_eq!(a[0].1.volume, 40.0);
+    }
+    #[test]
+    fn parses_devices_and_skips_monitors() {
+        let sinks = r#"[{"name":"alsa_output.hdmi","description":"HDMI"},{"name":"bluez_output.x","description":"Headset"}]"#;
+        let o = pa::outputs(sinks, "bluez_output.x");
+        assert!(o[1].is_default && !o[0].is_default);
+        let sources = r#"[{"name":"alsa_output.hdmi.monitor","description":"Monitor of HDMI"},{"name":"alsa_input.usb","description":"USB Mic","mute":true,"volume":{"mono":{"value_percent":"80%"}}}]"#;
+        let i = pa::inputs(sources, "alsa_input.usb");
+        assert_eq!(i.len(), 1);
+        assert_eq!(i[0].muted, Some(true));
+        assert_eq!(i[0].volume, Some(0.8));
+    }
+    #[test]
+    fn reads_volume_text() {
+        assert_eq!(pa::first_percent("Volume: front-left: 26214 /  40% / -23.88 dB,   front-right: 26214 /  40%"), Some(40.0));
     }
 }

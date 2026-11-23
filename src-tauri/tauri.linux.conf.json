@@ -5,7 +5,7 @@
     "targets": ["rpm", "appimage"],
     "linux": {
       "rpm": {
-        "depends": ["webkit2gtk4.1", "libayatana-appindicator-gtk3", "xdg-utils", "pipewire"],
+        "depends": ["webkit2gtk4.1", "libayatana-appindicator-gtk3", "xdg-utils", "pipewire", "pulseaudio-utils", "tesseract", "tesseract-langpack-eng"],
         "desktopTemplate": "linux/bev.desktop"
       },
       "appimage": {

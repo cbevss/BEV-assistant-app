@@ -53,6 +53,17 @@ pub fn from_percent(min: u32, max: u32, pct: u32) -> u32 {
     min + ((max - min) as f64 * pct.min(100) as f64 / 100.0).round() as u32
 }
 
+/// A Linux power profile, named like Windows' plans so pick_plan works.
+pub fn profile(id: &str, active: bool) -> PowerPlan {
+    let name = match id {
+        "performance" => "High performance",
+        "balanced" => "Balanced",
+        "power-saver" => "Power saver",
+        other => other,
+    };
+    PowerPlan { id: id.to_string(), name: name.to_string(), active }
+}
+
 #[cfg(windows)]
 mod win {
     use super::*;
@@ -211,8 +222,13 @@ pub fn power_plans() -> BevResult<Vec<PowerPlan>> {
     {
         Ok(win::plans().into_iter().map(|p| p.1).collect())
     }
-    #[cfg(not(windows))]
-    Err(BevError::Unsupported("power plans are Windows-only".into()))
+    #[cfg(target_os = "linux")]
+    {
+        let (ids, active) = crate::kwin::power_profiles().map_err(BevError::Unsupported)?;
+        Ok(ids.into_iter().map(|id| profile(&id, id == active)).collect())
+    }
+    #[cfg(not(any(windows, target_os = "linux")))]
+    Err(BevError::Unsupported("power plans aren't supported on this OS".into()))
 }
 
 #[tauri::command]
@@ -230,10 +246,19 @@ pub fn set_power_plan(name: String) -> BevResult<String> {
         }
         Ok(format!("power plan set to {}", p.name))
     }
-    #[cfg(not(windows))]
+    #[cfg(target_os = "linux")]
+    {
+        let list = power_plans()?;
+        let Some(p) = pick_plan(&list, &name) else {
+            return Err(BevError::NotFound(format!("no power profile called \"{name}\"; this PC has: {}", list.iter().map(|p| p.name.as_str()).collect::<Vec<_>>().join(", "))));
+        };
+        crate::kwin::set_power_profile(&p.id).map_err(BevError::Os)?;
+        Ok(format!("power profile set to {}", p.name))
+    }
+    #[cfg(not(any(windows, target_os = "linux")))]
     {
         let _ = name;
-        Err(BevError::Unsupported("power plans are Windows-only".into()))
+        Err(BevError::Unsupported("power plans aren't supported on this OS".into()))
     }
 }
 
@@ -247,8 +272,21 @@ pub async fn monitor_brightness() -> BevResult<Vec<MonitorBrightness>> {
         .await
         .map_err(|e| BevError::Os(e.to_string()))
     }
-    #[cfg(not(windows))]
-    Err(BevError::Unsupported("brightness is Windows-only".into()))
+    #[cfg(target_os = "linux")]
+    {
+        tauri::async_runtime::spawn_blocking(|| {
+            crate::kwin::displays().map_err(BevError::Unsupported).map(|ds| {
+                ds.into_iter()
+                    .enumerate()
+                    .map(|(index, d)| MonitorBrightness { index, name: d.label, percent: to_percent(0, d.brightness.max(0) as u32, d.max.max(0) as u32) })
+                    .collect()
+            })
+        })
+        .await
+        .map_err(|e| BevError::Os(e.to_string()))?
+    }
+    #[cfg(not(any(windows, target_os = "linux")))]
+    Err(BevError::Unsupported("brightness isn't supported on this OS".into()))
 }
 
 /// Set brightness on one monitor (index) or all that support it.
@@ -272,10 +310,32 @@ pub async fn set_monitor_brightness(percent: u32, index: Option<usize>) -> BevRe
         }
         Ok(format!("brightness set to {}% on {} monitor{}", percent.min(100), changed.len(), if changed.len() == 1 { "" } else { "s" }))
     }
-    #[cfg(not(windows))]
+    #[cfg(target_os = "linux")]
+    {
+        let changed = tauri::async_runtime::spawn_blocking(move || -> BevResult<usize> {
+            let ds = crate::kwin::displays().map_err(BevError::Unsupported)?;
+            let mut n = 0;
+            for (i, d) in ds.iter().enumerate() {
+                if index.is_some_and(|w| w != i) || d.max <= 0 {
+                    continue;
+                }
+                if crate::kwin::set_display_brightness(&d.path, from_percent(0, d.max as u32, percent) as i32).is_ok() {
+                    n += 1;
+                }
+            }
+            Ok(n)
+        })
+        .await
+        .map_err(|e| BevError::Os(e.to_string()))??;
+        if changed == 0 {
+            return Err(BevError::Unsupported("no screen accepted a brightness change. External monitors need DDC/CI on in their own menu, and Plasma needs ddcutil access".into()));
+        }
+        Ok(format!("brightness set to {}% on {} screen{}", percent.min(100), changed, if changed == 1 { "" } else { "s" }))
+    }
+    #[cfg(not(any(windows, target_os = "linux")))]
     {
         let _ = (percent, index);
-        Err(BevError::Unsupported("brightness is Windows-only".into()))
+        Err(BevError::Unsupported("brightness isn't supported on this OS".into()))
     }
 }
 
@@ -300,10 +360,16 @@ pub fn set_theme(dark: bool) -> BevResult<String> {
         unsafe { SendMessageTimeoutW(HWND_BROADCAST, WM_SETTINGCHANGE, WPARAM(0), LPARAM(topic.as_ptr() as isize), SMTO_ABORTIFHUNG, 1000, None) };
         Ok(if dark { "dark mode on".into() } else { "light mode on".into() })
     }
-    #[cfg(not(windows))]
+    #[cfg(target_os = "linux")]
+    {
+        let scheme = if dark { "BreezeDark" } else { "BreezeLight" };
+        crate::linux::run("plasma-apply-colorscheme", &[scheme])?;
+        Ok(if dark { "dark mode on".into() } else { "light mode on".into() })
+    }
+    #[cfg(not(any(windows, target_os = "linux")))]
     {
         let _ = dark;
-        Err(BevError::Unsupported("themes are Windows-only".into()))
+        Err(BevError::Unsupported("themes aren't supported on this OS".into()))
     }
 }
 
@@ -367,8 +433,13 @@ pub fn set_wallpaper(path: String) -> BevResult<String> {
         unsafe { SystemParametersInfoW(SPI_SETDESKWALLPAPER, 0, Some(wide.as_mut_ptr().cast()), SPIF_UPDATEINIFILE | SPIF_SENDCHANGE) }.map_err(|e| BevError::Os(format!("couldn't set the wallpaper: {e}")))?;
         Ok(format!("wallpaper set to {}", p.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default()))
     }
-    #[cfg(not(windows))]
-    Err(BevError::Unsupported("wallpaper is Windows-only".into()))
+    #[cfg(target_os = "linux")]
+    {
+        crate::linux::run("plasma-apply-wallpaperimage", &[&p.to_string_lossy()])?;
+        Ok(format!("wallpaper set to {}", p.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default()))
+    }
+    #[cfg(not(any(windows, target_os = "linux")))]
+    Err(BevError::Unsupported("wallpaper isn't supported on this OS".into()))
 }
 
 #[tauri::command]
@@ -382,8 +453,13 @@ pub fn empty_recycle_bin() -> BevResult<String> {
         })?;
         Ok("Recycle Bin emptied".into())
     }
-    #[cfg(not(windows))]
-    Err(BevError::Unsupported("the Recycle Bin is Windows-only".into()))
+    #[cfg(target_os = "linux")]
+    {
+        crate::linux::run("gio", &["trash", "--empty"])?;
+        Ok("Trash emptied".into())
+    }
+    #[cfg(not(any(windows, target_os = "linux")))]
+    Err(BevError::Unsupported("the Recycle Bin isn't supported on this OS".into()))
 }
 
 #[cfg(test)]
@@ -392,6 +468,14 @@ mod tests {
 
     fn plan(name: &str) -> PowerPlan {
         PowerPlan { id: name.into(), name: name.into(), active: false }
+    }
+
+    #[test]
+    fn reads_linux_power_profiles() {
+        let ps: Vec<PowerPlan> = [("performance", false), ("balanced", true), ("power-saver", false)].iter().map(|(i, a)| profile(i, *a)).collect();
+        assert_eq!(ps.len(), 3);
+        assert!(ps[1].active && ps[1].name == "Balanced");
+        assert_eq!(pick_plan(&ps, "gaming").unwrap().id, "performance");
     }
 
     #[test]

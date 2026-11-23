@@ -306,6 +306,10 @@ pub async fn gpu_stats() -> BevResult<GpuStats> {
                 }
             }
         }
+        #[cfg(target_os = "linux")]
+        {
+            s = linux_stats(std::path::Path::new("/sys/class/drm")).unwrap_or_default();
+        }
         s
     })
     .await
@@ -328,8 +332,94 @@ pub fn running_game() -> Option<RunningGame> {
         let name = crate::games::list_games().ok().and_then(|gs| gs.into_iter().find(|g| g.id == id).map(|g| g.name));
         Some(RunningGame { id, name })
     }
-    #[cfg(not(windows))]
+    #[cfg(target_os = "linux")]
+    {
+        let home = crate::linux::home();
+        let reg = [home.join(".steam/registry.vdf"), home.join(".var/app/com.valvesoftware.Steam/.steam/registry.vdf")]
+            .into_iter()
+            .find_map(|p| std::fs::read_to_string(p).ok())?;
+        let id = crate::games::vdf_pairs(&reg).into_iter().find(|(k, _)| k.eq_ignore_ascii_case("RunningAppID")).map(|(_, v)| v)?;
+        if id == "0" || id.is_empty() {
+            return None;
+        }
+        let name = crate::games::list_games().ok().and_then(|gs| gs.into_iter().find(|g| g.id == id).map(|g| g.name));
+        Some(RunningGame { id, name })
+    }
+    #[cfg(not(any(windows, target_os = "linux")))]
     None
+}
+
+/// Linux GPU readings from the kernel driver's sysfs files (amdgpu gives
+/// everything; other drivers give what they expose). `drm` is /sys/class/drm.
+pub fn linux_stats(drm: &std::path::Path) -> Option<GpuStats> {
+    let read = |p: std::path::PathBuf| std::fs::read_to_string(p).ok().map(|s| s.trim().to_string());
+    let num = |p: std::path::PathBuf| read(p).and_then(|s| s.parse::<u64>().ok());
+    let mut cards: Vec<std::path::PathBuf> = std::fs::read_dir(drm)
+        .ok()?
+        .flatten()
+        .map(|e| e.path())
+        .filter(|p| p.file_name().and_then(|n| n.to_str()).is_some_and(|n| n.starts_with("card") && !n.contains('-')))
+        .collect();
+    cards.sort();
+    // Prefer the card with a usage counter and the most video memory (the dGPU).
+    let dev = cards
+        .iter()
+        .map(|c| c.join("device"))
+        .filter(|d| d.join("vendor").exists())
+        .max_by_key(|d| (d.join("gpu_busy_percent").exists(), num(d.join("mem_info_vram_total")).unwrap_or(0)))?;
+    let mut s = GpuStats::default();
+    let vendor = read(dev.join("vendor")).unwrap_or_default();
+    s.name = read(dev.join("product_name")).filter(|n| !n.is_empty()).or_else(|| {
+        Some(match vendor.as_str() {
+            "0x1002" => "AMD Radeon".to_string(),
+            "0x10de" => "NVIDIA GPU".to_string(),
+            "0x8086" => "Intel graphics".to_string(),
+            _ => return None,
+        })
+    });
+    s.usage = num(dev.join("gpu_busy_percent")).map(|v| v as f32);
+    s.vram_total_mb = num(dev.join("mem_info_vram_total")).map(|b| b / 1_048_576);
+    s.vram_used_mb = num(dev.join("mem_info_vram_used")).map(|b| b / 1_048_576);
+    if let Some(hw) = std::fs::read_dir(dev.join("hwmon")).ok().and_then(|mut r| r.next()).and_then(|e| e.ok()).map(|e| e.path()) {
+        let temp = |n: &str| num(hw.join(n)).map(|m| m as f32 / 1000.0).filter(|t| *t > 0.0 && *t < 150.0);
+        s.temp_c = temp("temp1_input");
+        s.hotspot_c = temp("temp2_input");
+        s.mem_temp_c = temp("temp3_input");
+        s.clock_mhz = num(hw.join("freq1_input")).map(|hz| (hz / 1_000_000) as u32).filter(|m| *m > 0);
+        s.mem_clock_mhz = num(hw.join("freq2_input")).map(|hz| (hz / 1_000_000) as u32).filter(|m| *m > 0);
+        s.fan_rpm = num(hw.join("fan1_input")).map(|r| r as u32).filter(|r| *r < 10_000);
+        s.fan_percent = num(hw.join("pwm1")).map(|p| ((p.min(255) * 100 + 127) / 255) as u32);
+        s.power_w = num(hw.join("power1_average")).or_else(|| num(hw.join("power1_input"))).map(|uw| (uw / 1_000_000) as u32).filter(|w| *w > 0 && *w < 1000);
+    }
+    Some(s)
+}
+
+#[cfg(test)]
+mod linux_tests {
+    #[test]
+    fn reads_amdgpu_sysfs() {
+        let root = std::env::temp_dir().join(format!("bev-drm-{}", std::process::id()));
+        let dev = root.join("card1/device");
+        let hw = dev.join("hwmon/hwmon3");
+        std::fs::create_dir_all(&hw).unwrap();
+        std::fs::create_dir_all(root.join("card1-DP-1")).unwrap();
+        for (f, v) in [("vendor", "0x1002"), ("gpu_busy_percent", "37"), ("mem_info_vram_total", "17163091968"), ("mem_info_vram_used", "2147483648")] {
+            std::fs::write(dev.join(f), v).unwrap();
+        }
+        for (f, v) in [("temp1_input", "54000"), ("temp2_input", "71000"), ("freq1_input", "2650000000"), ("fan1_input", "1200"), ("pwm1", "128"), ("power1_average", "145000000")] {
+            std::fs::write(hw.join(f), v).unwrap();
+        }
+        let s = super::linux_stats(&root).unwrap();
+        assert_eq!(s.usage, Some(37.0));
+        assert_eq!(s.vram_used_mb, Some(2048));
+        assert_eq!(s.temp_c, Some(54.0));
+        assert_eq!(s.hotspot_c, Some(71.0));
+        assert_eq!(s.clock_mhz, Some(2650));
+        assert_eq!(s.fan_percent, Some(50));
+        assert_eq!(s.power_w, Some(145));
+        assert_eq!(s.name.as_deref(), Some("AMD Radeon"));
+        let _ = std::fs::remove_dir_all(&root);
+    }
 }
 
 #[cfg(test)]
