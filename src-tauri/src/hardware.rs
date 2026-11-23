@@ -328,10 +328,28 @@ pub fn media_key(action: String) -> BevResult<String> {
         }
         Ok(format!("pressed {}", action.replace('_', "/")))
     }
-    #[cfg(not(windows))]
+    #[cfg(target_os = "linux")]
+    {
+        let method = match action.as_str() {
+            "play_pause" => "PlayPause",
+            "next" => "Next",
+            "previous" => "Previous",
+            _ => "Stop",
+        };
+        match crate::kwin::mpris(method) {
+            Ok(player) => Ok(format!("{} on {player}", action.replace('_', "/"))),
+            // No MPRIS player: fall back to pressing the media key.
+            Err(_) => {
+                let combo = crate::control::keys::Combo { mods: vec![], key: Some(vk), text: action.clone() };
+                crate::control::input::press(&[combo]).map_err(BevError::Os)?;
+                Ok(format!("pressed {}", action.replace('_', "/")))
+            }
+        }
+    }
+    #[cfg(not(any(windows, target_os = "linux")))]
     {
         let _ = vk;
-        Err(BevError::Unsupported("media keys are Windows-only".into()))
+        Err(BevError::Unsupported("media keys aren't supported on this OS".into()))
     }
 }
 

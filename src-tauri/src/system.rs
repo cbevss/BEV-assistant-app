@@ -115,9 +115,7 @@ pub fn take_screenshot(monitor: Option<usize>) -> BevResult<String> {
     let m = monitors
         .get(idx)
         .ok_or_else(|| BevError::Invalid(format!("monitor {idx} does not exist (have {})", monitors.len())))?;
-    let img = m
-        .capture_image()
-        .map_err(|e| BevError::Os(format!("capture: {e}")))?;
+    let img = crate::screen::grab(m)?;
     let stamp = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_millis())

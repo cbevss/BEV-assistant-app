@@ -24,6 +24,8 @@ mod cleanup;
 mod journal;
 #[cfg(target_os = "linux")]
 mod linux;
+#[cfg(target_os = "linux")]
+mod kwin;
 mod games;
 mod overlay;
 mod replay;

@@ -115,7 +115,34 @@ mod imp {
     }
 }
 
-#[cfg(not(windows))]
+#[cfg(target_os = "linux")]
+mod imp {
+    use super::WinInfo;
+    use crate::kwin::{self, KWindow};
+
+    fn info(w: &KWindow) -> WinInfo {
+        WinInfo { hwnd: w.handle(), title: w.title.clone(), class: w.cls.clone(), process: w.process(), pid: w.pid }
+    }
+    pub fn foreground() -> Option<WinInfo> {
+        kwin::active().ok().flatten().map(|w| info(&w))
+    }
+    /// The window the user was working in: the active one, or (when BEV is
+    /// in front) the topmost visible app window.
+    pub fn user_window() -> Option<WinInfo> {
+        let me = std::process::id();
+        let list = kwin::windows().ok()?;
+        list.iter().find(|w| w.active && w.pid != me && !w.min && !w.title.is_empty())
+            .or_else(|| list.iter().find(|w| w.pid != me && !w.min && !w.title.is_empty()))
+            .map(info)
+    }
+    pub fn window_rect(hwnd: isize) -> Option<super::WinRect> {
+        let id = kwin::uuid_for(hwnd)?;
+        let w = kwin::windows().ok()?.into_iter().find(|w| w.id == id)?;
+        Some(super::WinRect { left: w.x, top: w.y, right: w.x + w.w, bottom: w.y + w.h, minimized: w.min, title: w.title })
+    }
+}
+
+#[cfg(not(any(windows, target_os = "linux")))]
 mod imp {
     use super::WinInfo;
     pub fn foreground() -> Option<WinInfo> {

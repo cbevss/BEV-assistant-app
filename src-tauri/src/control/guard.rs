@@ -51,6 +51,17 @@ pub fn typing_blocked(process: &str, class: &str, title: &str) -> Option<String>
         };
         return Some(format!("BEV doesn't type into {what}. Open a normal app, or do this part yourself."));
     }
+    // Linux: terminals, KRunner (runs what's typed) and auth prompts.
+    const LINUX_TERMINALS: &[&str] = &[
+        "konsole", "yakuake", "gnome-terminal-", "gnome-terminal", "kgx", "ptyxis", "kitty", "alacritty", "foot", "xterm", "wezterm-gui", "tilix", "terminator", "guake",
+    ];
+    let c = class.to_ascii_lowercase();
+    if LINUX_TERMINALS.iter().any(|t| p == *t || c == *t || c == format!("org.kde.{t}")) {
+        return Some("BEV doesn't type into a terminal (typed text there runs as a command). Open a normal app, or do this part yourself.".into());
+    }
+    if ["krunner", "polkit-kde-authentication-agent-1", "polkit-kde-auth"].contains(&p) || c == "org.kde.krunner" || c.contains("polkit") {
+        return Some("BEV doesn't type into KRunner or password prompts. Do this part yourself.".into());
+    }
     if class == "#32770" && title.trim().eq_ignore_ascii_case("run") {
         return Some("BEV doesn't type into the Run box: typed text there runs as a command.".into());
     }
@@ -116,6 +127,9 @@ mod tests {
         assert!(typing_blocked("explorer.exe", "#32770", "Run").is_some());
         assert!(typing_blocked("notepad.exe", "Notepad", "Untitled").is_none());
         assert!(typing_blocked("explorer.exe", "#32770", "Properties").is_none());
+        assert!(typing_blocked("konsole", "org.kde.konsole", "~ : bash").is_some());
+        assert!(typing_blocked("krunner", "org.kde.krunner", "").is_some());
+        assert!(typing_blocked("kate", "org.kde.kate", "notes.txt").is_none());
     }
 
     #[test]
