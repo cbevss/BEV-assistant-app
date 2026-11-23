@@ -102,7 +102,7 @@ describe("Discord", () => {
   });
 });
 
-import { describeOverview, describeConfig, noticeFor } from "./bevbot";
+import { describeOverview, describeConfig, noticeFor, describePrices } from "./bevbot";
 describe("BEV bot owner link", () => {
   it("summarises the bot", () => {
     const t = describeOverview({ online: true, version: "4.81", uptime_s: 90000, latency_ms: 40, server_count: 2, member_count: 1500, servers: [{ id: "123456", name: "Hub", members: 1000 }, { id: "234567", name: "Test", members: 500 }], global_off: ["economy"], recent_errors: [] });
@@ -121,5 +121,9 @@ describe("BEV bot owner link", () => {
   it("groups repeated errors into one notice key", () => {
     expect(noticeFor({ id: 1, kind: "error", text: "KeyError: x" }).key).toBe(noticeFor({ id: 2, kind: "error", text: "KeyError: x" }).key);
     expect(noticeFor({ id: 3, kind: "server", text: "joined" }).key).not.toBe(noticeFor({ id: 4, kind: "server", text: "joined" }).key);
+    expect(noticeFor({ id: 5, kind: "price", text: "Price drop: Lamp is now £39.99" }).title).toBe("Price drop");
+    expect(noticeFor({ id: 6, kind: "price", text: "Now tracking Lamp" }).title).toBe("Price tracker");
+    expect(describePrices([])).toContain("isn't tracking");
+    expect(describePrices([{ id: 3, name: "Lamp", url: "https://s.com/l", price_text: "£49.99", target: 40, lowest: 49.99, currency: "GBP", problem: null }])).toBe("#3 Lamp: £49.99 (target 40) https://s.com/l");
   });
 });
