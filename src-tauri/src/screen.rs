@@ -89,6 +89,18 @@ fn capture_blocking(target: &str) -> BevResult<ScreenCapture> {
 /// on it can be mapped back to the desktop.
 pub(crate) static LAST_SHOT: std::sync::Mutex<Option<crate::control::guard::ShotGeom>> = std::sync::Mutex::new(None);
 
+/// Capture one monitor. On KDE Wayland, KWin's own screenshot interface is
+/// tried first (silent, no portal prompt); xcap is the fallback.
+pub(crate) fn grab(m: &xcap::Monitor) -> BevResult<RgbaImage> {
+    #[cfg(target_os = "linux")]
+    if let Ok(name) = m.name() {
+        if let Ok(img) = crate::kwin::capture_screen(&name) {
+            return Ok(img);
+        }
+    }
+    m.capture_image().map_err(|e| BevError::Os(format!("capture: {e}")))
+}
+
 /// Full-resolution capture plus its top-left desktop position.
 pub(crate) fn capture_raw(target: &str) -> BevResult<(RgbaImage, i32, i32, String)> {
     let monitors = xcap::Monitor::all().map_err(os("monitors"))?;
@@ -98,7 +110,7 @@ pub(crate) fn capture_raw(target: &str) -> BevResult<(RgbaImage, i32, i32, Strin
     let n = monitors.len();
     let one = |i: usize| -> BevResult<(RgbaImage, i32, i32, String)> {
         let m = &monitors[i];
-        Ok((m.capture_image().map_err(os("capture"))?, m.x().unwrap_or(0), m.y().unwrap_or(0), describe(m, i, n)))
+        Ok((grab(m)?, m.x().unwrap_or(0), m.y().unwrap_or(0), describe(m, i, n)))
     };
     if let Some(h) = target.strip_prefix("window:").and_then(|h| h.parse::<isize>().ok()) {
         return capture_window(h);
@@ -153,7 +165,7 @@ pub(crate) fn capture_at(x: i32, y: i32) -> BevResult<(RgbaImage, i32, i32)> {
         })
         .or_else(|| monitors.first())
         .ok_or_else(|| BevError::NotFound("no displays found".into()))?;
-    Ok((m.capture_image().map_err(os("capture"))?, m.x().unwrap_or(0), m.y().unwrap_or(0)))
+    Ok((grab(m)?, m.x().unwrap_or(0), m.y().unwrap_or(0)))
 }
 
 /// Stitch every display onto one canvas using their desktop positions.
@@ -161,7 +173,7 @@ fn capture_all(monitors: &[xcap::Monitor]) -> BevResult<(RgbaImage, i32, i32, St
     let mut shots = Vec::with_capacity(monitors.len());
     for m in monitors {
         let (x, y) = (m.x().unwrap_or(0), m.y().unwrap_or(0));
-        shots.push((x, y, m.capture_image().map_err(os("capture"))?));
+        shots.push((x, y, grab(m)?));
     }
     let min_x = shots.iter().map(|s| s.0).min().unwrap_or(0);
     let min_y = shots.iter().map(|s| s.1).min().unwrap_or(0);
@@ -251,7 +263,15 @@ mod imp {
     }
 }
 
-#[cfg(not(windows))]
+#[cfg(target_os = "linux")]
+mod imp {
+    use super::*;
+    pub fn foreground() -> BevResult<Option<ForegroundWindow>> {
+        Ok(crate::control::win::foreground().map(|w| ForegroundWindow { title: w.title, process: w.process }))
+    }
+}
+
+#[cfg(not(any(windows, target_os = "linux")))]
 mod imp {
     use super::*;
     pub fn foreground() -> BevResult<Option<ForegroundWindow>> {

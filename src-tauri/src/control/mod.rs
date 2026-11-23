@@ -10,6 +10,8 @@ pub mod elements;
 pub mod guard;
 pub mod input;
 pub mod keys;
+#[cfg(target_os = "linux")]
+pub mod portal;
 pub mod ocr;
 pub mod recorder;
 pub mod uia;

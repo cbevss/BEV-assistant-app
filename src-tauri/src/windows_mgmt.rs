@@ -206,7 +206,63 @@ mod imp {
     }
 }
 
-#[cfg(not(windows))]
+#[cfg(target_os = "linux")]
+mod imp {
+    use super::*;
+    use crate::kwin;
+
+    fn os(e: String) -> BevError {
+        BevError::Os(e)
+    }
+    pub fn list() -> BevResult<Vec<WinInfo>> {
+        let me = std::process::id();
+        Ok(kwin::windows()
+            .map_err(os)?
+            .into_iter()
+            .filter(|w| w.pid != me && !w.title.is_empty())
+            .map(|w| WinInfo {
+                hwnd: w.handle(),
+                process: w.process(),
+                display: if w.min || w.screen < 0 { String::new() } else { format!("display {} of {}", w.screen + 1, w.screens) },
+                minimized: w.min,
+                title: w.title,
+            })
+            .collect())
+    }
+    pub fn focus(h: isize) -> BevResult<()> {
+        kwin::focus(h).map_err(os)
+    }
+    pub fn placements() -> BevResult<Vec<Placement>> {
+        let me = std::process::id();
+        Ok(kwin::windows()
+            .map_err(os)?
+            .into_iter()
+            .filter(|w| w.pid != me && !w.title.is_empty())
+            .map(|w| Placement {
+                hwnd: w.handle(),
+                process: w.process(),
+                state: if w.min { "minimized".into() } else { "normal".into() },
+                title: w.title,
+                x: w.x,
+                y: w.y,
+                w: w.w,
+                h: w.h,
+            })
+            .collect())
+    }
+    pub fn place(h: isize, x: i32, y: i32, w: i32, hh: i32, s: &str) -> BevResult<()> {
+        kwin::place(h, x, y, w, hh, s).map_err(os)
+    }
+    pub fn work_areas() -> Vec<WorkArea> {
+        kwin::work_areas()
+            .unwrap_or_default()
+            .into_iter()
+            .map(|a| WorkArea { x: a.x, y: a.y, w: a.w, h: a.h, primary: a.primary })
+            .collect()
+    }
+}
+
+#[cfg(not(any(windows, target_os = "linux")))]
 mod imp {
     use super::*;
     pub fn list() -> BevResult<Vec<WinInfo>> {

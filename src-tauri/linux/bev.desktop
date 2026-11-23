@@ -7,3 +7,4 @@ Icon={{icon}}
 Name=BEV
 Terminal=false
 Type=Application
+X-KDE-DBUS-Restricted-Interfaces=org.kde.KWin.ScreenShot2
