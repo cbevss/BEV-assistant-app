@@ -11,6 +11,7 @@ import type { Env } from "./env";
 import { callsConfigured } from "./env";
 import { Store } from "./db";
 import { Brain } from "./brain";
+import { smallTalk, smallTalkReply } from "./smalltalk";
 import { Runner } from "./runner";
 import { Telegram, pairingCode, webhookSecret, type TgMessage } from "./telegram";
 import { handlePhoneTool, placeCall, setupPhone } from "./phone";
@@ -74,8 +75,10 @@ async function onTelegram(msg: TgMessage, env: Env, store: Store): Promise<void>
 
   await tg.typing(chatId);
   let reply: string;
+  const small = smallTalk(userText);
   try {
-    reply = await new Brain(env, store).reply(userText);
+    // "Good, thanks bev" gets "No worries.", not a recap of the plan.
+    reply = small ? smallTalkReply(small) : await new Brain(env, store).reply(userText);
   } catch (e) {
     console.error("brain", e);
     reply = `Something went wrong on my side: ${(e instanceof Error ? e.message : String(e)).slice(0, 200)}`;

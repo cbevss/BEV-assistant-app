@@ -1,6 +1,6 @@
 import { emit } from "@tauri-apps/api/event";
 import { isQuiet } from "@/lib/gaming";
-import { endIntent, DISMISS_REPLY } from "./intents";
+import { endIntent, dismissReply } from "./intents";
 import { AssistantState, useAssistant } from "@/state/assistant";
 import { native } from "@/lib/native";
 import { useSettings } from "@/state/settings";
@@ -436,7 +436,7 @@ export class VoiceController {
           this.tts.cancel();
           this.setState("speaking");
           await this.tts
-            .speak(DISMISS_REPLY, { signal: this.abort.signal, onLevel: (l) => this.setAudio(l) })
+            .speak(dismissReply(utterance), { signal: this.abort.signal, onLevel: (l) => this.setAudio(l) })
             .catch(() => {});
           this.orchestrator.reset();
           this.closeQuietly = true;

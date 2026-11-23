@@ -76,4 +76,20 @@ export function endIntent(utterance: string): EndIntent {
   return null;
 }
 
-export const DISMISS_REPLY = "Okay, I'll leave you to it.";
+/** Short replies to "thanks", picked at random so it doesn't sound like a recording. */
+export const THANKS_REPLIES = ["No worries.", "Any time.", "No problem.", "You're welcome.", "Sure thing.", "Happy to help.", "Not a problem.", "Cheers.", "Glad to help.", "Of course."];
+/** Short goodbyes for "that's all" and the like. */
+export const DISMISS_REPLIES = ["Okay, I'll leave you to it.", "Alright.", "Got it.", "Okay.", "Sure.", "Catch you later.", "I'm here if you need me.", "Shout if you need me.", "Okay, later.", "Right you are."];
+
+const pick = (list: string[], rand = Math.random) => list[Math.floor(rand() * list.length) % list.length];
+
+/** Pure thanks ("thanks", "cheers bev", "good, thanks bev"), nothing else asked. */
+export function isThanks(utterance: string): boolean {
+  const u = normalise(utterance).replace(/\b(good|great|nice|perfect|lovely|brilliant|sound|awesome|legend|much|very|appreciate it|appreciated)\b/g, " ").replace(/\s+/g, " ").trim();
+  return /\b(thanks|thank|cheers|ta|thx|ty)\b/.test(u) && core(u) === "";
+}
+
+/** What BEV says when the user dismisses it: a "you're welcome" for thanks, otherwise a short goodbye. */
+export function dismissReply(utterance: string, rand = Math.random): string {
+  return pick(isThanks(utterance) ? THANKS_REPLIES : DISMISS_REPLIES, rand);
+}
