@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "BEV",
-  "version": "1.43.0",
-  "identifier": "com.cbevss.bev",
+  "version": "1.44.0",
+  "identifier": "BEV",
   "build": {
     "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:1420",
