@@ -73,6 +73,9 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev libssl-dev libasound2-dev libdbus-1-dev libxdo-dev rpm patchelf
       - run: npm ci
+        env:
+          # onnxruntime-node (via kokoro-js) otherwise fetches a CUDA build on Linux.
+          npm_config_onnxruntime_node_install_cuda: skip
       - name: Rust tests
         working-directory: src-tauri
         run: cargo test --lib
@@ -154,6 +157,9 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev libssl-dev libasound2-dev libdbus-1-dev libxdo-dev rpm patchelf
       - run: npm ci
+        env:
+          # onnxruntime-node (via kokoro-js) otherwise fetches a CUDA build on Linux.
+          npm_config_onnxruntime_node_install_cuda: skip
       - uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
