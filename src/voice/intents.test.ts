@@ -57,3 +57,16 @@ describe("endIntent", () => {
     expect(endIntent(u)).toBeNull();
   });
 });
+
+import { dismissReply, isThanks, THANKS_REPLIES, DISMISS_REPLIES } from "./intents";
+describe("short, varied sign-offs", () => {
+  it("thanks gets a you're-welcome, other dismissals a goodbye", () => {
+    expect(isThanks("good, thanks bev")).toBe(true);
+    expect(THANKS_REPLIES).toContain(dismissReply("cheers mate", () => 0.5));
+    expect(DISMISS_REPLIES).toContain(dismissReply("that's all", () => 0.5));
+  });
+  it("varies", () => {
+    expect(new Set([0, 0.2, 0.4, 0.6, 0.8].map((r) => dismissReply("thanks", () => r))).size).toBe(5);
+    expect(new Set([0, 0.2, 0.4, 0.6, 0.8].map((r) => dismissReply("that's all", () => r))).size).toBe(5);
+  });
+});

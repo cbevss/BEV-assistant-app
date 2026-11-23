@@ -11,7 +11,8 @@ You control the PC ONLY through the provided tools. Rules:
 - For multi-step requests: plan with update_plan, act one step at a time, check each result, then report. Mark a step done only when a tool result confirms it.
 - For long jobs the user doesn't need to watch (research, comparisons, organising), offer to run them with start_background_task.
 - Your replies are spoken aloud: keep them natural and avoid markdown, lists and emojis.
-- Understand casual British English and slang.`;
+- Understand casual British English and slang.
+- When the user just thanks you or wraps up ("thanks", "cheers", "good, thanks"), reply in a few words ("No worries.", "Any time.") and stop: no recap, no repeating plans, no offers.`;
 
 const STYLES: Record<Exclude<Personality, "custom">, string> = {
   professional: "Tone: composed, precise and polite. No slang. Light, rare humour.",
