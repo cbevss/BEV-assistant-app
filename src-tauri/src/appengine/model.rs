@@ -80,6 +80,9 @@ pub struct RawDiscovery {
     pub folders: HashMap<String, String>,
     #[serde(default)]
     pub defaults: HashMap<String, RawDefault>,
+    /// Ready-made records from a native scan (Linux .desktop entries).
+    #[serde(skip)]
+    pub native: Vec<AppRecord>,
 }
 
 #[derive(Deserialize, Debug, Clone)]
@@ -255,7 +258,7 @@ pub fn merge(raw: &RawDiscovery, scanned_at: i64) -> AppIndex {
         shortcut_by_name.entry(s.name.to_lowercase()).or_insert(s);
     }
     let mut used_shortcuts: HashSet<String> = HashSet::new();
-    let mut apps: Vec<AppRecord> = Vec::new();
+    let mut apps: Vec<AppRecord> = raw.native.clone();
 
     for s in &raw.start {
         let (Some(name), Some(app_id)) = (s.name.as_deref(), s.app_id.as_deref()) else { continue };
@@ -371,7 +374,9 @@ pub fn merge(raw: &RawDiscovery, scanned_at: i64) -> AppIndex {
         });
     }
 
-    for b in builtins() {
+    // Windows tools and settings pages; on Linux they come from .desktop files.
+    let builtin = if cfg!(target_os = "linux") && !raw.native.is_empty() { Vec::new() } else { builtins() };
+    for b in builtin {
         let dup = apps.iter().any(|a| a.name.eq_ignore_ascii_case(&b.name));
         if !dup {
             apps.push(b);
