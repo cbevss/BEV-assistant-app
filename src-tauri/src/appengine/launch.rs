@@ -350,12 +350,129 @@ mod imp {
 #[cfg(windows)]
 pub use imp::{close, launch};
 
-#[cfg(not(windows))]
-pub fn launch(_a: &AppRecord, _t: std::time::Duration) -> LaunchOutcome {
-    LaunchOutcome::Failed { error: "launching apps is Windows-only".into() }
+#[cfg(target_os = "linux")]
+pub use linux_imp::{close, launch};
+
+/// Linux: start apps from their .desktop entry and verify by process.
+/// (Window-level checks arrive with the Wayland window support.)
+#[cfg(target_os = "linux")]
+mod linux_imp {
+    use super::*;
+    use std::time::{Duration, Instant};
+    use sysinfo::{ProcessesToUpdate, Signal, System};
+
+    fn procs(sys: &mut System, a: &AppRecord) -> Vec<u32> {
+        sys.refresh_processes(ProcessesToUpdate::All, true);
+        let Some(want) = a.exe_name.as_deref().map(str::to_lowercase) else { return Vec::new() };
+        let me = std::process::id();
+        sys.processes()
+            .iter()
+            .filter(|(pid, p)| {
+                pid.as_u32() != me && {
+                    let n = p.name().to_string_lossy().to_lowercase();
+                    // Linux truncates comm to 15 chars.
+                    n == want || (n.len() == 15 && want.starts_with(&n))
+                        || p.exe().and_then(|e| e.file_name()).is_some_and(|f| f.to_string_lossy().eq_ignore_ascii_case(&want))
+                }
+            })
+            .map(|(pid, _)| pid.as_u32())
+            .collect()
+    }
+
+    fn start(a: &AppRecord) -> Result<(), String> {
+        if let Some(file) = a.shortcut.as_deref().filter(|f| f.ends_with(".desktop")) {
+            // gio honours the entry fully (Flatpak, env, working dir, terminal apps).
+            if crate::linux::run("gio", &["launch", file]).is_ok() {
+                return Ok(());
+            }
+            if let Some(id) = a.app_id.as_deref() {
+                let id = id.trim_end_matches(".desktop");
+                if crate::linux::spawn("kstart", &["--application", id]).is_ok() {
+                    return Ok(());
+                }
+            }
+            let text = std::fs::read_to_string(file).map_err(|e| e.to_string())?;
+            let entry = super::super::desktop::parse_entry(&text);
+            let argv = super::super::desktop::exec_argv(entry.get("Exec").map(String::as_str).unwrap_or(""));
+            let (prog, args) = argv.split_first().ok_or("the app's entry has no command")?;
+            let args: Vec<&str> = args.iter().map(String::as_str).collect();
+            return crate::linux::spawn(prog, &args).map_err(|e| e.to_string());
+        }
+        let exe = a.exe_path.as_deref().ok_or("BEV doesn't know how to start this app")?;
+        crate::linux::spawn(exe, &[]).map_err(|e| e.to_string())
+    }
+
+    pub fn launch(a: &AppRecord, timeout: Duration) -> LaunchOutcome {
+        let mut sys = System::new();
+        let before = procs(&mut sys, a);
+        if let Err(e) = start(a) {
+            return LaunchOutcome::Failed { error: format!("couldn't start {}: {e}", a.name) };
+        }
+        if !before.is_empty() {
+            // Most Linux apps are single-instance: a second launch raises the window.
+            return LaunchOutcome::AlreadyRunning { window: a.name.clone(), focused: true };
+        }
+        if a.exe_name.is_none() {
+            return LaunchOutcome::Unverified { detail: format!("asked KDE to open {}", a.name) };
+        }
+        let deadline = Instant::now() + timeout;
+        loop {
+            let now = procs(&mut sys, a);
+            if let Some(pid) = now.first() {
+                return LaunchOutcome::Opened { window: a.name.clone(), pid: Some(*pid) };
+            }
+            if Instant::now() >= deadline {
+                return LaunchOutcome::Unverified {
+                    detail: format!("asked KDE to open {}, but no {} process appeared yet", a.name, a.exe_name.as_deref().unwrap_or("app")),
+                };
+            }
+            std::thread::sleep(Duration::from_millis(200));
+        }
+    }
+
+    pub fn close(a: &AppRecord, force: bool, pids: &[u32]) -> CloseOutcome {
+        let mut sys = System::new();
+        let mut targets = procs(&mut sys, a);
+        for p in pids {
+            if !targets.contains(p) {
+                targets.push(*p);
+            }
+        }
+        if targets.is_empty() {
+            return CloseOutcome::NotRunning;
+        }
+        let signal = if force { Signal::Kill } else { Signal::Term };
+        let mut sent = 0;
+        for pid in &targets {
+            if let Some(p) = sys.process(sysinfo::Pid::from_u32(*pid)) {
+                if p.kill_with(signal).unwrap_or(false) {
+                    sent += 1;
+                }
+            }
+        }
+        if sent == 0 {
+            return CloseOutcome::Failed { error: format!("couldn't signal {}", a.name) };
+        }
+        let deadline = Instant::now() + Duration::from_secs(5);
+        loop {
+            std::thread::sleep(Duration::from_millis(250));
+            let left = procs(&mut sys, a);
+            if left.is_empty() {
+                return if force { CloseOutcome::ForceClosed { processes: sent } } else { CloseOutcome::Closed { windows: sent } };
+            }
+            if Instant::now() >= deadline {
+                return CloseOutcome::StillOpen { window: a.name.clone() };
+            }
+        }
+    }
 }
 
-#[cfg(not(windows))]
+#[cfg(not(any(windows, target_os = "linux")))]
+pub fn launch(_a: &AppRecord, _t: std::time::Duration) -> LaunchOutcome {
+    LaunchOutcome::Failed { error: "launching apps isn't supported on this OS".into() }
+}
+
+#[cfg(not(any(windows, target_os = "linux")))]
 pub fn close(_a: &AppRecord, _force: bool, _pids: &[u32]) -> CloseOutcome {
-    CloseOutcome::Failed { error: "closing apps is Windows-only".into() }
+    CloseOutcome::Failed { error: "closing apps isn't supported on this OS".into() }
 }

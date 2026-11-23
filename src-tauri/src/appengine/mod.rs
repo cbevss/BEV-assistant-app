@@ -4,6 +4,7 @@
 //! resolve (what the user meant) → launchplan (how to start it) →
 //! launch (start it and verify what happened). See docs/AUDIT.md.
 
+pub mod desktop;
 pub mod discover;
 pub mod engine;
 pub mod launch;

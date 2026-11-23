@@ -134,6 +134,14 @@ fn steam_root() -> Option<PathBuf> {
     if let Some(p) = registry_steam_path() {
         candidates.push(p);
     }
+    #[cfg(target_os = "linux")]
+    {
+        // Native Steam (RPM Fusion), Flatpak Steam, and the old ~/.steam link.
+        let home = crate::linux::home();
+        candidates.push(home.join(".local/share/Steam"));
+        candidates.push(home.join(".var/app/com.valvesoftware.Steam/.local/share/Steam"));
+        candidates.push(home.join(".steam/steam"));
+    }
     candidates.push(PathBuf::from(r"C:\Program Files (x86)\Steam"));
     candidates.push(PathBuf::from(r"C:\Program Files\Steam"));
     candidates.into_iter().find(|p| p.join("steamapps").is_dir())
@@ -210,10 +218,16 @@ fn open_steam_url(url: &str) -> BevResult<()> {
             Err(BevError::NotFound("Steam didn't respond to the launch request".into()))
         }
     }
-    #[cfg(not(windows))]
+    #[cfg(target_os = "linux")]
+    {
+        crate::linux::run("xdg-open", &[url])
+            .map(|_| ())
+            .map_err(|_| BevError::NotFound("Steam didn't respond to the launch request".into()))
+    }
+    #[cfg(not(any(windows, target_os = "linux")))]
     {
         let _ = url;
-        Err(BevError::Unsupported("game launch is Windows-only".into()))
+        Err(BevError::Unsupported("game launch isn't supported on this OS".into()))
     }
 }
 

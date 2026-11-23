@@ -130,7 +130,16 @@ pub fn run(script_dir: &std::path::Path) -> Result<RawDiscovery, String> {
     parse(&String::from_utf8_lossy(&out))
 }
 
-#[cfg(not(windows))]
+#[cfg(target_os = "linux")]
 pub fn run(_script_dir: &std::path::Path) -> Result<RawDiscovery, String> {
-    Err("app discovery is Windows-only".into())
+    let native = super::desktop::scan();
+    if native.is_empty() {
+        return Err("no apps found in any applications folder".into());
+    }
+    Ok(RawDiscovery { native, ..Default::default() })
+}
+
+#[cfg(not(any(windows, target_os = "linux")))]
+pub fn run(_script_dir: &std::path::Path) -> Result<RawDiscovery, String> {
+    Err("app discovery isn't supported on this OS".into())
 }
