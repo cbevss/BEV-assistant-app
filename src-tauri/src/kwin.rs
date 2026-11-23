@@ -36,7 +36,7 @@ fn rt() -> &'static tokio::runtime::Runtime {
 }
 
 /// Run async work from any thread (including ones inside Tauri's runtime).
-fn block<T: Send + 'static>(f: impl std::future::Future<Output = T> + Send + 'static) -> T {
+pub(crate) fn block<T: Send + 'static>(f: impl std::future::Future<Output = T> + Send + 'static) -> T {
     std::thread::spawn(move || rt().block_on(f)).join().expect("kwin thread")
 }
 
@@ -66,7 +66,7 @@ function screens(){return workspace.screens;}
 function d(w){var g=w.frameGeometry;var s=screens();var i=w.output?s.indexOf(w.output):-1;
 return {id:String(w.internalId),title:String(w.caption||""),cls:String(w.resourceClass||""),pid:w.pid||0,
 min:!!w.minimized,normal:!!(w.normalWindow&&!w.skipTaskbar),x:Math.round(g.x),y:Math.round(g.y),w:Math.round(g.width),h:Math.round(g.height),
-screen:i,screens:s.length,active:workspace.activeWindow===w};}
+screen:i,screens:s.length,active:workspace.activeWindow===w,cx:Math.round(w.clientGeometry?w.clientGeometry.x:g.x),cy:Math.round(w.clientGeometry?w.clientGeometry.y:g.y)};}
 function all(){return workspace.windowList().filter(function(w){return w.normalWindow&&!w.skipTaskbar;});}
 function byId(id){var l=workspace.windowList();for(var i=0;i<l.length;i++){if(String(l[i].internalId)===id)return l[i];}return null;}
 "#;
@@ -131,6 +131,11 @@ pub struct KWindow {
     pub screen: i32,
     pub screens: i32,
     pub active: bool,
+    /// Top-left of the window's content (inside the title bar).
+    #[serde(default)]
+    pub cx: i32,
+    #[serde(default)]
+    pub cy: i32,
 }
 
 impl KWindow {
