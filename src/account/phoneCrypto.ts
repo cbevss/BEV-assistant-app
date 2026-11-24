@@ -32,9 +32,33 @@ export async function openPhone<T>(key: CryptoKey, dir: PhoneDir, userId: string
   return JSON.parse(td.decode(pt)) as T;
 }
 
+/** A picture or file attached on the phone: base64 bytes. */
+export interface PhoneFile {
+  name: string;
+  mime: string;
+  data: string;
+}
+export const MAX_PHONE_FILES = 4;
+
+/** Pure: the attachments of an "ask", or null if any is malformed. */
+export function phoneFiles(v: unknown): PhoneFile[] | null {
+  if (v === undefined) return [];
+  if (!Array.isArray(v) || v.length > MAX_PHONE_FILES) return null;
+  const out: PhoneFile[] = [];
+  for (const f of v) {
+    if (!f || typeof f !== "object") return null;
+    const { name, mime, data } = f as Record<string, unknown>;
+    if (typeof name !== "string" || !name.trim() || name.length > 200) return null;
+    if (typeof mime !== "string" || mime.length > 100) return null;
+    if (typeof data !== "string" || !/^[A-Za-z0-9+/=]+$/.test(data)) return null;
+    out.push({ name: name.trim(), mime, data });
+  }
+  return out;
+}
+
 /** What the phone sends. */
 export type FromPhone =
-  | { type: "ask"; id: string; t: number; text: string }
+  | { type: "ask"; id: string; t: number; text: string; files?: PhoneFile[] }
   | { type: "approve"; id: string; t: number; re: string; allow: boolean }
   | { type: "screen"; id: string; t: number };
 
@@ -49,7 +73,11 @@ export function acceptFromPhone(p: unknown, now: number, seen: ReadonlySet<strin
   const m = p as Record<string, unknown>;
   if (typeof m.id !== "string" || !/^[A-Za-z0-9_-]{8,64}$/.test(m.id) || seen.has(m.id)) return null;
   if (typeof m.t !== "number" || m.t > now + 60_000 || now - m.t > MAX_AGE) return null;
-  if (m.type === "ask" && typeof m.text === "string" && m.text.trim() && m.text.length <= 4000) return { type: "ask", id: m.id, t: m.t, text: m.text.trim() };
+  if (m.type === "ask" && typeof m.text === "string" && m.text.length <= 4000) {
+    const files = phoneFiles(m.files);
+    if (!files || (!m.text.trim() && !files.length)) return null;
+    return files.length ? { type: "ask", id: m.id, t: m.t, text: m.text.trim(), files } : { type: "ask", id: m.id, t: m.t, text: m.text.trim() };
+  }
   if (m.type === "approve" && typeof m.re === "string" && typeof m.allow === "boolean") return { type: "approve", id: m.id, t: m.t, re: m.re, allow: m.allow };
   if (m.type === "screen") return { type: "screen", id: m.id, t: m.t };
   return null;

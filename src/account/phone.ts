@@ -21,8 +21,9 @@ import { toolLabel, summary } from "@/ui/assistant/tools";
 import { Orchestrator } from "@/ai/orchestrator";
 import { makeAssistantProvider } from "@/ai/factory";
 import { useAccount, accountSecrets } from "./account";
+import { fromBase64, messageWithAttachments, type Attachment } from "@/lib/attachments";
 import { api } from "./client";
-import { acceptFromPhone, openPhone, phoneKey, sealPhone, type FromPhone } from "./phoneCrypto";
+import { type PhoneFile, acceptFromPhone, openPhone, phoneKey, sealPhone, type FromPhone } from "./phoneCrypto";
 
 const ACTIVE_MS = 2500;
 /** Live screen: frame size and pace (about 1-2 frames a second on a phone connection). */
@@ -46,7 +47,14 @@ export const usePhone = create<PhoneStatus>(() => ({ running: false, lastCheck: 
 /** Pure: a chat message as a feed item for the phone. */
 export function feedItem(m: ChatMessage): Record<string, unknown> {
   if (m.role === "tool") return { id: m.id, role: "tool", label: toolLabel(m.toolName ?? ""), text: summary(m.content ?? "", 160), ok: m.ok !== false, at: m.at };
-  return { id: m.id, role: m.role, text: m.content, at: m.at, ...(m.source ? { source: m.source } : {}) };
+  return {
+    id: m.id,
+    role: m.role,
+    text: m.content,
+    at: m.at,
+    ...(m.source ? { source: m.source } : {}),
+    ...(m.attachments?.length ? { files: m.attachments.map((f) => f.name) } : {}),
+  };
 }
 
 /** Pure: messages that are new or changed since they were last sent. */
@@ -204,7 +212,7 @@ class PhoneLink {
       return;
     }
     // One request at a time, in order.
-    this.queue = this.queue.then(() => this.ask(m.id, m.text)).catch(() => {});
+    this.queue = this.queue.then(() => this.ask(m.id, m.text, m.files ?? [])).catch(() => {});
   }
 
   private orchestrator(): Orchestrator {
@@ -240,12 +248,32 @@ class PhoneLink {
     return this.orch;
   }
 
-  private async ask(id: string, text: string) {
+  private async ask(id: string, typed: string, files: PhoneFile[] = []) {
     const a = useAssistant.getState();
-    a.pushMessage({ id, role: "user", content: text, source: "phone" });
+    // Pictures and files from the phone: pictures go to the AI, other files are saved on the PC.
+    const atts: Attachment[] = [];
+    const problems: string[] = [];
+    for (const f of files) {
+      try {
+        atts.push(await fromBase64(f.name, f.mime, f.data));
+      } catch (e) {
+        problems.push(`${f.name}: ${e instanceof Error ? e.message : String(e)}`);
+      }
+    }
+    a.pushMessage({
+      id,
+      role: "user",
+      content: typed,
+      source: "phone",
+      ...(atts.length ? { attachments: atts.map((x) => ({ name: x.name, kind: x.kind, thumb: x.thumb })) } : {}),
+    });
+    if (problems.length) a.pushMessage({ role: "tool", content: `Couldn't take ${problems.join("; ")}`, toolName: "phone_files", ok: false });
+    if (!typed && !atts.length) return;
+    const text = messageWithAttachments(typed, atts);
+    const images = atts.flatMap((x) => (x.image ? [x.image] : []));
     const before = new Set(useAssistant.getState().messages.map((m) => m.id));
     try {
-      const reply = await this.orchestrator().send(text);
+      const reply = await this.orchestrator().send(text, undefined, images);
       this.lastAsk = Date.now();
       // Streamed replies are already in the chat; otherwise add it now.
       const streamedReply = useAssistant.getState().messages.some((m) => !before.has(m.id) && m.role === "assistant");
