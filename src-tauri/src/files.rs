@@ -68,8 +68,12 @@ fn display_name(p: &Path) -> String {
 }
 
 #[tauri::command]
-pub fn open_path(path: String) -> BevResult<String> {
+pub fn open_path(path: String, manager: Option<String>) -> BevResult<String> {
     let p = resolve(&path)?;
+    // A folder goes to the file manager picked in Settings (if it's installed).
+    if p.is_dir() && crate::filemanagers::open_folder_in(manager.as_deref().unwrap_or(""), &p)? {
+        return Ok(format!("opened {}", display_name(&p)));
+    }
     #[cfg(windows)]
     {
         // Ask Windows to "open" it, like double-clicking: folders go to whatever

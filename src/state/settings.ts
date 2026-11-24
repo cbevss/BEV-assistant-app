@@ -173,6 +173,8 @@ export interface Settings {
   /** When true, a spoken/typed request is itself the approval — sensitive tools
    *  run without the Approve/Cancel modal. Off by default. */
   autoApproveActions: boolean;
+  /** Which file manager folders open in: "system" (Windows' choice) or an id from list_file_managers. */
+  fileManager: string;
 }
 
 export const defaultSettings: Settings = {
@@ -245,6 +247,7 @@ export const defaultSettings: Settings = {
   screenReplay: false,
   toolPermissions: {},
   autoApproveActions: false,
+  fileManager: "system",
 };
 
 interface SettingsStore {

@@ -30,6 +30,8 @@ mod games;
 mod overlay;
 mod annotate;
 mod folders;
+mod gamelib;
+mod filemanagers;
 mod replay;
 mod screen;
 mod secrets;
@@ -199,6 +201,9 @@ pub fn run() {
             overlay::show_overlay,
             annotate::show_annotate,
             folders::bev_folder,
+            gamelib::game_libraries,
+            filemanagers::list_file_managers,
+            gamelib::start_game_download,
             screen::live_frame,
             folders::install_update_to_folder,
             annotate::hide_annotate,

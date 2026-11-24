@@ -1,3 +1,4 @@
+import { setFileManagerPref } from "@/lib/native";
 import { useEffect, useState } from "react";
 import { Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { getCurrentWindow } from "@tauri-apps/api/window";
@@ -183,6 +184,9 @@ export function App() {
       // Updates: look for a newer signed release now and every half hour; the
       // title bar shows a download button when one is ready.
       startUpdateChecks();
+      // Folders open in the file manager picked in Settings.
+      setFileManagerPref(useSettings.getState().settings.fileManager);
+      useSettings.subscribe((s) => setFileManagerPref(s.settings.fileManager));
       // Make the BEV folder (Installers, From phone) so it's there to find and to add to antivirus exclusions.
       void import("@tauri-apps/api/core").then(({ invoke }) => invoke("bev_folder")).catch(() => {});
 
