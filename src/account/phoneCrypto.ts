@@ -9,7 +9,7 @@ import { fromB64, toB64 } from "./crypto";
 const te = new TextEncoder();
 const td = new TextDecoder();
 /** "frame" is the live screen feed, sealed apart so a frame can't pass as a message. */
-export type PhoneDir = "to_pc" | "to_phone" | "frame";
+export type PhoneDir = "to_pc" | "to_phone" | "frame" | "rtc_pc" | "rtc_phone";
 
 export async function phoneKey(dek: Uint8Array<ArrayBuffer>): Promise<CryptoKey> {
   const base = await crypto.subtle.importKey("raw", dek, "HKDF", false, ["deriveKey"]);

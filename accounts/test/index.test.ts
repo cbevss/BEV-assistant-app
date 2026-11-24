@@ -275,6 +275,26 @@ describe("phone control", () => {
     expect(gone.ct).toBeUndefined();
   });
 
+  it("passes live-video set-up messages between the PC and the phone, each side seeing only its own", async () => {
+    const { token } = await signIn();
+    const h = app();
+    const post = (b: unknown) => h(req("/phone/rtc", token, { method: "POST", body: JSON.stringify(b) }), env);
+    const sealed = { iv: "AAAAAAAAAAAAAAAA", ct: "QUJDREVGR0g=" };
+    expect((await h(new Request(`${BASE}/phone/rtc?for=pc`), env)).status).toBe(401);
+    expect((await post({ to: "pc", ...sealed })).status).toBe(200);
+    expect((await post({ to: "phone", ...sealed })).status).toBe(200);
+    expect((await post({ to: "nobody", ...sealed })).status).toBe(400);
+    expect((await post({ to: "pc", iv: "x", ct: "<script>" })).status).toBe(400);
+    const forPc = (await (await h(req("/phone/rtc?for=pc&after=0", token), env)).json()) as { messages: { id: number }[]; latest: number };
+    expect(forPc.messages).toHaveLength(1);
+    const later = (await (await h(req(`/phone/rtc?for=pc&after=${forPc.messages[0].id}`, token), env)).json()) as { messages: unknown[] };
+    expect(later.messages).toHaveLength(0);
+    // No TURN key set: STUN only.
+    const ice = (await (await h(req("/phone/ice", token), env)).json()) as { iceServers: unknown[]; relay: boolean };
+    expect(ice.relay).toBe(false);
+    expect(ice.iceServers.length).toBeGreaterThan(0);
+  });
+
   it("relays ciphertext both ways and marks the PC online when it listens", async () => {
     const { token } = await signIn();
     const h = app();

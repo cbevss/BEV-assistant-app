@@ -85,6 +85,38 @@ fn capture_blocking(target: &str) -> BevResult<ScreenCapture> {
     encode(img, label)
 }
 
+/// One frame of the phone's live video: the screen scaled to `max_edge`, as raw
+/// JPEG bytes (no base64), quickly. Doesn't touch LAST_SHOT, so BEV's own
+/// clicking keeps using the screenshots it actually looked at.
+#[tauri::command]
+pub async fn live_frame(target: Option<String>, max_edge: Option<u32>, quality: Option<u8>) -> BevResult<tauri::ipc::Response> {
+    let edge = max_edge.unwrap_or(1600).clamp(480, 2560);
+    let q = quality.unwrap_or(72).clamp(40, 92);
+    tauri::async_runtime::spawn_blocking(move || -> BevResult<tauri::ipc::Response> {
+        let (img, _, _, _) = capture_raw(target.as_deref().unwrap_or("current"))?;
+        let bytes = live_jpeg(img, edge, q)?;
+        Ok(tauri::ipc::Response::new(bytes))
+    })
+    .await
+    .map_err(os("live frame task"))?
+}
+
+/// Fast downscale (box-filter thumbnail) + JPEG. Pure; tested.
+pub(crate) fn live_jpeg(img: RgbaImage, edge: u32, quality: u8) -> BevResult<Vec<u8>> {
+    let (w, h) = (img.width(), img.height());
+    let long = w.max(h).max(1);
+    let small = if long > edge {
+        let s = edge as f64 / long as f64;
+        image::imageops::thumbnail(&img, ((w as f64 * s) as u32).max(2) & !1, ((h as f64 * s) as u32).max(2) & !1)
+    } else {
+        img
+    };
+    let rgb = DynamicImage::ImageRgba8(small).to_rgb8();
+    let mut buf = Vec::with_capacity(200 * 1024);
+    image::codecs::jpeg::JpegEncoder::new_with_quality(&mut buf, quality).encode_image(&rgb).map_err(os("encode"))?;
+    Ok(buf)
+}
+
 /// Where the last screenshot sent to the AI came from, so a point the AI picks
 /// on it can be mapped back to the desktop.
 pub(crate) static LAST_SHOT: std::sync::Mutex<Option<crate::control::guard::ShotGeom>> = std::sync::Mutex::new(None);
@@ -293,6 +325,14 @@ mod tests {
         assert_eq!(fit(2560, 1440), (1568, 882));
         assert_eq!(fit(1440, 2560), (882, 1568));
         assert_eq!(fit(5120, 1440), (1568, 441));
+    }
+
+    #[test]
+    fn live_jpeg_scales_down_to_even_size() {
+        let img = RgbaImage::from_pixel(2561, 1441, image::Rgba([10, 20, 30, 255]));
+        let bytes = live_jpeg(img, 1280, 70).unwrap();
+        let back = image::load_from_memory(&bytes).unwrap();
+        assert!(back.width() <= 1280 && back.width() % 2 == 0 && back.height() % 2 == 0);
     }
 
     #[test]
