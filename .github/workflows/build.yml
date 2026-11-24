@@ -93,6 +93,28 @@ jobs:
             src-tauri/target/release/bundle/appimage/*.AppImage
           if-no-files-found: error
 
+  # Every change to main has to ship: the version must be higher than every release so far, or the tag
+  # already exists (nothing is released) or apps on a newer number never update to it. Checked on PRs
+  # too, so a forgotten or reused version number fails before merging.
+  version-is-new:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - shell: bash
+        run: |
+          set -euo pipefail
+          v=$(node -p "require('./package.json').version")
+          latest=$(git ls-remote --tags --refs origin 'v*' | sed 's#.*/v##' | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -1)
+          echo "This version: $v, newest release: ${latest:-none}"
+          if [ "${GITHUB_EVENT_NAME}" = "push" ] && [ "${GITHUB_REF_TYPE}" = "branch" ] && [ "v$v" = "v$latest" ] \
+             && [ "$(git ls-remote --tags origin "refs/tags/v$v^{}" "refs/tags/v$v" | head -1 | cut -f1)" = "$(git rev-parse HEAD)" ]; then
+            exit 0          # re-run of the commit that made this release
+          fi
+          if [ -n "$latest" ] && [ "$(printf '%s\n%s\n' "$latest" "$v" | sort -V | tail -1)" != "$v" -o "$v" = "$latest" ]; then
+            echo "::error::Version $v isn't higher than the newest release ($latest). Bump package.json, tauri.conf.json and Cargo.toml so this ships as an update."
+            exit 1
+          fi
+
   # Decides whether this run publishes a release, and which version.
   # - Push to main: release if the version in the code (package.json) has no
   #   v<version> tag yet. Bumping the version in a PR and merging it is all it
@@ -137,7 +159,7 @@ jobs:
   # Build, sign, and publish the release with the installer plus the updater's
   # latest.json + .sig, so running apps auto-update to it.
   release:
-    needs: [build, build-linux, version]
+    needs: [build, build-linux, version, version-is-new]
     if: needs.version.outputs.release == 'true'
     strategy:
       fail-fast: false
