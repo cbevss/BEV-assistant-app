@@ -30,6 +30,7 @@ const LABELS: Record<string, string> = {
   undo_file_changes: "Undid file changes",
   search_documents: "Searched your documents",
   phone_screenshot: "Sent your screen to your phone",
+  phone_live: "Live screen",
   set_timer: "Set a timer",
   set_alarm: "Set an alarm",
   remind_me: "Set a reminder",

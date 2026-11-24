@@ -32,10 +32,13 @@ const HTML = String.raw`<!doctype html>
 *{box-sizing:border-box}html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font:15px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;-webkit-font-smoothing:antialiased}
 button,input,textarea{font:inherit;color:inherit}
 html,body{touch-action:manipulation;-webkit-text-size-adjust:100%;text-size-adjust:100%}
+/* The page itself never scrolls or bounces: only the chat (and the chip row) do. */
+html,body{overflow:hidden;overscroll-behavior:none}
+body{position:fixed;inset:0;width:100%}
 /* 16px stops iPhones zooming in when a box is tapped. */
 input,textarea{font-size:16px}
-.app{display:flex;flex-direction:column;height:100%;max-width:640px;margin:0 auto}
-header{display:flex;align-items:center;gap:10px;padding:calc(env(safe-area-inset-top) + 12px) 16px 12px;border-bottom:1px solid var(--line);background:var(--bg);position:sticky;top:0;z-index:2}
+.app{display:flex;flex-direction:column;height:100%;height:100dvh;max-width:640px;margin:0 auto;overflow:hidden}
+header{flex:none;display:flex;align-items:center;gap:10px;padding:calc(env(safe-area-inset-top) + 12px) 16px 12px;border-bottom:1px solid var(--line);background:var(--bg);z-index:2;touch-action:none}
 .mark{width:26px;height:26px;border-radius:50%;border:1.5px solid var(--acc);display:grid;place-items:center}
 .mark i{width:8px;height:8px;border-radius:50%;background:var(--acc);box-shadow:0 0 10px var(--acc)}
 .who{flex:1;min-width:0}.who b{display:block;font-weight:600;letter-spacing:.02em}
@@ -43,7 +46,18 @@ header{display:flex;align-items:center;gap:10px;padding:calc(env(safe-area-inset
 .dot{width:7px;height:7px;border-radius:50%;background:var(--ink3)}.dot.on{background:var(--ok);box-shadow:0 0 8px var(--ok)}
 .icon{background:none;border:1px solid var(--line);border-radius:10px;height:34px;padding:0 10px;color:var(--ink2);cursor:pointer}
 .icon:active{background:var(--s2)}
-main{flex:1;overflow-y:auto;padding:16px 14px 8px;-webkit-overflow-scrolling:touch}
+main{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;padding:16px 14px 8px;-webkit-overflow-scrolling:touch}
+.live{flex:none;position:relative;height:40vh;height:40dvh;background:#000;border-bottom:1px solid var(--line);overflow:hidden;touch-action:none}
+.live[hidden]{display:none}
+.zoom{position:absolute;inset:0;display:grid;place-items:center;overflow:hidden;touch-action:none}
+.zoom img{max-width:100%;max-height:100%;transform-origin:0 0;will-change:transform;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;pointer-events:none}
+.livebar{position:absolute;left:8px;right:8px;top:8px;display:flex;gap:6px;align-items:center;pointer-events:none}
+.livebar>*{pointer-events:auto}
+.pill{background:#000b;border:1px solid #ffffff22;border-radius:999px;padding:4px 10px;font-size:12px;color:var(--ink);display:flex;align-items:center;gap:6px}
+.pill .dot.on{background:var(--bad);box-shadow:0 0 8px var(--bad)}
+.pill.btn2{cursor:pointer}.grow{flex:1}
+.livemsg{position:absolute;inset:0;display:grid;place-items:center;color:var(--ink3);font-size:13px;text-align:center;padding:24px;pointer-events:none}
+.chip.on{border-color:var(--bad);color:var(--ink)}
 .empty{color:var(--ink3);text-align:center;margin-top:18vh;padding:0 24px}
 .row{display:flex;margin:6px 0}.row.user{justify-content:flex-end}
 .bubble{max-width:84%;padding:9px 12px;border-radius:16px;white-space:pre-wrap;word-wrap:break-word}
@@ -63,7 +77,7 @@ main{flex:1;overflow-y:auto;padding:16px 14px 8px;-webkit-overflow-scrolling:tou
 .btn.go{background:var(--acc2);border-color:var(--acc2)}.btn.danger{background:#7a2b30;border-color:#93353b}
 .btn:disabled{opacity:.5}
 .shot{margin:10px 0}.shot img{width:100%;border-radius:10px;border:1px solid var(--line);display:block}.shot .meta{text-align:left}
-footer{border-top:1px solid var(--line);padding:10px 12px calc(env(safe-area-inset-bottom) + 10px);background:var(--bg)}
+footer{flex:none;border-top:1px solid var(--line);padding:10px 12px calc(env(safe-area-inset-bottom) + 10px);background:var(--bg)}
 .compose{display:flex;gap:8px;align-items:flex-end}
 textarea{flex:1;resize:none;max-height:120px;min-height:44px;border-radius:14px;border:1px solid var(--line);background:var(--s1);padding:11px 13px;outline:none}
 textarea:focus{border-color:var(--acc2)}
@@ -79,19 +93,22 @@ textarea:focus{border-color:var(--acc2)}
 .mt{margin-top:10px}.err{color:var(--bad);font-size:13px;min-height:18px;margin:6px 0}
 .btn.discord{background:#5865f2;border-color:#5865f2;color:#fff}
 .hint{font-size:12px;color:var(--ink3);margin-top:14px}
-.viewer{position:fixed;inset:0;background:#000d;display:none;place-items:center;z-index:9;padding:12px}.viewer.open{display:grid}.viewer img{max-width:100%;max-height:100%}
+.viewer{position:fixed;inset:0;background:#000;display:none;z-index:9;touch-action:none}.viewer.open{display:block}
+.viewer .close{position:absolute;top:calc(env(safe-area-inset-top) + 10px);right:12px;z-index:2}
 :focus-visible{outline:2px solid var(--acc);outline-offset:2px}
 @media (prefers-reduced-motion:no-preference){.row,.card,.step{animation:in .18s ease-out}@keyframes in{from{opacity:0;transform:translateY(4px)}}}
 </style>
 </head>
 <body>
 <div class="app" id="app"></div>
-<div class="viewer" id="viewer"><img alt="Your screen"></div>
+<div class="viewer" id="viewer" role="dialog" aria-label="Screenshot"><div class="zoom"><img alt="Your screen"></div><button class="pill btn2 close" type="button" aria-label="Close">Close</button></div>
 <script nonce="__NONCE__">
 "use strict";
 // No pinch or double-tap zoom (iOS ignores user-scalable=no for pinches).
 ["gesturestart","gesturechange","gestureend"].forEach(function(t){document.addEventListener(t,function(e){e.preventDefault();},{passive:false});});
-document.addEventListener("touchmove",function(e){if(e.touches&&e.touches.length>1)e.preventDefault();},{passive:false});
+// Pinches only zoom the live screen and pictures (handled there); one finger
+// only scrolls the chat, the chip row and the message box.
+document.addEventListener("touchmove",function(e){if(e.touches&&e.touches.length>1){e.preventDefault();return;}var t=e.target;if(!(t&&t.closest&&t.closest("main,.tools,textarea")))e.preventDefault();},{passive:false});
 var lastTouch=0;document.addEventListener("touchend",function(e){var n=Date.now();if(n-lastTouch<300&&!(e.target&&e.target.closest&&e.target.closest("textarea,input")))e.preventDefault();lastTouch=n;},{passive:false});
 var te = new TextEncoder(), td = new TextDecoder();
 function b64(u8){var s="";for(var i=0;i<u8.length;i+=0x8000)s+=String.fromCharCode.apply(null,u8.subarray(i,i+0x8000));return btoa(s);}
@@ -131,7 +148,67 @@ function seal(obj){var iv=rand(12);return crypto.subtle.encrypt({name:"AES-GCM",
 function openMsg(m){return crypto.subtle.decrypt({name:"AES-GCM",iv:unb64(m.iv),additionalData:aad("to_phone")},key,unb64(m.ct)).then(function(pt){return JSON.parse(td.decode(pt));});}
 function sendToPc(obj){obj.t=Date.now();return seal(obj).then(function(e){return api("/phone/messages",{method:"POST",body:{dir:"to_pc",iv:e.iv,ct:e.ct}});});}
 
-function signOut(){var t=token;token=null;localStorage.removeItem("bev_token");kvSet("key",undefined);kvSet("user",undefined);if(t)fetch("/auth/logout",{method:"POST",headers:{authorization:"Bearer "+t}}).catch(function(){});stopPolling();gateSignIn();}
+function signOut(){if(live.on&&live.panel)stopLive();var t=token;token=null;localStorage.removeItem("bev_token");kvSet("key",undefined);kvSet("user",undefined);if(t)fetch("/auth/logout",{method:"POST",headers:{authorization:"Bearer "+t}}).catch(function(){});stopPolling();gateSignIn();}
+
+// ---- pinch-to-zoom for one picture (the live screen or a screenshot)
+function zoomable(box,img){
+  var z={s:1,x:0,y:0},start=null,lastTap=0;
+  function apply(){img.style.transform="translate("+z.x+"px,"+z.y+"px) scale("+z.s+")";}
+  function clamp(){var bw=box.clientWidth,bh=box.clientHeight,iw=img.offsetWidth*z.s,ih=img.offsetHeight*z.s,ox=img.offsetLeft,oy=img.offsetTop;
+    if(z.s<=1){z.s=1;z.x=0;z.y=0;return;}
+    var minX=bw-iw-ox,maxX=-ox,minY=bh-ih-oy,maxY=-oy;
+    if(iw<=bw)z.x=(bw-iw)/2-ox;else z.x=Math.min(maxX,Math.max(minX,z.x));
+    if(ih<=bh)z.y=(bh-ih)/2-oy;else z.y=Math.min(maxY,Math.max(minY,z.y));}
+  function pt(t){var r=box.getBoundingClientRect();return {x:t.clientX-r.left-img.offsetLeft,y:t.clientY-r.top-img.offsetTop};}
+  box.addEventListener("touchstart",function(e){var t=e.touches;
+    if(t.length===2){var a=pt(t[0]),b=pt(t[1]);start={d:Math.hypot(a.x-b.x,a.y-b.y),mx:(a.x+b.x)/2,my:(a.y+b.y)/2,s:z.s,x:z.x,y:z.y};}
+    else if(t.length===1){var p=pt(t[0]),n=Date.now();
+      if(n-lastTap<300){/* double tap: zoom in to 2.5x there, or back out */var ns=z.s>1?1:2.5;z.x=p.x-(p.x-z.x)*ns/z.s;z.y=p.y-(p.y-z.y)*ns/z.s;z.s=ns;clamp();apply();lastTap=0;start=null;return;}
+      lastTap=n;start={px:p.x,py:p.y,x:z.x,y:z.y};}},{passive:true});
+  box.addEventListener("touchmove",function(e){if(!start)return;e.preventDefault();var t=e.touches;
+    if(t.length===2&&start.d){var a=pt(t[0]),b=pt(t[1]),d=Math.hypot(a.x-b.x,a.y-b.y),mx=(a.x+b.x)/2,my=(a.y+b.y)/2;
+      var ns=Math.min(6,Math.max(1,start.s*d/start.d));
+      // keep the point between the fingers under the fingers
+      z.x=mx-(start.mx-start.x)*ns/start.s;z.y=my-(start.my-start.y)*ns/start.s;z.s=ns;clamp();apply();}
+    else if(t.length===1&&start.px!==undefined&&z.s>1){var p=pt(t[0]);z.x=start.x+(p.x-start.px);z.y=start.y+(p.y-start.py);clamp();apply();}},{passive:false});
+  box.addEventListener("touchend",function(e){if(e.touches.length===0)start=null;else if(e.touches.length===1){var p=pt(e.touches[0]);start={px:p.x,py:p.y,x:z.x,y:z.y};}});
+  return {reset:function(){z={s:1,x:0,y:0};apply();},zoomed:function(){return z.s>1;}};
+}
+
+// ---- live screen
+var live={on:false,seq:0,display:"current",lastAt:0,frameTimer:null,beatTimer:null,panel:null,img:null,msg:null,state:null,zoom:null,chip:null};
+var DISPLAY_NAMES={current:"Active screen",all:"All screens",primary:"Main screen"};
+function liveBeat(){if(!live.on||document.hidden)return;api("/phone/live",{method:"POST",body:{on:true,display:live.display}}).catch(function(){});}
+function startLive(){live.on=true;live.seq=0;live.lastAt=0;live.panel.hidden=false;live.chip.classList.add("on");live.chip.textContent="Stop live screen";live.msg.textContent="Connecting to your PC…";live.img.removeAttribute("src");live.zoom.reset();
+  liveBeat();clearInterval(live.beatTimer);live.beatTimer=setInterval(liveBeat,15000);pollFrame();keepChatAtBottom();}
+function stopLive(){live.on=false;clearInterval(live.beatTimer);clearTimeout(live.frameTimer);live.panel.hidden=true;live.chip.classList.remove("on");live.chip.textContent="Live screen";
+  api("/phone/live",{method:"POST",body:{on:false}}).catch(function(){});keepChatAtBottom();}
+// The chat gets shorter or taller when the live panel opens or closes: stay at the newest message.
+function keepChatAtBottom(){if(stickToBottom&&mainEl)requestAnimationFrame(function(){mainEl.scrollTop=mainEl.scrollHeight;});}
+function openFrame(f){return crypto.subtle.decrypt({name:"AES-GCM",iv:unb64(f.iv),additionalData:aad("frame")},key,unb64(f.ct)).then(function(pt){return JSON.parse(td.decode(pt));});}
+function pollFrame(){
+  clearTimeout(live.frameTimer);
+  if(!live.on||document.hidden||!key)return;
+  var got=false;
+  api("/phone/frame?after="+live.seq).then(function(f){
+    if(f.ct){got=true;live.seq=f.seq;return openFrame(f).then(function(p){if(p&&p.type==="frame"&&p.data){live.img.src="data:image/jpeg;base64,"+p.data;live.lastAt=Date.now();live.msg.textContent="";live.state.textContent=String(p.label||"Your screen");}},function(){});}
+    if(!live.lastAt){var on=f.pc_last_seen&&f.now-f.pc_last_seen<30000;live.msg.textContent=on?"Waiting for the first picture…":"Your PC isn't connected. Is BEV open with Phone control on?";}
+  }).catch(function(){}).then(function(){
+    if(live.lastAt&&Date.now()-live.lastAt>8000)live.state.textContent="Paused (no new picture)";
+    live.frameTimer=setTimeout(pollFrame,got?250:700);});
+}
+function liveNode(){
+  live.img=h("img",{alt:"Your PC's screen, live",draggable:"false"});
+  var box=h("div",{class:"zoom"},[live.img]);
+  live.zoom=zoomable(box,live.img);
+  live.msg=h("div",{class:"livemsg",role:"status"});
+  live.state=h("span",{text:"Live"});
+  var which=h("button",{class:"pill btn2",type:"button",on:{click:function(){var order=["current","all","primary"];live.display=order[(order.indexOf(live.display)+1)%3];which.textContent=DISPLAY_NAMES[live.display];live.zoom.reset();liveBeat();}}},[DISPLAY_NAMES[live.display]]);
+  var close=h("button",{class:"pill btn2",type:"button","aria-label":"Stop live screen",on:{click:stopLive}},["✕"]);
+  live.panel=h("section",{class:"live",hidden:true,"aria-label":"Live screen"},[box,live.msg,h("div",{class:"livebar"},[h("span",{class:"pill"},[h("span",{class:"dot on"}),live.state]),h("span",{class:"grow"}),which,close])]);
+  return live.panel;
+}
+document.addEventListener("visibilitychange",function(){if(!live.on)return;if(document.hidden)clearTimeout(live.frameTimer);else{liveBeat();pollFrame();}});
 
 // ---- screens
 function logo(){return h("div",{class:"mark","aria-hidden":"true"},[h("i")]);}
@@ -175,12 +252,14 @@ function startMain(){
   input.addEventListener("keydown",function(e){if(e.key==="Enter"&&!e.shiftKey&&window.matchMedia("(pointer:fine)").matches){e.preventDefault();send();}});
   sendBtn=h("button",{class:"send",disabled:true,on:{click:send}},["Send"]);
   var screenBtn=h("button",{class:"chip",on:{click:askScreen}},["Show my screen"]);
+  live.chip=h("button",{class:"chip",on:{click:function(){if(live.on)stopLive();else startLive();}}},["Live screen"]);
   // One-tap requests; they go through BEV like typed ones.
   var quick=[["Play / pause","Play or pause the music"],["Next track","Skip to the next track"],["Mute","Mute the PC's sound"],["Lock PC","Lock my PC"],["Today","What did I do today?"]].map(function(q){return h("button",{class:"chip",on:{click:function(){input.value=q[1];send();}}},[q[0]]);});
   show([
     h("header",{},[logo(),h("div",{class:"who"},[h("b",{text:"BEV"}),h("div",{class:"pc"},[statusDot,statusText])]),h("button",{class:"icon",on:{click:function(){if(confirm("Sign out of BEV on this phone?"))signOut();}}},["Sign out"])]),
+    liveNode(),
     mainEl,
-    h("footer",{},[h("div",{class:"tools"},[screenBtn].concat(quick)),h("div",{class:"compose"},[input,sendBtn])])
+    h("footer",{},[h("div",{class:"tools"},[live.chip,screenBtn].concat(quick)),h("div",{class:"compose"},[input,sendBtn])])
   ]);
   render();
   poll(true);
@@ -248,8 +327,9 @@ function approvalNode(a){
   return h("div",{class:"card",role:"alertdialog","aria-label":"BEV needs your OK"},[h("h3",{text:"BEV needs your OK"}),h("p",{text:a.text}),a.err?h("div",{class:"err",text:a.err}):null,
     h("div",{class:"btns"},[h("button",{class:"btn",on:{click:function(){answer(a,false);}}},["Don't"]),h("button",{class:"btn go",on:{click:function(){a.stage="confirm";render();}}},["Allow"])])]);
 }
-function shotNode(s){var img=h("img",{src:"data:image/jpeg;base64,"+s.data,alt:s.label,loading:"lazy"});img.addEventListener("click",function(){var v=document.getElementById("viewer");v.firstElementChild.src=img.src;v.classList.add("open");});return h("div",{class:"shot"},[img,h("div",{class:"meta",text:s.label+" · "+clock(s.at)})]);}
-document.getElementById("viewer").addEventListener("click",function(){this.classList.remove("open");});
+var viewer=document.getElementById("viewer"),viewerImg=viewer.querySelector("img"),viewerZoom=zoomable(viewer.querySelector(".zoom"),viewerImg);
+function shotNode(s){var img=h("img",{src:"data:image/jpeg;base64,"+s.data,alt:s.label,loading:"lazy"});img.addEventListener("click",function(){viewerImg.src=img.src;viewerZoom.reset();viewer.classList.add("open");});return h("div",{class:"shot"},[img,h("div",{class:"meta",text:s.label+" · "+clock(s.at)})]);}
+viewer.querySelector(".close").addEventListener("click",function(){viewer.classList.remove("open");});
 setInterval(function(){if(approvals.size)render();},15000);
 
 function boot(){
