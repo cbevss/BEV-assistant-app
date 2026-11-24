@@ -1,3 +1,4 @@
+import { invoke } from "@tauri-apps/api/core";
 import { useEffect, useState } from "react";
 import { setStartWithWindows, startWithWindowsEnabled } from "../../lib/startup";
 import { getVersion } from "@tauri-apps/api/app";
@@ -193,7 +194,20 @@ export function Settings({ part = "general" }: { part?: "general" | "apps" | "ad
         <Field label="Version">
           <span className="font-mono text-sm text-ink-2">BEV {version}</span>
         </Field>
-        <Field label="BEV folder" hint={browseError || "Where BEV keeps its database, memories and logs on this PC."}>
+        <Field label="Your BEV folder" hint="In your home folder: Installers (BEV's updates download here, newest 3 kept) and From phone. To stop antivirus checking every update, add BEV\\Installers to its exclusions.">
+          <Button
+            onClick={() => {
+              setBrowseError("");
+              invoke<string>("bev_folder")
+                .then((p) => native.openPath(p))
+                .catch((e) => setBrowseError(`Couldn't open the folder: ${String((e as { message?: string })?.message ?? e)}`));
+            }}
+            icon={FolderOpen}
+          >
+            Open
+          </Button>
+        </Field>
+        <Field label="App data" hint={browseError || "Where BEV keeps its database, memories and logs on this PC."}>
           <div className="flex min-w-0 items-center gap-2">
             <span className="min-w-0 truncate font-mono text-xs text-ink-2" title={dataDir}>
               {dataDir || "Unknown"}

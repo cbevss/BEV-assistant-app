@@ -29,6 +29,7 @@ mod kwin;
 mod games;
 mod overlay;
 mod annotate;
+mod folders;
 mod replay;
 mod screen;
 mod secrets;
@@ -197,6 +198,8 @@ pub fn run() {
             // Overlay control
             overlay::show_overlay,
             annotate::show_annotate,
+            folders::bev_folder,
+            folders::install_update_to_folder,
             annotate::hide_annotate,
             annotate::shot_points_to_screen,
             overlay::hide_overlay,

@@ -103,7 +103,7 @@ export function messageWithAttachments(text: string, atts: readonly Attachment[]
   return `${head}\n\n${notes.join("\n")}`;
 }
 
-/** A file sent from the phone (base64): pictures go to the AI, text goes in as text, anything else is saved to Downloads\\BEV from phone. */
+/** A file sent from the phone (base64): pictures go to the AI, text goes in as text, anything else is saved to BEV\\From phone in your home folder. */
 export async function fromBase64(name: string, mime: string, data: string): Promise<Attachment> {
   if (mime.startsWith("image/") || IMAGE_EXT.test(name)) return asImage(name, `data:${mime.startsWith("image/") ? mime : "image/jpeg"};base64,${data}`, Math.round(data.length * 0.75));
   if (mime.startsWith("text/") || TEXT_EXT.test(name)) {

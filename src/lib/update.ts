@@ -6,6 +6,8 @@
 import { create } from "zustand";
 import { check, type Update } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
+import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 
 type Phase = "none" | "available" | "downloading" | "installing" | "error";
 
@@ -69,6 +71,21 @@ export async function installUpdate(): Promise<void> {
   let total = 0;
   let got = 0;
   useUpdate.setState({ phase: "downloading", progress: null, error: "" });
+  // Windows: download into BEV\Installers (one folder to trust in an antivirus), then run it from there.
+  if (navigator.userAgent.includes("Windows")) {
+    const off = await listen<{ got: number; total: number | null }>("bev://update-progress", (e) => {
+      if (e.payload.total) useUpdate.setState({ progress: Math.min(100, Math.round((e.payload.got / e.payload.total) * 100)) });
+    });
+    try {
+      await invoke<string>("install_update_to_folder");
+      useUpdate.setState({ phase: "installing", progress: 100 });
+      return; // BEV closes while the installer runs, then starts again
+    } catch (e) {
+      console.warn("BEV folder update failed, using the built-in updater", e);
+    } finally {
+      off();
+    }
+  }
   try {
     await u.downloadAndInstall((e) => {
       if (e.event === "Started") total = e.data.contentLength ?? 0;

@@ -183,6 +183,8 @@ export function App() {
       // Updates: look for a newer signed release now and every half hour; the
       // title bar shows a download button when one is ready.
       startUpdateChecks();
+      // Make the BEV folder (Installers, From phone) so it's there to find and to add to antivirus exclusions.
+      void import("@tauri-apps/api/core").then(({ invoke }) => invoke("bev_folder")).catch(() => {});
 
       // Keep the installed-app index fresh (launch scan, scans after downloads).
       startAppScanning();
