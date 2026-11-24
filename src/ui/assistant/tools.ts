@@ -54,6 +54,7 @@ const LABELS: Record<string, string> = {
   focus_session: "Focus session",
   focus: "Focus session",
   my_day: "Looked back over your day",
+  app_spots: "Window spots",
   move_window: "Moved a window",
   window_layout: "Window layout",
   get_screen_time: "Checked screen time",

@@ -33,7 +33,7 @@ import { getForecast, describeForecast } from "@/lib/weather";
 import { usePowerTimer, setPowerTimer, cancelPowerTimer } from "@/lib/powerTimer";
 import { useScreenTime, describeScreenTime } from "@/lib/screentime";
 import { bevRect, isBevItself, placeBev } from "@/lib/bevWindow";
-import { layoutApi, useLayouts, findWindows, orderMonitors, monitorOf, snapRect, moveToMonitor, POSITIONS, type Position } from "@/lib/layouts";
+import { layoutApi, useLayouts, findWindows, orderMonitors, monitorOf, snapRect, moveToMonitor, POSITIONS, type Position, percentRect, useAppSpots, placeInSavedSpot, describeSpot, spotToRect, findSpot } from "@/lib/layouts";
 import { useTimers, dueFrom, nextRepeat, nextClock, describeTimer, formatDuration, clockTime, matchTimers } from "@/lib/timers";
 import { winMics } from "@/voice/mic";
 import { formatSize } from "@/lib/files";
@@ -91,6 +91,7 @@ const str = (v: unknown, name: string): string => {
     throw new Error(`argument "${name}" must be a non-empty string`);
   return v.trim();
 };
+const num0 = (v: unknown): number | undefined => (v === undefined || v === null || v === "" || !Number.isFinite(Number(v)) ? undefined : Number(v));
 const num = (v: unknown, name: string): number => {
   const n = typeof v === "string" ? Number(v) : v;
   if (typeof n !== "number" || Number.isNaN(n)) throw new Error(`argument "${name}" must be a number`);
@@ -316,7 +317,44 @@ export const tools: Record<string, RegisteredTool> = {
       },
     },
     timeoutMs: 45_000, // first use may scan installed apps; launches are verified for up to 10 s
-    run: async (a) => describeOpen(await appsApi.open(str(a.name, "name"))),
+    run: async (a) => {
+      const name = str(a.name, "name");
+      const r = await appsApi.open(name);
+      const text = describeOpen(r);
+      // Its usual spot, if the user saved one: put it there straight away.
+      if (r.status === "opened" || r.status === "already_running" || r.status === "starting") {
+        const note = (await placeInSavedSpot(name).catch(() => "")) || (await placeInSavedSpot(r.app).catch(() => ""));
+        return text + note;
+      }
+      return text;
+    },
+  },
+
+  app_spots: {
+    spec: {
+      name: "app_spots",
+      description:
+        "Apps' usual spots (where BEV puts them whenever it opens them): list them, forget one, or put an app back in its spot now. To save one, use move_window with remember=true (\"remember Discord there\" = move_window app Discord remember true).",
+      parameters: { type: "object", properties: { action: { type: "string", enum: ["list", "forget", "apply"] }, app: { type: "string" } }, required: ["action"] },
+    },
+    run: async (a) => {
+      const st = useAppSpots.getState();
+      await st.load();
+      if (a.action === "forget") {
+        const gone = await st.forget(str(a.app, "app"));
+        return gone ? `Forgot ${gone.label}'s usual spot.` : `No saved spot for ${a.app}.`;
+      }
+      if (a.action === "apply") {
+        const app = str(a.app, "app");
+        const s = findSpot(st.spots, app);
+        if (!s) return `No saved spot for ${app}.`;
+        const win = findWindows(await layoutApi.placements(), s.app)[0];
+        if (!win) return `${s.label} isn't open.`;
+        await layoutApi.place(win.hwnd, spotToRect(s, await layoutApi.workAreas()), s.state);
+        return `Put ${s.label} back in its usual spot.`;
+      }
+      return st.spots.length ? st.spots.map(describeSpot).join("\n") : "No apps have a usual spot yet.";
+    },
   },
 
   find_apps: {
@@ -1008,10 +1046,20 @@ export const tools: Record<string, RegisteredTool> = {
     spec: {
       name: "move_window",
       description:
-        "Move or snap an app's window: to another monitor (monitor 1 = the main one, then left to right) and/or a position: left, right, top, bottom, top_left, top_right, bottom_left, bottom_right, centre, or full (maximised). E.g. \"put Discord on my second monitor\", \"snap Chrome to the left\". Use app \"BEV\" to move BEV's own window (\"move yourself to the right\").",
+        "Move an app's window anywhere: to a monitor (1 = the main one, then left to right) and a preset position (left, right, top, bottom, the four corners, centre, full), OR an exact spot in percent of that monitor (x, y from its top-left, width, height: e.g. right third = x 66.7, y 0, width 33.3, height 100), OR exactly over another app's window (like_app: same spot and size). remember=true saves it as that app's usual spot, so BEV puts it there whenever it opens it. E.g. \"put Liner exactly where Claude is\", \"make Spotify the right third of my second monitor and always open it there\". Use app \"BEV\" to move BEV's own window.",
       parameters: {
         type: "object",
-        properties: { app: { type: "string" }, monitor: { type: "number" }, position: { type: "string", enum: POSITIONS } },
+        properties: {
+          app: { type: "string" },
+          monitor: { type: "number" },
+          position: { type: "string", enum: POSITIONS },
+          x: { type: "number", description: "% from the monitor's left edge (0-100)" },
+          y: { type: "number", description: "% from its top" },
+          width: { type: "number", description: "% of the monitor's width" },
+          height: { type: "number", description: "% of its height" },
+          like_app: { type: "string", description: "put it exactly where this other app's window is" },
+          remember: { type: "boolean", description: "save as this app's usual spot for when BEV opens it" },
+        },
         required: ["app"],
       },
     },
@@ -1042,6 +1090,28 @@ export const tools: Record<string, RegisteredTool> = {
       const target = typeof a.monitor === "number" ? mons[Math.round(a.monitor) - 1] : from;
       if (!target) return `There ${mons.length === 1 ? "is only 1 monitor" : `are only ${mons.length} monitors`}.`;
       const pos = typeof a.position === "string" && POSITIONS.includes(a.position as Position) ? (a.position as Position) : null;
+      const remember = a.remember === true || a.remember === "true";
+      const name = win.process.replace(/\.exe$/i, "");
+      const saveSpot = async () => {
+        if (!remember) return "";
+        await new Promise((r) => setTimeout(r, 400));
+        const now = (await layoutApi.placements()).find((p) => p.hwnd === win.hwnd) ?? win;
+        const s = await useAppSpots.getState().remember(now, app);
+        return ` Saved as ${name}'s usual spot (${describeSpot(s)}); BEV will open it there from now on.`;
+      };
+      const pct = ["x", "y", "width", "height"].some((k) => a[k] !== undefined);
+      if (typeof a.like_app === "string" && a.like_app.trim()) {
+        const other = findWindows(ps, a.like_app).find((p) => p.hwnd !== win.hwnd);
+        if (!other) return `No open window for "${a.like_app}" to line ${name} up with.`;
+        await layoutApi.place(win.hwnd, other, other.state === "maximized" ? "maximized" : "normal");
+        return `Put ${name} exactly where ${other.process.replace(/\.exe$/i, "")} is.${await saveSpot()}`;
+      }
+      if (pct) {
+        const r = percentRect(target, { x: num0(a.x), y: num0(a.y), width: num0(a.width), height: num0(a.height) });
+        await layoutApi.place(win.hwnd, r, "normal");
+        return `Moved ${name} to that spot on monitor ${mons.indexOf(target) + 1}.${await saveSpot()}`;
+      }
+      if (!pos && typeof a.monitor !== "number" && remember) return `Kept ${name} where it is.${await saveSpot()}`;
       if (pos === "full") {
         await layoutApi.place(win.hwnd, snapRect(target, "centre"), "maximized");
       } else if (pos) {
@@ -1050,7 +1120,7 @@ export const tools: Record<string, RegisteredTool> = {
         // Just another monitor: same spot and size there; stay maximised if it was.
         await layoutApi.place(win.hwnd, win.state === "maximized" ? snapRect(target, "centre") : moveToMonitor(win, from, target), win.state === "maximized" ? "maximized" : "normal");
       }
-      return `Moved ${win.process.replace(/\.exe$/i, "")} to ${pos ? `the ${pos.replace("_", " ")} of ` : ""}monitor ${mons.indexOf(target) + 1}.`;
+      return `Moved ${name} to ${pos ? `the ${pos.replace("_", " ")} of ` : ""}monitor ${mons.indexOf(target) + 1}.${await saveSpot()}`;
     },
   },
 

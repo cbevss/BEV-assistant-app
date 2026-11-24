@@ -205,3 +205,124 @@ export const useLayouts = create<LayoutState>((set, get) => ({
     return `Restored "${l.name}": moved ${moved} window${moved === 1 ? "" : "s"}.${missing.length ? ` Not open: ${missing.join(", ")} (open them and restore again).` : ""}`;
   },
 }));
+
+// ---------------------------------------------------------------------------
+// Exact spots and each app's preferred spot ("put Liner exactly where Claude is",
+// "always open Spotify on the right half of my second monitor").
+
+/** Where a window goes, relative to a monitor's work area, so it survives resolution changes. */
+export interface Spot {
+  /** 1 = main monitor, then left to right. */
+  monitor: number;
+  rx: number;
+  ry: number;
+  rw: number;
+  rh: number;
+  state: "normal" | "maximized";
+}
+export interface AppSpot extends Spot {
+  /** Process name without .exe, lower case (what BEV matches on). */
+  app: string;
+  /** How the user named it, for showing back. */
+  label: string;
+  savedAt: number;
+}
+
+const clamp01 = (n: number) => Math.max(0, Math.min(1, n));
+
+/** A spot given in percent of a monitor (x, y from its top-left; width, height). Pure; tested. */
+export function percentRect(a: WorkArea, p: { x?: number; y?: number; width?: number; height?: number }) {
+  const w = Math.round(a.w * clamp01((p.width ?? 50) / 100));
+  const h = Math.round(a.h * clamp01((p.height ?? 50) / 100));
+  const x = a.x + Math.round(Math.min(a.w - w, a.w * clamp01((p.x ?? 0) / 100)));
+  const y = a.y + Math.round(Math.min(a.h - h, a.h * clamp01((p.y ?? 0) / 100)));
+  return { x, y, w: Math.max(120, w), h: Math.max(80, h) };
+}
+
+/** A window's rectangle → a spot on the monitor it's mostly on. Pure; tested. */
+export function rectToSpot(r: { x: number; y: number; w: number; h: number }, state: Placement["state"], areas: WorkArea[]): Spot {
+  const mons = orderMonitors(areas);
+  const i = monitorOf(r, areas);
+  const a = mons[i] ?? mons[0];
+  return { monitor: i + 1, rx: (r.x - a.x) / a.w, ry: (r.y - a.y) / a.h, rw: r.w / a.w, rh: r.h / a.h, state: state === "maximized" ? "maximized" : "normal" };
+}
+
+/** A spot → a rectangle on today's monitors (monitor 1 if that one's gone). Pure; tested. */
+export function spotToRect(s: Spot, areas: WorkArea[]) {
+  const mons = orderMonitors(areas);
+  const a = mons[s.monitor - 1] ?? mons[0];
+  return { x: a.x + Math.round(s.rx * a.w), y: a.y + Math.round(s.ry * a.h), w: Math.round(s.rw * a.w), h: Math.round(s.rh * a.h) };
+}
+
+const key = (s: string) => exe(s.trim()).replace(/\s+/g, " ");
+
+/** The saved spot for what the user called an app ("Discord", "discord.exe", "spotify"). Pure; tested. */
+export function findSpot(spots: AppSpot[], name: string): AppSpot | undefined {
+  const k = key(name);
+  if (!k) return undefined;
+  return (
+    spots.find((s) => s.app === k || key(s.label) === k) ??
+    spots.find((s) => s.app.includes(k) || k.includes(s.app) || key(s.label).includes(k) || k.includes(key(s.label)))
+  );
+}
+
+interface SpotState {
+  spots: AppSpot[];
+  loaded: boolean;
+  load(): Promise<void>;
+  remember(win: Placement, label: string): Promise<AppSpot>;
+  forget(name: string): Promise<AppSpot | undefined>;
+}
+
+export const useAppSpots = create<SpotState>((set, get) => ({
+  spots: [],
+  loaded: false,
+  async load() {
+    if (get().loaded) return;
+    try {
+      set({ spots: (await (await store()).get<AppSpot[]>("app-spots")) ?? [], loaded: true });
+    } catch {
+      set({ loaded: true });
+    }
+  },
+  async remember(win, label) {
+    await get().load();
+    const spot: AppSpot = { ...rectToSpot(win, win.state, await layoutApi.workAreas()), app: key(win.process), label: label.trim() || win.process, savedAt: Date.now() };
+    const spots = [...get().spots.filter((s) => s.app !== spot.app), spot];
+    set({ spots });
+    await (await store()).set("app-spots", spots);
+    return spot;
+  },
+  async forget(name) {
+    await get().load();
+    const s = findSpot(get().spots, name);
+    if (!s) return undefined;
+    const spots = get().spots.filter((x) => x !== s);
+    set({ spots });
+    await (await store()).set("app-spots", spots);
+    return s;
+  },
+}));
+
+/** Put an app's window in its saved spot, waiting for it to appear (an app just opened). Returns a note, or "" if it has no spot. */
+export async function placeInSavedSpot(name: string, waitMs = 15_000): Promise<string> {
+  const st = useAppSpots.getState();
+  await st.load();
+  const spot = findSpot(st.spots, name);
+  if (!spot) return "";
+  const until = Date.now() + waitMs;
+  for (;;) {
+    const ps = await layoutApi.placements();
+    const wins = findWindows(ps, spot.app).filter((p) => p.state !== "minimized" || Date.now() > until - 2000);
+    if (wins.length) {
+      const areas = await layoutApi.workAreas();
+      await layoutApi.place(wins[0].hwnd, spotToRect(spot, areas), spot.state);
+      return ` Put it in its usual spot (monitor ${spot.monitor}${spot.state === "maximized" ? ", full screen" : ""}).`;
+    }
+    if (Date.now() > until) return ` Its window didn't show up in time to move it to its usual spot.`;
+    await new Promise((r) => setTimeout(r, 500));
+  }
+}
+
+export const describeSpot = (s: AppSpot) =>
+  `${s.label}: monitor ${s.monitor}, ${s.state === "maximized" ? "full screen" : `${Math.round(s.rx * 100)}% across, ${Math.round(s.ry * 100)}% down, ${Math.round(s.rw * 100)}% wide, ${Math.round(s.rh * 100)}% tall`}`;
