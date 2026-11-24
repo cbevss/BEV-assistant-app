@@ -49,6 +49,7 @@ header{flex:none;display:flex;align-items:center;gap:10px;padding:calc(env(safe-
 main{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;padding:16px 14px 8px;-webkit-overflow-scrolling:touch}
 .live{flex:none;position:relative;height:40vh;height:40dvh;background:#000;border-bottom:1px solid var(--line);overflow:hidden;touch-action:none}
 .live[hidden]{display:none}
+.live img:not([src]){visibility:hidden}
 .zoom{position:absolute;inset:0;display:grid;place-items:center;overflow:hidden;touch-action:none}
 .zoom img{max-width:100%;max-height:100%;transform-origin:0 0;will-change:transform;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;pointer-events:none}
 .livebar{position:absolute;left:8px;right:8px;top:8px;display:flex;gap:6px;align-items:center;pointer-events:none}
@@ -215,7 +216,7 @@ function toast(msg){var id=newId();feed.set(id,{id:id,role:"tool",label:"Couldn'
 var live={on:false,seq:0,display:"current",lastAt:0,frameTimer:null,beatTimer:null,panel:null,img:null,msg:null,state:null,zoom:null,chip:null};
 var DISPLAY_NAMES={current:"Active screen",all:"All screens",primary:"Main screen"};
 function liveBeat(){if(!live.on||document.hidden)return;api("/phone/live",{method:"POST",body:{on:true,display:live.display}}).catch(function(){});}
-function startLive(){live.on=true;live.seq=0;live.lastAt=0;live.panel.hidden=false;live.chip.classList.add("on");live.chip.textContent="Stop live screen";live.msg.textContent="Connecting to your PC…";live.img.removeAttribute("src");live.zoom.reset();
+function startLive(){live.on=true;live.seq=0;live.lastAt=0;live.waitSince=0;live.panel.hidden=false;live.chip.classList.add("on");live.chip.textContent="Stop live screen";live.msg.textContent="Connecting to your PC…";live.img.removeAttribute("src");live.zoom.reset();
   liveBeat();clearInterval(live.beatTimer);live.beatTimer=setInterval(liveBeat,15000);pollFrame();keepChatAtBottom();}
 function stopLive(){live.on=false;clearInterval(live.beatTimer);clearTimeout(live.frameTimer);live.panel.hidden=true;live.chip.classList.remove("on");live.chip.textContent="Live screen";
   api("/phone/live",{method:"POST",body:{on:false}}).catch(function(){});keepChatAtBottom();}
@@ -228,7 +229,8 @@ function pollFrame(){
   var got=false;
   api("/phone/frame?after="+live.seq).then(function(f){
     if(f.ct){got=true;live.seq=f.seq;return openFrame(f).then(function(p){if(p&&p.type==="frame"&&p.data){live.img.src="data:image/jpeg;base64,"+p.data;live.lastAt=Date.now();live.msg.textContent="";live.state.textContent=String(p.label||"Your screen");}},function(){});}
-    if(!live.lastAt){var on=f.pc_last_seen&&f.now-f.pc_last_seen<30000;live.msg.textContent=on?"Waiting for the first picture…":"Your PC isn't connected. Is BEV open with Phone control on?";}
+    if(!live.lastAt){var on=f.pc_last_seen&&f.now-f.pc_last_seen<30000;live.waitSince=live.waitSince||Date.now();
+      live.msg.textContent=!on?"Your PC isn't connected. Is BEV open with Phone control on?":Date.now()-live.waitSince>20000?"Still no picture. Check the chat below for a message from your PC, or stop and start the live screen.":"Waiting for the first picture…";}
   }).catch(function(){}).then(function(){
     if(live.lastAt&&Date.now()-live.lastAt>8000)live.state.textContent="Paused (no new picture)";
     live.frameTimer=setTimeout(pollFrame,got?250:700);});
