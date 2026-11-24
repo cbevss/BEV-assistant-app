@@ -27,6 +27,30 @@ const POLL_MS = 15_000;
 const ASK_MS = 5 * 60_000;
 export const DEFAULT_BOT_URL = "https://bevbotdiscord.com";
 
+let owners: { ids: string[]; at: number } | null = null;
+
+/** The BEV bot owner's Discord ids, from the bot (cached for an hour). */
+export async function botOwnerIds(): Promise<string[]> {
+  if (owners && Date.now() - owners.at < 3600_000) return owners.ids;
+  try {
+    const r = await api<{ ids: string[] }>(`${DEFAULT_BOT_URL}/api/link/owners`, {});
+    owners = { ids: (r.ids ?? []).map(String), at: Date.now() };
+  } catch {
+    owners = { ids: owners?.ids ?? [], at: Date.now() - 3000_000 };     // try again in 10 minutes
+  }
+  return owners.ids;
+}
+
+/** Only the bot owner's BEV login gets the Discord link. Pure; tested. */
+export function isOwnerLogin(discordId: string | undefined | null, ids: string[]): boolean {
+  return !!discordId && ids.includes(String(discordId));
+}
+
+async function signedInAsOwner(): Promise<boolean> {
+  const { useAccount } = await import("@/account/account");
+  return isOwnerLogin(useAccount.getState().user?.discord_id, await botOwnerIds());
+}
+
 export const botUrl = () => (useSettings.getState().settings.integrations.bevbot?.url || DEFAULT_BOT_URL).trim().replace(/\/+$/, "");
 
 async function bot<T>(path: string, body?: unknown, method?: string): Promise<T> {
@@ -423,7 +447,7 @@ let timer: ReturnType<typeof setTimeout> | null = null;
 let busy = false;
 async function tick() {
   const i = useSettings.getState().settings.integrations.bevbot;
-  if (i?.enabled && !busy) {
+  if (i?.enabled && !busy && (await signedInAsOwner())) {
     busy = true;
     try {
       if (i.owner) await ownerEvents();

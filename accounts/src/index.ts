@@ -158,6 +158,7 @@ interface User {
 const publicUser = (u: User) => ({
   id: u.id,
   name: u.name,
+  discord_id: u.discord_id,
   avatar: u.avatar ? `https://cdn.discordapp.com/avatars/${u.discord_id}/${u.avatar}.png?size=128` : null,
   created_at: u.created_at,
 });

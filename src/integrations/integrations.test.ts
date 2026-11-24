@@ -123,3 +123,13 @@ describe("BEV bot owner link", () => {
     expect(noticeFor({ id: 3, kind: "server", text: "joined" }).key).not.toBe(noticeFor({ id: 4, kind: "server", text: "joined" }).key);
   });
 });
+
+import { isOwnerLogin } from "./bevbot";
+describe("Discord PC link is the bot owner's only", () => {
+  it("shows only for the owner's login", () => {
+    expect(isOwnerLogin("123", ["123"])).toBe(true);
+    expect(isOwnerLogin("999", ["123"])).toBe(false);
+    expect(isOwnerLogin(undefined, ["123"])).toBe(false);
+    expect(isOwnerLogin("123", [])).toBe(false);
+  });
+});
