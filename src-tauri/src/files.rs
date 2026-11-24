@@ -72,12 +72,21 @@ pub fn open_path(path: String) -> BevResult<String> {
     let p = resolve(&path)?;
     #[cfg(windows)]
     {
-        // explorer.exe returns non-zero exit codes even on success, so only a
-        // failure to start it counts as an error.
-        std::process::Command::new("explorer.exe")
-            .arg(&p)
-            .spawn()
-            .map_err(|e| BevError::Os(format!("couldn't open {}: {e}", p.display())))?;
+        // Ask Windows to "open" it, like double-clicking: folders go to whatever
+        // file manager is set as default (File Explorer, Files, Directory Opus…),
+        // files to their default app.
+        use windows::core::{HSTRING, PCWSTR};
+        use windows::Win32::UI::Shell::ShellExecuteW;
+        use windows::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
+        let file = HSTRING::from(p.as_os_str());
+        let r = unsafe { ShellExecuteW(windows::Win32::Foundation::HWND::default(), &HSTRING::from("open"), &file, PCWSTR::null(), PCWSTR::null(), SW_SHOWNORMAL) };
+        if (r.0 as isize) <= 32 {
+            // Nothing registered (or it refused): File Explorer always works.
+            std::process::Command::new("explorer.exe")
+                .arg(&p)
+                .spawn()
+                .map_err(|e| BevError::Os(format!("couldn't open {}: {e}", p.display())))?;
+        }
         Ok(format!("opened {}", display_name(&p)))
     }
     #[cfg(target_os = "linux")]
