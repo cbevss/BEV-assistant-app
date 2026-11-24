@@ -34,6 +34,7 @@ export default defineConfig({
       input: {
         main: r("./index.html"),
         overlay: r("./overlay.html"),
+        annotate: r("./annotate.html"),
       },
     },
   },

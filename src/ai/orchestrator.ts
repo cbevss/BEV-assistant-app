@@ -1,3 +1,4 @@
+import { teachingOn, teachingPrompt } from "@/annotate/teach";
 import { native } from "@/lib/native";
 import { useGaming } from "@/lib/gaming";
 import { focusing } from "@/lib/focus";
@@ -112,7 +113,7 @@ async function currentSystemPrompt(userText = ""): Promise<string> {
     // Screen awareness is governed by the look_at_screen permission.
     toolAllowed("look_at_screen") ? native.foregroundWindow().catch(() => null) : Promise.resolve(null),
   ]);
-  return [buildSystemPrompt(s, memories, foregroundLabel(fg), useGaming.getState().game?.name ?? null, focusing()), noticesForPrompt()].filter(Boolean).join("\n\n");
+  return [buildSystemPrompt(s, memories, foregroundLabel(fg), useGaming.getState().game?.name ?? null, focusing()), noticesForPrompt(), teachingPrompt()].filter(Boolean).join("\n\n");
 }
 
 /** "Discord — #general (Discord.exe)", or "" for BEV itself / nothing useful. */
@@ -186,6 +187,10 @@ export const OUTSIDE_RISK = new Set([
 
 /** Drop history beyond this many messages to bound token use / latency. */
 const MAX_HISTORY = 30;
+/** A lesson is a long conversation: keep far more of it. */
+const MAX_HISTORY_TEACHING = 240;
+/** What was said in turns dropped from history, so a long talk doesn't forget how it started. */
+const DIGEST_MAX = 3500;
 
 /**
  * Runs the conversation loop: model → tool calls → results → model, until the
@@ -336,7 +341,8 @@ export class Orchestrator {
     const hint = similar
       ? `You've done a similar task before ("${similar.example}"). These steps worked then; adapt them if this request differs:\n${describeSteps(similar.steps).map((s, i) => `${i + 1}. ${s}`).join("\n")}`
       : "";
-    const system = [await currentSystemPrompt(userText), this.recentContext, note, hint, replayNote, remote ? REMOTE_NOTE : bg ? BACKGROUND_NOTE : ""].filter(Boolean).join("\n\n");
+    const earlier = this.digest ? `EARLIER IN THIS CONVERSATION (older turns, summarised):\n${this.digest}` : "";
+    const system = [await currentSystemPrompt(userText), earlier, this.recentContext, note, hint, replayNote, remote ? REMOTE_NOTE : bg ? BACKGROUND_NOTE : ""].filter(Boolean).join("\n\n");
     // Only advertise tools the user hasn't revoked (and, in the background, that don't need a watcher).
     const specs = toolSpecs().filter((t) => toolAllowed(t.name) && !(noInput && BACKGROUND_FORBIDDEN.has(t.name)) && !(remote && (t.name === "start_background_task" || t.name === "fill_card")));
     // A planned task gets room to work; a simple request stays short.
@@ -455,11 +461,16 @@ export class Orchestrator {
 
   /** Keep the most recent turns; never start history on an orphaned tool result. */
   private trimHistory() {
-    if (this.history.length <= MAX_HISTORY) return;
-    let cut = this.history.length - MAX_HISTORY;
+    const max = teachingOn() ? MAX_HISTORY_TEACHING : MAX_HISTORY;
+    if (this.history.length <= max) return;
+    let cut = this.history.length - max;
     while (cut < this.history.length && this.history[cut].role !== "user") cut++;
+    this.digest = digestDropped(this.digest, this.history.slice(0, cut));
     this.history = this.history.slice(cut);
   }
+
+  /** Earlier in this conversation (turns no longer in history), for the system prompt. */
+  private digest = "";
 
   /** Run a tool and note the step, so a successful task can be learned. */
   private async runTool(call: ToolCall, signal?: AbortSignal): Promise<{ ok: boolean; text: string; images?: AiImage[] }> {
@@ -571,4 +582,15 @@ function withTimeout<T>(p: Promise<T>, ms: number, signal?: AbortSignal): Promis
       }
     );
   });
+}
+
+/** Adds what was said in dropped turns to the running digest (oldest trimmed first when it's long). Pure; tested. */
+export function digestDropped(digest: string, dropped: Array<{ role: string; content?: unknown }>): string {
+  const lines = dropped
+    .filter((m) => (m.role === "user" || m.role === "assistant") && typeof m.content === "string" && m.content.trim())
+    .map((m) => `${m.role === "user" ? "User" : "BEV"}: ${String(m.content).replace(/\s+/g, " ").trim().slice(0, 220)}`);
+  if (!lines.length) return digest;
+  let out = [digest, ...lines].filter(Boolean).join("\n");
+  if (out.length > DIGEST_MAX) out = "…" + out.slice(out.length - DIGEST_MAX);
+  return out;
 }

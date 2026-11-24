@@ -24,7 +24,7 @@ pub fn ensure_overlay(app: &tauri::AppHandle) -> BevResult<()> {
 /// Keep the orb out of screenshots (BEV's own screen captures included), so it
 /// never hides what BEV is looking at. Windows 10 2004+; silently a no-op before.
 #[cfg(windows)]
-fn exclude_from_capture(w: &WebviewWindow) {
+pub(crate) fn exclude_from_capture(w: &WebviewWindow) {
     use windows::Win32::Foundation::HWND;
     use windows::Win32::UI::WindowsAndMessaging::{SetWindowDisplayAffinity, WDA_EXCLUDEFROMCAPTURE};
     if let Ok(h) = w.hwnd() {
@@ -37,7 +37,7 @@ fn exclude_from_capture(w: &WebviewWindow) {
 }
 
 #[cfg(not(windows))]
-fn exclude_from_capture(_w: &WebviewWindow) {}
+pub(crate) fn exclude_from_capture(_w: &WebviewWindow) {}
 
 #[tauri::command]
 pub fn show_overlay(app: tauri::AppHandle) -> BevResult<()> {
@@ -60,7 +60,7 @@ pub fn hide_overlay(app: tauri::AppHandle) -> BevResult<()> {
 /// (stutter, alt-tab, mouse escaping). Show it the way tooltips are shown.
 /// Hide goes the same way so Tauri's idea of visibility can't get out of step.
 #[cfg(windows)]
-fn show_without_focus(w: &WebviewWindow) -> BevResult<()> {
+pub(crate) fn show_without_focus(w: &WebviewWindow) -> BevResult<()> {
     use windows::Win32::Foundation::HWND;
     use windows::Win32::UI::WindowsAndMessaging::{
         SetWindowPos, ShowWindow, HWND_TOPMOST, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SWP_SHOWWINDOW,
@@ -84,7 +84,7 @@ fn show_without_focus(w: &WebviewWindow) -> BevResult<()> {
 }
 
 #[cfg(windows)]
-fn hide_window(w: &WebviewWindow) -> BevResult<()> {
+pub(crate) fn hide_window(w: &WebviewWindow) -> BevResult<()> {
     use windows::Win32::Foundation::HWND;
     use windows::Win32::UI::WindowsAndMessaging::{ShowWindow, SW_HIDE};
     let h = w.hwnd().map_err(|e| BevError::Os(e.to_string()))?;
@@ -95,12 +95,12 @@ fn hide_window(w: &WebviewWindow) -> BevResult<()> {
 }
 
 #[cfg(not(windows))]
-fn show_without_focus(w: &WebviewWindow) -> BevResult<()> {
+pub(crate) fn show_without_focus(w: &WebviewWindow) -> BevResult<()> {
     w.show().map_err(|e| BevError::Os(e.to_string()))
 }
 
 #[cfg(not(windows))]
-fn hide_window(w: &WebviewWindow) -> BevResult<()> {
+pub(crate) fn hide_window(w: &WebviewWindow) -> BevResult<()> {
     w.hide().map_err(|e| BevError::Os(e.to_string()))
 }
 

@@ -28,6 +28,7 @@ mod linux;
 mod kwin;
 mod games;
 mod overlay;
+mod annotate;
 mod replay;
 mod screen;
 mod secrets;
@@ -115,6 +116,7 @@ pub fn run() {
 
             tray::build(app.handle())?;
             overlay::ensure_overlay(app.handle()).ok();
+            annotate::ensure_annotate(app.handle());
 
             // The main window starts hidden (tauri.conf.json). Autostart passes
             // --minimized so BEV signs in quietly to the tray; any other launch
@@ -194,6 +196,9 @@ pub fn run() {
             windows_mgmt::list_windows,
             // Overlay control
             overlay::show_overlay,
+            annotate::show_annotate,
+            annotate::hide_annotate,
+            annotate::shot_points_to_screen,
             overlay::hide_overlay,
             overlay::fullscreen_state,
             overlay::set_overlay_clickthrough,

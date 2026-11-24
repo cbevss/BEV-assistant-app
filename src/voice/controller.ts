@@ -1,3 +1,4 @@
+import { teachingOn } from "@/annotate/teach";
 import { emit } from "@tauri-apps/api/event";
 import { isQuiet } from "@/lib/gaming";
 import { endIntent, dismissReply } from "./intents";
@@ -49,6 +50,9 @@ function micErrorText(error: string): string {
 }
 
 /** "stop", "BEV stop", "cancel", "shut up" end the conversation silently. */
+/** In a lesson, how long BEV keeps listening after a step (they need time to do it). */
+const TEACHING_LISTEN_MS = 45_000;
+
 export function isStopPhrase(utterance: string): boolean {
   return endIntent(utterance) === "stop";
 }
@@ -543,6 +547,8 @@ export class VoiceController {
         followUp = followUpPlan(reply, settings());
         // They talked over BEV: they're mid-conversation with it, so listen properly.
         if (interruptedTurn) followUp = { listen: true, windowMs: settings().conversationTimeoutMs, expectAnswer: true };
+        // A lesson: they're doing the step BEV just showed, so keep listening for a good while.
+        else if (teachingOn()) followUp = { listen: true, windowMs: Math.max(settings().conversationTimeoutMs, TEACHING_LISTEN_MS), expectAnswer: true };
         // Smart mode: shape the window by how this user really follows up.
         else if (settings().followUpMode === "smart" && followUp.listen) {
           learnKind = asksQuestion(reply) ? "question" : "statement";

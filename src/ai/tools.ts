@@ -1,3 +1,4 @@
+import { teachTools } from "@/annotate/teach";
 import { invoke } from "@tauri-apps/api/core";
 import { findWindow, describeWindows } from "@/lib/windows";
 import { askToUnlock, cardLabel, expiryAs, findCard, loadCards, unlockedCard } from "../lib/card";
@@ -2255,9 +2256,9 @@ async function micLabel(deviceId: string): Promise<string> {
 
 /** Built-in tools plus those from connected services (Integrations). */
 export function allTools(): Record<string, RegisteredTool> {
-  return { ...connectorTools(), ...tools };
+  return { ...connectorTools(), ...teachTools(), ...tools };
 }
-export const getTool = (name: string): RegisteredTool | undefined => tools[name] ?? connectorTools()[name];
+export const getTool = (name: string): RegisteredTool | undefined => tools[name] ?? teachTools()[name] ?? connectorTools()[name];
 
 export const toolSpecs = (): ToolSpec[] => Object.values(allTools()).map((t) => t.spec);
 export const isSensitive = (name: string, args?: Record<string, unknown>): boolean => {
