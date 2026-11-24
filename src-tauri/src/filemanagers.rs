@@ -1,4 +1,4 @@
-//! File managers installed on this PC (File Explorer, Files, Directory Opus, Total Commander…), so the user can
+//! File managers installed on this PC (File Explorer, Slate, Files, Directory Opus, Total Commander…), so the user can
 //! pick which one BEV opens folders in. Windows doesn't always hand folders to a replacement file manager, so BEV
 //! starts the chosen one itself with the folder.
 
@@ -16,6 +16,7 @@ pub struct FileManager {
 
 /// (id, name, places to look under Program Files / LocalAppData / WindowsApps aliases, how to pass the folder)
 const KNOWN: &[(&str, &str, &[&str], Args)] = &[
+    ("slate", "Slate", &[r"%LOCALAPPDATA%\Slate\Slate.exe", r"%LOCALAPPDATA%\Programs\Slate\Slate.exe", r"%ProgramFiles%\Slate\Slate.exe"], Args::Plain),
     ("files", "Files", &[r"%LOCALAPPDATA%\Microsoft\WindowsApps\files.exe", r"%LOCALAPPDATA%\Microsoft\WindowsApps\Files.App.exe"], Args::Plain),
     ("dopus", "Directory Opus", &[r"%ProgramFiles%\GPSoftware\Directory Opus\dopus.exe"], Args::Plain),
     ("totalcmd", "Total Commander", &[r"%COMMANDER_PATH%\TOTALCMD64.EXE", r"C:\totalcmd\TOTALCMD64.EXE", r"%ProgramFiles%\totalcmd\TOTALCMD64.EXE", r"C:\totalcmd\TOTALCMD.EXE"], Args::TotalCmd),
@@ -93,6 +94,7 @@ mod tests {
     fn builds_each_file_managers_command_line() {
         let f = Path::new(r"C:\Users\me\BEV");
         assert_eq!(args_for("files", f), vec![r"C:\Users\me\BEV".to_string()]);
+        assert_eq!(args_for("slate", f), vec![r"C:\Users\me\BEV".to_string()]);
         assert_eq!(args_for("totalcmd", f), vec!["/O".to_string(), "/T".to_string(), r"/L=C:\Users\me\BEV".to_string()]);
     }
 
