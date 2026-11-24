@@ -31,6 +31,7 @@ import { suggestGame } from "@/lib/suggestGame";
 import { getForecast, describeForecast } from "@/lib/weather";
 import { usePowerTimer, setPowerTimer, cancelPowerTimer } from "@/lib/powerTimer";
 import { useScreenTime, describeScreenTime } from "@/lib/screentime";
+import { bevRect, isBevItself, placeBev } from "@/lib/bevWindow";
 import { layoutApi, useLayouts, findWindows, orderMonitors, monitorOf, snapRect, moveToMonitor, POSITIONS, type Position } from "@/lib/layouts";
 import { useTimers, dueFrom, nextRepeat, nextClock, describeTimer, formatDuration, clockTime, matchTimers } from "@/lib/timers";
 import { winMics } from "@/voice/mic";
@@ -1006,7 +1007,7 @@ export const tools: Record<string, RegisteredTool> = {
     spec: {
       name: "move_window",
       description:
-        "Move or snap an app's window: to another monitor (monitor 1 = the main one, then left to right) and/or a position: left, right, top, bottom, top_left, top_right, bottom_left, bottom_right, centre, or full (maximised). E.g. \"put Discord on my second monitor\", \"snap Chrome to the left\".",
+        "Move or snap an app's window: to another monitor (monitor 1 = the main one, then left to right) and/or a position: left, right, top, bottom, top_left, top_right, bottom_left, bottom_right, centre, or full (maximised). E.g. \"put Discord on my second monitor\", \"snap Chrome to the left\". Use app \"BEV\" to move BEV's own window (\"move yourself to the right\").",
       parameters: {
         type: "object",
         properties: { app: { type: "string" }, monitor: { type: "number" }, position: { type: "string", enum: POSITIONS } },
@@ -1015,6 +1016,21 @@ export const tools: Record<string, RegisteredTool> = {
     },
     run: async (a) => {
       const app = str(a.app, "app");
+      const pos0 = typeof a.position === "string" && POSITIONS.includes(a.position as Position) ? (a.position as Position) : null;
+      // BEV's own window isn't in the window list: move it through its own API.
+      if (isBevItself(app)) {
+        const [areas, me] = await Promise.all([layoutApi.workAreas(), bevRect()]);
+        const mons = orderMonitors(areas);
+        if (!mons.length) throw new Error("couldn't read the monitors");
+        const from = mons[monitorOf(me, areas)] ?? mons[0];
+        const target = typeof a.monitor === "number" ? mons[Math.round(a.monitor) - 1] : from;
+        if (!target) return `There ${mons.length === 1 ? "is only 1 monitor" : `are only ${mons.length} monitors`}.`;
+        if (pos0 === "full") await placeBev(snapRect(target, "centre"), "maximized");
+        else if (pos0) await placeBev(snapRect(target, pos0), "normal");
+        else if (me.maximized) await placeBev(snapRect(target, "centre"), "maximized");
+        else await placeBev(moveToMonitor(me, from, target), "normal");
+        return `Moved BEV's window to ${pos0 ? `the ${pos0.replace("_", " ")} of ` : ""}monitor ${mons.indexOf(target) + 1}.`;
+      }
       const [ps, areas] = await Promise.all([layoutApi.placements(), layoutApi.workAreas()]);
       const wins = findWindows(ps, app);
       if (!wins.length) return `No open window for "${app}". Open windows: ${[...new Set(ps.map((p) => p.process.replace(/\.exe$/i, "")))].join(", ")}.`;
