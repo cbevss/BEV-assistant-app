@@ -21,6 +21,9 @@
  *   POST /phone/messages  { dir, iv, ct }        relay one encrypted message
  *   GET  /phone/messages?dir=to_pc|to_phone&since=N
  *   GET  /phone/status                when the PC last checked in
+ *   POST /phone/live      { on, display }       the phone wants (or stops) a live feed
+ *   POST /phone/frame     { iv, ct }            PC: the newest encrypted screen frame
+ *   GET  /phone/frame?after=N                   phone: that frame, if newer than N
  *
  * Memories are encrypted on the user's devices before they're sent. This
  * service never sees the key, so it can't read them.
@@ -53,6 +56,10 @@ export const LIMITS = {
   phoneKeep: 300,
   phoneScreensKeep: 2,
   phonePerMinute: 60,
+  /** A phone keeps the live feed going by asking again within this long. */
+  liveHold: 45_000,
+  /** Fastest the PC may send live frames. */
+  frameMinGapMs: 300,
   phoneTtl: DAY,
 };
 const KINDS = new Set(["memory", "note", "profile"]);
@@ -361,7 +368,7 @@ async function handle(req: Request, env: Env, fetcher: typeof fetch): Promise<Re
 
   if (req.method === "GET" && path === "/") return json({ service: "bev-accounts", ok: true }, 200, c);
   if (req.method === "GET" && path === "/phone") return phonePage();
-  if (req.method === "GET" && path.startsWith("/phone/") && !path.startsWith("/phone/messages") && path !== "/phone/status") {
+  if (req.method === "GET" && path.startsWith("/phone/") && !PHONE_API.has(path)) {
     const asset = phoneAsset(path);
     if (asset) return asset;
   }
@@ -443,7 +450,7 @@ async function handle(req: Request, env: Env, fetcher: typeof fetch): Promise<Re
     else for (const s of stmts) await s.run();
     return json({ ok: true, erased: rows.results.length }, 200, c);
   }
-  if (path === "/phone/messages" || path === "/phone/status") {
+  if (PHONE_API.has(path)) {
     const r = await phoneApi(req, url, path, env, user);
     Object.entries(c).forEach(([k, v]) => r.headers.set(k, v));
     return r;
@@ -455,7 +462,7 @@ async function handle(req: Request, env: Env, fetcher: typeof fetch): Promise<Re
     return json({ user: publicUser(user), vault: v ? JSON.parse(v.data) : null, items: items.results, phone_messages: phone.results }, 200, c);
   }
   if (req.method === "DELETE" && path === "/account") {
-    const stmts = ["items", "counters", "vaults", "sessions", "login_codes", "phone_messages", "phone_presence"].map((t) => env.DB.prepare(`DELETE FROM ${t} WHERE user_id = ?`).bind(user.id));
+    const stmts = ["items", "counters", "vaults", "sessions", "login_codes", "phone_messages", "phone_presence", "phone_frames", "phone_live"].map((t) => env.DB.prepare(`DELETE FROM ${t} WHERE user_id = ?`).bind(user.id));
     stmts.push(env.DB.prepare("DELETE FROM users WHERE id = ?").bind(user.id));
     if (env.DB.batch) await env.DB.batch(stmts);
     else for (const s of stmts) await s.run();
@@ -469,12 +476,16 @@ export async function cleanup(env: Env, now = Date.now()): Promise<void> {
   await env.DB.prepare("DELETE FROM login_codes WHERE created_at < ?").bind(now - CODE_TTL).run();
   await env.DB.prepare("DELETE FROM sessions WHERE expires_at < ?").bind(now).run();
   await env.DB.prepare("DELETE FROM phone_messages WHERE created_at < ?").bind(now - LIMITS.phoneTtl).run();
+  await env.DB.prepare("DELETE FROM phone_frames WHERE created_at < ?").bind(now - 5 * 60_000).run();
+  await env.DB.prepare("DELETE FROM phone_live WHERE until < ?").bind(now).run();
 }
 
 // ---------------------------------------------------------------------------
 // phone control: a relay for ciphertext between the user's phone and PC
 
 const DIRS = new Set(["to_pc", "to_phone"]);
+const PHONE_API = new Set(["/phone/messages", "/phone/status", "/phone/live", "/phone/frame"]);
+const DISPLAYS = new Set(["current", "all", "primary"]);
 
 async function phoneApi(req: Request, url: URL, path: string, env: Env, user: User): Promise<Response> {
   const now = Date.now();
@@ -493,11 +504,53 @@ async function phoneApi(req: Request, url: URL, path: string, env: Env, user: Us
     }
     const since = Math.floor(Number(url.searchParams.get("since") ?? 0)) || 0;
     const latest = (await env.DB.prepare("SELECT COALESCE(MAX(id), 0) AS n FROM phone_messages WHERE user_id = ? AND dir = ?").bind(user.id, dir).first<{ n: number }>())?.n ?? 0;
-    if (since < 0) return json({ messages: [], latest });
+    // The PC also learns here whether the phone wants a live feed.
+    const live =
+      dir === "to_pc"
+        ? await env.DB.prepare("SELECT until, display FROM phone_live WHERE user_id = ?").bind(user.id).first<{ until: number; display: string }>()
+        : null;
+    const liveInfo = live && live.until > now ? { live_until: live.until, live_display: live.display } : {};
+    if (since < 0) return json({ messages: [], latest, ...liveInfo });
     const rows = await env.DB.prepare("SELECT id, iv, ct, created_at FROM phone_messages WHERE user_id = ? AND dir = ? AND id > ? ORDER BY id LIMIT 100")
       .bind(user.id, dir, since)
       .all<{ id: number; iv: string; ct: string; created_at: number }>();
-    return json({ messages: rows.results, latest });
+    return json({ messages: rows.results, latest, ...liveInfo });
+  }
+  if (req.method === "POST" && path === "/phone/live") {
+    const b = await body<{ on?: boolean; display?: string }>(req, 1024);
+    if (!b || typeof b.on !== "boolean") return fail(400, "expected { on }");
+    const display = DISPLAYS.has(b.display ?? "") ? b.display! : "current";
+    const until = b.on ? now + LIMITS.liveHold : 0;
+    await env.DB.prepare(
+      "INSERT INTO phone_live (user_id, until, display) VALUES (?, ?, ?) ON CONFLICT(user_id) DO UPDATE SET until = excluded.until, display = excluded.display"
+    )
+      .bind(user.id, until, display)
+      .run();
+    if (!b.on) await env.DB.prepare("DELETE FROM phone_frames WHERE user_id = ?").bind(user.id).run();
+    return json({ ok: true, until });
+  }
+  if (req.method === "POST" && path === "/phone/frame") {
+    const b = await body<{ iv?: string; ct?: string }>(req, LIMITS.phoneScreen + 1024);
+    if (!b || typeof b.iv !== "string" || !/^[A-Za-z0-9+/=]{12,32}$/.test(b.iv) || typeof b.ct !== "string" || !/^[A-Za-z0-9+/=]+$/.test(b.ct)) return fail(400, "expected encrypted { iv, ct }");
+    if (b.ct.length > LIMITS.phoneScreen) return fail(413, "frame too large");
+    const live = await env.DB.prepare("SELECT until FROM phone_live WHERE user_id = ?").bind(user.id).first<{ until: number }>();
+    if (!live || live.until <= now) return fail(409, "the phone isn't watching");
+    const prev = await env.DB.prepare("SELECT seq, created_at FROM phone_frames WHERE user_id = ?").bind(user.id).first<{ seq: number; created_at: number }>();
+    if (prev && now - prev.created_at < LIMITS.frameMinGapMs) return fail(429, "too fast");
+    const seq = (prev?.seq ?? 0) + 1;
+    await env.DB.prepare(
+      "INSERT INTO phone_frames (user_id, seq, iv, ct, created_at) VALUES (?, ?, ?, ?, ?) ON CONFLICT(user_id) DO UPDATE SET seq = excluded.seq, iv = excluded.iv, ct = excluded.ct, created_at = excluded.created_at"
+    )
+      .bind(user.id, seq, b.iv, b.ct, now)
+      .run();
+    return json({ ok: true, seq });
+  }
+  if (req.method === "GET" && path === "/phone/frame") {
+    const after = Math.floor(Number(url.searchParams.get("after") ?? 0)) || 0;
+    const f = await env.DB.prepare("SELECT seq, iv, ct, created_at FROM phone_frames WHERE user_id = ?").bind(user.id).first<{ seq: number; iv: string; ct: string; created_at: number }>();
+    const p = await env.DB.prepare("SELECT last_seen FROM phone_presence WHERE user_id = ?").bind(user.id).first<{ last_seen: number }>();
+    if (!f || f.seq <= after) return json({ seq: f?.seq ?? after, now, pc_last_seen: p?.last_seen ?? null });
+    return json({ seq: f.seq, iv: f.iv, ct: f.ct, at: f.created_at, now, pc_last_seen: p?.last_seen ?? null });
   }
   if (req.method === "POST" && path === "/phone/messages") {
     const b = await body<{ dir?: string; iv?: string; ct?: string }>(req, LIMITS.phoneScreen + 1024);

@@ -85,3 +85,18 @@ CREATE TABLE IF NOT EXISTS phone_presence (
   user_id TEXT PRIMARY KEY,
   last_seen INTEGER NOT NULL
 );
+
+-- Live screen: the newest encrypted frame of the user's screen (one row per
+-- user, overwritten), and until when the phone wants frames.
+CREATE TABLE IF NOT EXISTS phone_frames (
+  user_id TEXT PRIMARY KEY,
+  seq INTEGER NOT NULL,
+  iv TEXT NOT NULL,
+  ct TEXT NOT NULL,
+  created_at INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS phone_live (
+  user_id TEXT PRIMARY KEY,
+  until INTEGER NOT NULL,
+  display TEXT NOT NULL DEFAULT 'current'
+);

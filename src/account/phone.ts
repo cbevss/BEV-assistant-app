@@ -25,6 +25,11 @@ import { api } from "./client";
 import { acceptFromPhone, openPhone, phoneKey, sealPhone, type FromPhone } from "./phoneCrypto";
 
 const ACTIVE_MS = 2500;
+/** Live screen: frame size and pace (about 1-2 frames a second on a phone connection). */
+const LIVE_EDGE = 1280;
+const LIVE_BYTES = 260_000;
+const LIVE_QUALITY = 0.55;
+const LIVE_GAP_MS = 600;
 const IDLE_MS = 8000;
 const ACTIVE_FOR = 10 * 60_000;
 const APPROVAL_MS = 5 * 60_000;
@@ -127,12 +132,65 @@ class PhoneLink {
           await st.set(`cursor:${this.userId}`, this.cursor);
           await st.set(`seen:${this.userId}`, this.seen);
         }
+        this.setLive(r.live_until ?? 0, r.live_display ?? "current");
         usePhone.setState({ lastCheck: Date.now(), error: null });
       }
     } catch (e) {
       usePhone.setState({ error: e instanceof Error ? e.message : String(e) });
     }
-    if (!this.stopped) this.timer = setTimeout(() => void this.tick(), Date.now() - this.lastActivity < ACTIVE_FOR ? ACTIVE_MS : IDLE_MS);
+    const busy = Date.now() - this.lastActivity < ACTIVE_FOR || this.liveUntil > Date.now();
+    if (!this.stopped) this.timer = setTimeout(() => void this.tick(), busy ? ACTIVE_MS : IDLE_MS);
+  }
+
+  // ---- live screen: frames go up while the phone keeps asking for them
+
+  private liveUntil = 0;
+  private liveDisplay = "current";
+  private streaming = false;
+
+  private setLive(until: number, display: string) {
+    this.liveUntil = until;
+    this.liveDisplay = ["current", "all", "primary"].includes(display) ? display : "current";
+    if (until > Date.now() && !this.streaming) void this.stream();
+  }
+
+  private async stream() {
+    this.streaming = true;
+    this.lastActivity = Date.now();
+    useAssistant.getState().pushMessage({ role: "tool", content: "Your phone is watching your screen live.", toolName: "phone_live", ok: true });
+    void notify("BEV", "Your phone is now watching your screen live.").catch(() => {});
+    let last = "";
+    let failures = 0;
+    try {
+      while (!this.stopped && this.liveUntil > Date.now() && failures < 5) {
+        const started = Date.now();
+        // Privacy mode: nothing leaves the PC, not even encrypted.
+        if (!useAssistant.getState().privacyMode) {
+          try {
+            const shot = await native.captureScreen(this.liveDisplay as "current" | "all" | "primary");
+            const data = await shrinkJpeg(shot.data, LIVE_EDGE, LIVE_BYTES, LIVE_QUALITY);
+            if (data !== last) {
+              const t = await this.token();
+              if (!t || !this.key) break;
+              const e = await sealPhone(this.key, "frame", this.userId, { type: "frame", data, label: shot.label || "Your screen", t: Date.now() });
+              await api.phoneFrame(t, e.iv, e.ct);
+              last = data;
+            }
+            failures = 0;
+          } catch (e) {
+            // 409: the phone stopped watching. Anything else: try a few more times.
+            const status = (e as { status?: number })?.status;
+            if (status === 409) break;
+            if (status !== 429) failures++;
+          }
+        }
+        await new Promise((r) => setTimeout(r, Math.max(150, LIVE_GAP_MS - (Date.now() - started))));
+      }
+    } finally {
+      this.streaming = false;
+      this.liveUntil = 0;
+      useAssistant.getState().pushMessage({ role: "tool", content: "Stopped sharing your screen with your phone.", toolName: "phone_live", ok: true });
+    }
   }
 
   private handle(m: FromPhone) {
@@ -246,7 +304,7 @@ class PhoneLink {
 }
 
 /** Make a screenshot small enough for a phone (and the relay). */
-async function shrinkJpeg(b64: string, maxEdge: number, maxBytes: number): Promise<string> {
+async function shrinkJpeg(b64: string, maxEdge: number, maxBytes: number, startQuality = 0.7): Promise<string> {
   const img = new Image();
   img.src = `data:image/jpeg;base64,${b64}`;
   await img.decode();
@@ -255,7 +313,7 @@ async function shrinkJpeg(b64: string, maxEdge: number, maxBytes: number): Promi
   c.width = Math.round(img.width * scale);
   c.height = Math.round(img.height * scale);
   c.getContext("2d")!.drawImage(img, 0, 0, c.width, c.height);
-  for (const q of [0.7, 0.55, 0.4, 0.3]) {
+  for (const q of [0.7, 0.55, 0.4, 0.3].filter((x) => x <= startQuality)) {
     const out = c.toDataURL("image/jpeg", q).split(",")[1];
     if (out.length * 0.75 <= maxBytes) return out;
   }

@@ -243,6 +243,38 @@ describe("phone control", () => {
     expect(redirectAllowed("https://evil.example/phone", env, BASE)).toBe(false);
   });
 
+  it("runs a live screen feed only while the phone is watching", async () => {
+    const { token } = await signIn();
+    const h = app();
+    const post = (path: string, b: unknown) => h(req(path, token, { method: "POST", body: JSON.stringify(b) }), env);
+    const frame = { iv: "AAAAAAAAAAAAAAAA", ct: "QUJDREVGR0g=" };
+    // Nobody watching: frames are refused and the PC isn't told to stream.
+    expect((await post("/phone/frame", frame)).status).toBe(409);
+    let inbox = (await (await h(req("/phone/messages?dir=to_pc&since=0", token), env)).json()) as { live_until?: number };
+    expect(inbox.live_until).toBeUndefined();
+    // The phone starts watching: the PC's next poll says so, with the display.
+    expect((await post("/phone/live", { on: true, display: "all" })).status).toBe(200);
+    inbox = (await (await h(req("/phone/messages?dir=to_pc&since=0", token), env)).json()) as { live_until?: number; live_display?: string };
+    expect(inbox.live_until).toBeGreaterThan(Date.now());
+    expect((inbox as { live_display?: string }).live_display).toBe("all");
+    // A frame goes up and comes down once.
+    const up = (await (await post("/phone/frame", frame)).json()) as { seq: number };
+    expect(up.seq).toBe(1);
+    const got = (await (await h(req("/phone/frame?after=0", token), env)).json()) as { seq: number; ct?: string };
+    expect(got.seq).toBe(1);
+    expect(got.ct).toBe(frame.ct);
+    const same = (await (await h(req("/phone/frame?after=1", token), env)).json()) as { ct?: string };
+    expect(same.ct).toBeUndefined();
+    // Too fast is refused; too big is refused.
+    expect((await post("/phone/frame", frame)).status).toBe(429);
+    expect((await post("/phone/frame", { iv: frame.iv, ct: "A".repeat(LIMITS.phoneScreen + 4) })).status).toBe(413);
+    // Stopping clears the frame and refuses more.
+    expect((await post("/phone/live", { on: false })).status).toBe(200);
+    expect((await post("/phone/frame", frame)).status).toBe(409);
+    const gone = (await (await h(req("/phone/frame?after=0", token), env)).json()) as { ct?: string };
+    expect(gone.ct).toBeUndefined();
+  });
+
   it("relays ciphertext both ways and marks the PC online when it listens", async () => {
     const { token } = await signIn();
     const h = app();
