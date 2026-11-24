@@ -87,7 +87,7 @@ pub fn safe_name(name: &str) -> String {
 
 const MAX_PHONE_FILE: usize = 10 * 1024 * 1024;
 
-/// Save a file sent from the user's phone into Downloads\BEV from phone and
+/// Save a file sent from the user's phone into BEV\From phone (in the user's home folder) and
 /// return its path. Programs and scripts are refused; nothing is opened.
 #[tauri::command]
 pub async fn save_phone_file(name: String, data: String) -> BevResult<String> {
@@ -100,9 +100,7 @@ pub async fn save_phone_file(name: String, data: String) -> BevResult<String> {
         if bytes.len() > MAX_PHONE_FILE {
             return Err(BevError::Invalid(format!("{name} is too big (over 10 MB)")));
         }
-        let home = std::env::var("USERPROFILE").or_else(|_| std::env::var("HOME")).map_err(|_| BevError::Os("no home folder".into()))?;
-        let dir = std::path::Path::new(&home).join("Downloads").join("BEV from phone");
-        std::fs::create_dir_all(&dir).map_err(|e| BevError::Os(format!("make folder: {e}")))?;
+        let dir = crate::folders::sub("From phone")?;
         // Don't overwrite: "photo.jpg", "photo (2).jpg", …
         let (stem, ext) = match name.rfind('.') {
             Some(i) if i > 0 => (name[..i].to_string(), name[i..].to_string()),
