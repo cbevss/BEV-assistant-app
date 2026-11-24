@@ -32,6 +32,25 @@ const LIVE_BYTES = 260_000;
 const LIVE_QUALITY = 0.55;
 const LIVE_GAP_MS = 600;
 const IDLE_MS = 8000;
+/** Longest one live-screen step (capture, shrink, upload) may take, and when a silent loop counts as stuck. */
+const LIVE_STEP_MS = 10_000;
+const LIVE_STUCK_MS = 35_000;
+
+function withTimeout<T>(p: Promise<T>, ms: number, what: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const t = setTimeout(() => reject(new Error(`${what} took too long`)), ms);
+    p.then(
+      (v) => {
+        clearTimeout(t);
+        resolve(v);
+      },
+      (e) => {
+        clearTimeout(t);
+        reject(e);
+      },
+    );
+  });
+}
 const ACTIVE_FOR = 10 * 60_000;
 const APPROVAL_MS = 5 * 60_000;
 const NEW_CONVERSATION_AFTER = 30 * 60_000;
@@ -155,33 +174,54 @@ class PhoneLink {
   private liveUntil = 0;
   private liveDisplay = "current";
   private streaming = false;
+  /** Last time the live loop got round (a capture or upload that never returns would otherwise block it for good). */
+  private liveBeat = 0;
+  private liveRun = 0;
 
   private setLive(until: number, display: string) {
     this.liveUntil = until;
     this.liveDisplay = ["current", "all", "primary"].includes(display) ? display : "current";
-    if (until > Date.now() && !this.streaming) void this.stream();
+    const stuck = this.streaming && Date.now() - this.liveBeat > LIVE_STUCK_MS;
+    if (until > Date.now() && (!this.streaming || stuck)) void this.stream();
+  }
+
+  /** Tells the phone why the live screen isn't coming (shown in its chat). */
+  private liveProblem(text: string) {
+    void this.send({ type: "feed", items: [{ id: `live-${Date.now()}`, role: "tool", label: "Live screen", text, ok: false, at: Date.now() }] }).catch(() => {});
   }
 
   private async stream() {
+    const run = ++this.liveRun;
     this.streaming = true;
+    this.liveBeat = Date.now();
     this.lastActivity = Date.now();
     useAssistant.getState().pushMessage({ role: "tool", content: "Your phone is watching your screen live.", toolName: "phone_live", ok: true });
     void notify("BEV", "Your phone is now watching your screen live.").catch(() => {});
     let last = "";
     let failures = 0;
+    let lastError = "";
+    let toldPrivacy = false;
     try {
-      while (!this.stopped && this.liveUntil > Date.now() && failures < 5) {
+      while (!this.stopped && run === this.liveRun && this.liveUntil > Date.now() && failures < 5) {
         const started = Date.now();
+        this.liveBeat = started;
         // Privacy mode: nothing leaves the PC, not even encrypted.
-        if (!useAssistant.getState().privacyMode) {
+        if (useAssistant.getState().privacyMode) {
+          if (!toldPrivacy) this.liveProblem("Privacy mode is on at the PC, so your screen isn't shared. Turn it off in BEV to watch live.");
+          toldPrivacy = true;
+        } else {
+          toldPrivacy = false;
           try {
-            const shot = await native.captureScreen(this.liveDisplay as "current" | "all" | "primary");
-            const data = await shrinkJpeg(shot.data, LIVE_EDGE, LIVE_BYTES, LIVE_QUALITY);
+            const shot = await withTimeout(native.captureScreen(this.liveDisplay as "current" | "all" | "primary"), LIVE_STEP_MS, "Taking the screenshot");
+            const data = await withTimeout(shrinkJpeg(shot.data, LIVE_EDGE, LIVE_BYTES, LIVE_QUALITY), LIVE_STEP_MS, "Shrinking the picture");
             if (data !== last) {
               const t = await this.token();
-              if (!t || !this.key) break;
+              if (!t || !this.key) {
+                lastError = "BEV on the PC isn't signed in to your account any more.";
+                break;
+              }
               const e = await sealPhone(this.key, "frame", this.userId, { type: "frame", data, label: shot.label || "Your screen", t: Date.now() });
-              await api.phoneFrame(t, e.iv, e.ct);
+              await withTimeout(api.phoneFrame(t, e.iv, e.ct), LIVE_STEP_MS, "Sending the picture");
               last = data;
             }
             failures = 0;
@@ -189,12 +229,18 @@ class PhoneLink {
             // 409: the phone stopped watching. Anything else: try a few more times.
             const status = (e as { status?: number })?.status;
             if (status === 409) break;
-            if (status !== 429) failures++;
+            if (status !== 429) {
+              failures++;
+              lastError = e instanceof Error ? e.message : String(e);
+            }
           }
         }
         await new Promise((r) => setTimeout(r, Math.max(150, LIVE_GAP_MS - (Date.now() - started))));
       }
+      if (failures >= 5) this.liveProblem(`Couldn't share your screen: ${lastError || "it kept failing"}. Stop and start the live screen to try again.`);
+      else if (lastError) this.liveProblem(lastError);
     } finally {
+      if (run !== this.liveRun) return;           // a newer run took over
       this.streaming = false;
       this.liveUntil = 0;
       useAssistant.getState().pushMessage({ role: "tool", content: "Stopped sharing your screen with your phone.", toolName: "phone_live", ok: true });
