@@ -22,6 +22,8 @@ export interface ChatMessage {
   at: number;
   /** Sent from the user's phone (phone control). */
   source?: "phone";
+  /** What the user attached: names and small previews only. */
+  attachments?: Array<{ name: string; kind: "image" | "file" | "text"; thumb?: string }>;
 }
 
 interface AssistantStore {

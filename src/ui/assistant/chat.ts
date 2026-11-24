@@ -1,3 +1,4 @@
+import { messageWithAttachments, type Attachment } from "@/lib/attachments";
 /**
  * The typed conversation. One orchestrator for the app's lifetime so context
  * survives moving between pages; it shares tools and memory with voice.
@@ -45,16 +46,22 @@ function orchestrator(): Orchestrator {
   return chatOrch;
 }
 
-export async function sendChat(text: string): Promise<void> {
-  const t = text.trim();
-  if (!t) return;
+export async function sendChat(text: string, attachments: readonly Attachment[] = []): Promise<void> {
+  const typed = text.trim();
+  if (!typed && !attachments.length) return;
+  const t = messageWithAttachments(typed, attachments);
+  const images = attachments.flatMap((x) => (x.image ? [x.image] : []));
   const a = useAssistant.getState();
-  a.pushMessage({ role: "user", content: t });
+  a.pushMessage({
+    role: "user",
+    content: typed,
+    ...(attachments.length ? { attachments: attachments.map((x) => ({ name: x.name, kind: x.kind, thumb: x.thumb })) } : {}),
+  });
   abort = new AbortController();
   live = null;
   streamed = false;
   try {
-    const reply = await orchestrator().send(t, abort.signal);
+    const reply = await orchestrator().send(t, abort.signal, images);
     // Already shown as it was written; otherwise show it now.
     if (reply && !streamed) a.pushMessage({ role: "assistant", content: reply });
   } catch (e) {

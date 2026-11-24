@@ -6,7 +6,9 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import clsx from "clsx";
 import { prettyAccelerator } from "@/lib/hotkeys";
-import { ArrowRight, ArrowUp, Check, Mic, MicOff, Plus, Square, X } from "lucide-react";
+import { ArrowRight, ArrowUp, Check, FileText, Mic, MicOff, Paperclip, Plus, Square, X } from "lucide-react";
+import { getCurrentWebview } from "@tauri-apps/api/webview";
+import { fromBlob, fromPath, MAX_ATTACHMENTS, type Attachment } from "@/lib/attachments";
 import { useAssistant, type AssistantState, type ChatMessage } from "@/state/assistant";
 import { useSettings, type ProviderId } from "@/state/settings";
 import { providerLabels } from "@/ai/factory";
@@ -200,7 +202,23 @@ function Message({ m }: { m: ChatMessage }) {
   if (m.role === "user") {
     return (
       <div className="group relative flex justify-end">
-        <div className="max-w-[78%] whitespace-pre-wrap rounded-xl rounded-br-sm bg-surface-2 px-3.5 py-2 text-base text-ink">{m.content}</div>
+        <div className="flex max-w-[78%] flex-col items-end gap-1.5">
+          {!!m.attachments?.length && (
+            <div className="flex flex-wrap justify-end gap-1.5">
+              {m.attachments.map((f, i) =>
+                f.thumb ? (
+                  <img key={i} src={f.thumb} alt={f.name} title={f.name} className="h-20 max-w-[160px] rounded-lg border border-line object-cover" />
+                ) : (
+                  <span key={i} className="flex items-center gap-1.5 rounded-lg border border-line bg-surface-1 px-2.5 py-1.5 text-xs text-ink-2" title={f.name}>
+                    <FileText className="h-3.5 w-3.5" aria-hidden />
+                    <span className="max-w-[180px] truncate">{f.name}</span>
+                  </span>
+                )
+              )}
+            </div>
+          )}
+          {m.content && <div className="whitespace-pre-wrap rounded-xl rounded-br-sm bg-surface-2 px-3.5 py-2 text-base text-ink">{m.content}</div>}
+        </div>
         <span className="tnum absolute right-0 top-full mt-1 font-mono text-[10px] tracking-[0.08em] text-ink-4 opacity-0 transition-opacity duration-fast group-hover:opacity-100">{clock(m.at)}</span>
       </div>
     );
@@ -296,6 +314,53 @@ function Composer({ draft, setDraft, busy }: { draft: string; setDraft: (s: stri
   const { state, privacyMode } = useAssistant();
   const shortcut = useSettings((s) => s.settings.pushToTalkShortcut);
   const voiceBusy = state === "listening" || state === "speaking" || state === "activating";
+  const [atts, setAtts] = useState<Attachment[]>([]);
+  const [attError, setAttError] = useState("");
+  const [dragging, setDragging] = useState(false);
+
+  const add = async (make: Array<() => Promise<Attachment>>) => {
+    setAttError("");
+    const room = MAX_ATTACHMENTS - atts.length;
+    if (make.length > room) setAttError(`You can attach up to ${MAX_ATTACHMENTS} things at once.`);
+    const out: Attachment[] = [];
+    for (const m of make.slice(0, Math.max(0, room))) {
+      try {
+        out.push(await m());
+      } catch (e) {
+        setAttError(String((e as Error)?.message ?? e));
+      }
+    }
+    if (out.length) setAtts((cur) => [...cur, ...out].slice(0, MAX_ATTACHMENTS));
+    ref.current?.focus();
+  };
+  const pick = async () => {
+    const { open } = await import("@tauri-apps/plugin-dialog");
+    const chosen = await open({ multiple: true, title: "Attach files for BEV" });
+    const paths = Array.isArray(chosen) ? chosen : chosen ? [chosen] : [];
+    if (paths.length) void add(paths.map((p) => () => fromPath(p)));
+  };
+  // Files dragged onto BEV's window.
+  useEffect(() => {
+    let off: (() => void) | undefined;
+    let alive = true;
+    getCurrentWebview()
+      .onDragDropEvent((e) => {
+        const t = e.payload.type;
+        if (t === "enter" || t === "over") setDragging(true);
+        else if (t === "leave") setDragging(false);
+        else if (t === "drop") {
+          setDragging(false);
+          void add(e.payload.paths.map((p) => () => fromPath(p)));
+        }
+      })
+      .then((u) => (alive ? (off = u) : u()))
+      .catch(() => {});
+    return () => {
+      alive = false;
+      off?.();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [atts.length]);
 
   // Grow with the text up to a limit; keep focus when a suggestion is picked.
   useEffect(() => {
@@ -309,21 +374,45 @@ function Composer({ draft, setDraft, busy }: { draft: string; setDraft: (s: stri
   }, [draft]);
 
   const submit = () => {
-    if (!draft.trim() || busy) return;
+    if ((!draft.trim() && !atts.length) || busy) return;
     const t = draft;
+    const a = atts;
     setDraft("");
-    sendChat(t);
+    setAtts([]);
+    setAttError("");
+    sendChat(t, a);
   };
 
   return (
     <div className="shrink-0 px-6 pb-4 pt-2">
       <div className="mx-auto w-full max-w-[760px]">
-        <div className="rounded-2xl border border-line bg-surface-1 transition-colors duration-fast focus-within:border-accent/50">
+        <div className={clsx("rounded-2xl border bg-surface-1 transition-colors duration-fast focus-within:border-accent/50", dragging ? "border-accent" : "border-line")}>
+          {(atts.length > 0 || dragging) && (
+            <div className="flex flex-wrap gap-2 px-3 pt-3">
+              {dragging && <span className="text-xs text-accent">Drop to attach</span>}
+              {atts.map((f) => (
+                <span key={f.id} className="group/att relative flex items-center gap-2 rounded-lg border border-line bg-surface-2 py-1 pl-1 pr-2 text-xs text-ink-2" title={f.path ?? f.name}>
+                  {f.thumb ? <img src={f.thumb} alt="" className="h-9 w-9 rounded object-cover" /> : <FileText className="ml-1 h-4 w-4" aria-hidden />}
+                  <span className="max-w-[160px] truncate">{f.name}</span>
+                  <button className="rounded p-0.5 text-ink-3 hover:bg-surface-3 hover:text-ink" aria-label={`Remove ${f.name}`} onClick={() => setAtts((cur) => cur.filter((x) => x.id !== f.id))}>
+                    <X className="h-3 w-3" aria-hidden />
+                  </button>
+                </span>
+              ))}
+            </div>
+          )}
+          {attError && <p className="px-4 pt-2 text-xs text-danger">{attError}</p>}
           <textarea
             ref={ref}
             rows={1}
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
+            onPaste={(e) => {
+              const files = Array.from(e.clipboardData.files);
+              if (!files.length) return;
+              e.preventDefault();
+              void add(files.map((f) => () => fromBlob(f)));
+            }}
             onKeyDown={(e) => {
               if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
                 e.preventDefault();
@@ -336,6 +425,7 @@ function Composer({ draft, setDraft, busy }: { draft: string; setDraft: (s: stri
             className="block max-h-[180px] w-full resize-none bg-transparent px-4 pb-1 pt-3 text-base text-ink placeholder:text-ink-4 focus:outline-none"
           />
           <div className="flex items-center gap-2 px-2 pb-2">
+            <IconButton icon={Paperclip} label="Attach pictures or files (or paste / drag them in)" disabled={atts.length >= MAX_ATTACHMENTS} onClick={() => void pick()} />
             <IconButton
               icon={voiceBusy ? Square : Mic}
               label={voiceBusy ? "Stop talking" : `Talk to BEV${shortcut ? ` (${prettyAccelerator(shortcut)})` : ""}`}
@@ -356,7 +446,7 @@ function Composer({ draft, setDraft, busy }: { draft: string; setDraft: (s: stri
               ) : (
                 <button
                   onClick={submit}
-                  disabled={!draft.trim()}
+                  disabled={!draft.trim() && !atts.length}
                   className="grid h-8 w-8 place-items-center rounded-lg bg-accent text-accent-ink transition-colors hover:bg-accent-strong disabled:bg-surface-3 disabled:text-ink-4"
                   aria-label="Send"
                   title="Send (Enter)"

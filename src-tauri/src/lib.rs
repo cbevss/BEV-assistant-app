@@ -31,6 +31,7 @@ mod overlay;
 mod replay;
 mod screen;
 mod secrets;
+mod attach;
 mod startup;
 mod sysmon;
 mod system;
@@ -136,6 +137,7 @@ pub fn run() {
             audio::list_output_devices,
             audio::set_output_device,
             audio::list_app_audio,
+            attach::read_image_attachment,
             startup::fast_start_enabled,
             startup::set_fast_start,
             audio::set_app_audio,

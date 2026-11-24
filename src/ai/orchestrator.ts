@@ -130,15 +130,18 @@ export function foregroundLabel(fg: { title: string; process: string } | null): 
  * replaced with a note so the model knows it had seen the screen earlier.
  */
 export function keepLatestImage(history: AiMessage[]): void {
-  let seen = false;
+  // The newest screenshot BEV took, and the newest pictures the user attached,
+  // are kept separately, so looking at the screen doesn't drop what they sent.
+  const seen = { user: false, tool: false };
   for (let i = history.length - 1; i >= 0; i--) {
     const m = history[i];
     if (!m.images?.length) continue;
-    if (!seen) {
-      seen = true;
+    const kind = m.role === "user" ? "user" : "tool";
+    if (!seen[kind]) {
+      seen[kind] = true;
       continue;
     }
-    history[i] = { ...m, images: undefined, content: `${m.content} [earlier screenshot removed]` };
+    history[i] = { ...m, images: undefined, content: `${m.content} [earlier ${kind === "user" ? "picture" : "screenshot"} removed]` };
   }
 }
 
@@ -224,7 +227,8 @@ export class Orchestrator {
     this.provider = p;
   }
 
-  async send(userText: string, signal?: AbortSignal): Promise<string> {
+  async send(userText: string, signal?: AbortSignal, images?: AiImage[]): Promise<string> {
+    this.pendingImages = images?.length ? images : undefined;
     if (this.opts.background) return this.sendInner(userText, signal);
     const channel: Channel = this.opts.remote ? "phone" : this.opts.channel ?? "chat";
     // Note what was said elsewhere *before* adding this request to the log.
@@ -234,6 +238,9 @@ export class Orchestrator {
     addRecent({ at: Date.now(), who: "bev", text: reply, source: this.recentId });
     return reply;
   }
+
+  /** Pictures the user attached to the current request. */
+  private pendingImages: AiImage[] | undefined;
 
   /** The last-two-minutes note for the current request. */
   private recentContext = "";
@@ -304,7 +311,10 @@ export class Orchestrator {
   private async run(userText: string, runId: number | null, signal?: AbortSignal, replayNote = ""): Promise<string> {
     this.turnSteps = [];
     this.turnNeededApproval = false;
-    this.history.push({ role: "user", content: userText });
+    const images = this.pendingImages;
+    this.pendingImages = undefined;
+    this.history.push(images ? { role: "user", content: userText, images } : { role: "user", content: userText });
+    if (images) keepLatestImage(this.history);
     this.trimHistory();
     const turnStart = Math.max(0, this.history.length - 1);
     this.turnStartIdx = turnStart;
