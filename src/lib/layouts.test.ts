@@ -45,3 +45,28 @@ describe("window layouts", () => {
     expect(r.missing).toEqual(["obs64"]);
   });
 });
+
+import { percentRect, rectToSpot, spotToRect, findSpot, type AppSpot } from "./layouts";
+describe("exact spots and apps' usual spots", () => {
+  const main = { x: 0, y: 0, w: 1920, h: 1040, primary: true };
+  const side = { x: 1920, y: 0, w: 2560, h: 1400, primary: false };
+  it("puts a window anywhere by percent, kept on the monitor", () => {
+    expect(percentRect(side, { x: 66.7, y: 0, width: 33.3, height: 100 })).toEqual({ x: 1920 + 1708, y: 0, w: 852, h: 1400 });
+    const r = percentRect(main, { x: 90, y: 90, width: 50, height: 50 });
+    expect(r.x + r.w).toBeLessThanOrEqual(1920);
+    expect(r.y + r.h).toBeLessThanOrEqual(1040);
+  });
+  it("remembers a spot relative to its monitor and puts it back there", () => {
+    const s = rectToSpot({ x: 1920 + 640, y: 350, w: 1280, h: 700 }, "normal", [main, side]);
+    expect(s).toMatchObject({ monitor: 2, rx: 0.25, ry: 0.25, rw: 0.5, rh: 0.5 });
+    expect(spotToRect(s, [main, side])).toEqual({ x: 2560, y: 350, w: 1280, h: 700 });
+    // Second monitor unplugged: falls back to the main one, same proportions.
+    expect(spotToRect(s, [main])).toEqual({ x: 480, y: 260, w: 960, h: 520 });
+  });
+  it("finds the spot for whatever the app is called", () => {
+    const spots = [{ app: "discord", label: "Discord", monitor: 2, rx: 0, ry: 0, rw: 1, rh: 1, state: "normal", savedAt: 0 }] as AppSpot[];
+    expect(findSpot(spots, "Discord.exe")?.app).toBe("discord");
+    expect(findSpot(spots, "discord")?.label).toBe("Discord");
+    expect(findSpot(spots, "spotify")).toBeUndefined();
+  });
+});
