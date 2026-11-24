@@ -19,6 +19,10 @@ export function Settings({ part = "general" }: { part?: "general" | "apps" | "ad
   const [confirmReset, setConfirmReset] = useState(false);
   const [dataDir, setDataDir] = useState("");
   const [browseError, setBrowseError] = useState("");
+  const [fileManagers, setFileManagers] = useState<Array<{ id: string; name: string }>>([]);
+  useEffect(() => {
+    native.listFileManagers().then(setFileManagers).catch(() => {});
+  }, []);
 
   useEffect(() => {
     getVersion().then(setVersion).catch(() => setVersion("?"));
@@ -194,7 +198,15 @@ export function Settings({ part = "general" }: { part?: "general" | "apps" | "ad
         <Field label="Version">
           <span className="font-mono text-sm text-ink-2">BEV {version}</span>
         </Field>
-        <Field label="Your BEV folder" hint="In your home folder: Installers (BEV's updates download here, newest 3 kept) and From phone. To stop antivirus checking every update, add BEV\\Installers to its exclusions.">
+        <Field label="File manager" hint="Which app BEV opens folders in: the Open and Browse buttons, and folders you ask it to open.">
+          <Select
+            ariaLabel="File manager"
+            value={settings.fileManager ?? "system"}
+            onChange={(fileManager) => update({ fileManager })}
+            options={[{ value: "system", label: "Windows default" }, ...fileManagers.map((m) => ({ value: m.id, label: m.name }))]}
+          />
+        </Field>
+        <Field label="Your BEV folder" hint="In your home folder: Installers (BEV's updates download here, newest 3 kept) and From phone. To stop antivirus checking every update, add BEV\Installers to its exclusions.">
           <Button
             onClick={() => {
               setBrowseError("");

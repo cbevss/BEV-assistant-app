@@ -1,3 +1,5 @@
+import { findSources, LAUNCHER_NAME, type Launcher } from "@/lib/gameDownloads";
+import { api as integrationApi } from "@/integrations/http";
 import { teachTools } from "@/annotate/teach";
 import { invoke } from "@tauri-apps/api/core";
 import { findWindow, describeWindows } from "@/lib/windows";
@@ -415,6 +417,58 @@ export const tools: Record<string, RegisteredTool> = {
         );
       }
       return native.launchGame(game.id, mode);
+    },
+  },
+
+  download_game: {
+    spec: {
+      name: "download_game",
+      description:
+        "Download (install) a game the user owns, from Steam, Epic Games or GOG Galaxy: BEV finds it in their libraries on this PC and starts the download in that launcher (its install window opens). If the game is in more than one library and the user didn't say which, this asks you to ask them, listing the launchers. Set launcher only if the user named one (or answered).",
+      parameters: {
+        type: "object",
+        properties: {
+          name: { type: "string", description: "The game, as the user said it" },
+          launcher: { type: "string", enum: ["steam", "epic", "gog"], description: "Only if the user said where" },
+        },
+        required: ["name"],
+      },
+    },
+    run: async (a) => {
+      const name = str(a.name, "name");
+      const libs = await native.gameLibraries();
+      const found = [libs.steam && "Steam", libs.epic && "Epic Games", libs.gog && "GOG Galaxy"].filter(Boolean);
+      if (!found.length) return "No game launchers BEV can download from are installed (Steam, Epic Games or GOG Galaxy).";
+      let store: Array<{ id: string; name: string }> = [];
+      if (libs.steam) {
+        try {
+          const r = await integrationApi<{ items?: Array<{ id: number; name: string; type?: string }> }>(
+            `https://store.steampowered.com/api/storesearch/?term=${encodeURIComponent(name)}&cc=GB&l=english`
+          );
+          store = (r.items ?? []).filter((i) => !i.type || i.type === "app").map((i) => ({ id: String(i.id), name: i.name }));
+        } catch {
+          /* offline: installed games still match */
+        }
+      }
+      const sources = findSources(name, libs, store);
+      const wanted = a.launcher === "steam" || a.launcher === "epic" || a.launcher === "gog" ? (a.launcher as Launcher) : null;
+      const others = libs.others.length ? ` (BEV can't see your ${libs.others.join(" / ")} library; open that launcher to get it there.)` : "";
+      if (!sources.length) {
+        const s = store[0];
+        return `"${name}" isn't in your ${found.join(", ")} libraries that BEV can see.${s ? ` The Steam store has ${s.name}, but it doesn't look like you own it.` : ""}${others}`;
+      }
+      const pick = wanted ? sources.find((x) => x.launcher === wanted) : sources.length === 1 ? sources[0] : null;
+      if (wanted && !pick) return `${name} isn't in your ${LAUNCHER_NAME[wanted]} library. You have it on: ${sources.map((x) => LAUNCHER_NAME[x.launcher]).join(", ")}.`;
+      if (!pick) {
+        return (
+          `NOT downloaded yet: ${sources[0].name} is in more than one library. Ask the user which app to download it from: ` +
+          sources.map((x) => `${LAUNCHER_NAME[x.launcher]}${x.installed ? " (already installed there)" : ""}`).join(", ") +
+          `. Then call download_game again with launcher set.`
+        );
+      }
+      if (pick.installed) return `${pick.name} is already installed in ${LAUNCHER_NAME[pick.launcher]}.`;
+      await native.startGameDownload(pick.launcher, pick.id);
+      return `Started downloading ${pick.name} in ${LAUNCHER_NAME[pick.launcher]}: its install window is open to pick the drive and confirm.`;
     },
   },
 

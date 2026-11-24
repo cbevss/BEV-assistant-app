@@ -1,5 +1,11 @@
 import { invoke } from "@tauri-apps/api/core";
 
+/** The file manager picked in Settings (kept in step by App). */
+let fileManagerPref = "system";
+export const setFileManagerPref = (id: string | undefined) => {
+  fileManagerPref = id || "system";
+};
+
 export interface SystemStats {
   cpu_usage: number;
   cpu_cores: number;
@@ -22,7 +28,23 @@ export interface RunningApp {
 export interface InstalledGame {
   id: string;
   name: string;
-  source: "steam";
+  source: string;
+}
+
+export interface LibGame {
+  id: string;
+  name: string;
+  installed: boolean;
+}
+export interface GameLibraries {
+  steam: boolean;
+  epic: boolean;
+  gog: boolean;
+  steam_owned: string[];
+  steam_installed: LibGame[];
+  epic_games: LibGame[];
+  gog_games: LibGame[];
+  others: string[];
 }
 
 /** An app holding sound on the default speakers, as the Windows volume mixer shows it. */
@@ -74,8 +96,12 @@ export const native = {
   listGames: () => invoke<InstalledGame[]>("list_games"),
   /** Through Steam: online = the game's first launch option, offline = its second. */
   launchGame: (id: string, mode: "online" | "offline") => invoke<string>("launch_game", { id, mode }),
+  gameLibraries: () => invoke<GameLibraries>("game_libraries"),
+  startGameDownload: (launcher: "steam" | "epic" | "gog", id: string) => invoke<string>("start_game_download", { launcher, id }),
   /** Open a file (default app) or folder (File Explorer) by full path. */
-  openPath: (path: string) => invoke<string>("open_path", { path }),
+  /** Folders open in the file manager picked in Settings (Advanced → File manager). */
+  openPath: (path: string) => invoke<string>("open_path", { path, manager: fileManagerPref }),
+  listFileManagers: () => invoke<Array<{ id: string; name: string }>>("list_file_managers"),
   listProcesses: () => invoke<{ pid: number; name: string }[]>("list_processes"),
 
   // Windows

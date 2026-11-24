@@ -202,6 +202,15 @@ pub fn launch_game(id: String, mode: String) -> BevResult<String> {
         .map(|_| format!("launched {} {mode} through Steam", game.name))
 }
 
+pub(crate) fn steam_root_pub() -> Option<PathBuf> {
+    steam_root()
+}
+
+/// A launcher's own link (steam://, com.epicgames.launcher://, goggalaxy://), built from checked ids only.
+pub(crate) fn open_launcher_url(url: &str) -> BevResult<()> {
+    open_steam_url(url)
+}
+
 /// Hand a steam:// URL to the Steam client. Only built from digits above.
 fn open_steam_url(url: &str) -> BevResult<()> {
     #[cfg(windows)]

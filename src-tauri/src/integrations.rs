@@ -24,6 +24,7 @@ const KNOWN: &[&str] = &[
     "https://api.search.brave.com",
     "https://discord.com",
     "https://bevbotdiscord.com",
+    "https://store.steampowered.com",
 ];
 
 /// scheme://host[:port], lower-cased; None if it isn't an http(s) URL.

@@ -18,6 +18,7 @@ const LABELS: Record<string, string> = {
   focus_window: "Switched window",
   find_apps: "Looked up apps",
   refresh_app_list: "Rescanned apps",
+  download_game: "Downloaded a game",
   launch_game: "Launched a game",
   open_path: "Opened a file or folder",
   list_folder: "Looked in a folder",
