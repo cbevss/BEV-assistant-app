@@ -37,6 +37,9 @@ export interface Env {
   DISCORD_CLIENT_SECRET: string;
   /** Extra browser origins allowed to call the API (future web version). */
   WEB_ORIGINS?: string;
+  /** Optional Cloudflare Realtime TURN key, so the live screen streams even when a direct connection can't be made (strict mobile networks). */
+  TURN_KEY_ID?: string;
+  TURN_KEY_API_TOKEN?: string;
 }
 
 const DAY = 86_400_000;
@@ -467,7 +470,7 @@ async function handle(req: Request, env: Env, fetcher: typeof fetch): Promise<Re
     return json({ user: publicUser(user), vault: v ? JSON.parse(v.data) : null, items: items.results, phone_messages: phone.results }, 200, c);
   }
   if (req.method === "DELETE" && path === "/account") {
-    const stmts = ["items", "counters", "vaults", "sessions", "login_codes", "phone_messages", "phone_presence", "phone_frames", "phone_live"].map((t) => env.DB.prepare(`DELETE FROM ${t} WHERE user_id = ?`).bind(user.id));
+    const stmts = ["items", "counters", "vaults", "sessions", "login_codes", "phone_messages", "phone_presence", "phone_frames", "phone_live", "phone_rtc"].map((t) => env.DB.prepare(`DELETE FROM ${t} WHERE user_id = ?`).bind(user.id));
     stmts.push(env.DB.prepare("DELETE FROM users WHERE id = ?").bind(user.id));
     if (env.DB.batch) await env.DB.batch(stmts);
     else for (const s of stmts) await s.run();
@@ -483,13 +486,16 @@ export async function cleanup(env: Env, now = Date.now()): Promise<void> {
   await env.DB.prepare("DELETE FROM phone_messages WHERE created_at < ?").bind(now - LIMITS.phoneTtl).run();
   await env.DB.prepare("DELETE FROM phone_frames WHERE created_at < ?").bind(now - 5 * 60_000).run();
   await env.DB.prepare("DELETE FROM phone_live WHERE until < ?").bind(now).run();
+  await env.DB.prepare("DELETE FROM phone_rtc WHERE created_at < ?").bind(now - 10 * 60_000).run();
 }
 
 // ---------------------------------------------------------------------------
 // phone control: a relay for ciphertext between the user's phone and PC
 
 const DIRS = new Set(["to_pc", "to_phone"]);
-const PHONE_API = new Set(["/phone/messages", "/phone/status", "/phone/live", "/phone/frame"]);
+const PHONE_API = new Set(["/phone/messages", "/phone/status", "/phone/live", "/phone/frame", "/phone/rtc", "/phone/ice"]);
+const SIDES = new Set(["pc", "phone"]);
+const STUN = [{ urls: ["stun:stun.cloudflare.com:3478", "stun:stun.l.google.com:19302"] }];
 const DISPLAYS = new Set(["current", "all", "primary"]);
 
 async function phoneApi(req: Request, url: URL, path: string, env: Env, user: User): Promise<Response> {
@@ -556,6 +562,48 @@ async function phoneApi(req: Request, url: URL, path: string, env: Env, user: Us
     const p = await env.DB.prepare("SELECT last_seen FROM phone_presence WHERE user_id = ?").bind(user.id).first<{ last_seen: number }>();
     if (!f || f.seq <= after) return json({ seq: f?.seq ?? after, now, pc_last_seen: p?.last_seen ?? null });
     return json({ seq: f.seq, iv: f.iv, ct: f.ct, at: f.created_at, now, pc_last_seen: p?.last_seen ?? null });
+  }
+  // WebRTC set-up messages between the PC and the phone (offer, answer, network candidates), sealed end to end.
+  if (req.method === "POST" && path === "/phone/rtc") {
+    const b = await body<{ to?: string; iv?: string; ct?: string }>(req, 24 * 1024);
+    if (!b || !SIDES.has(b.to ?? "")) return fail(400, "to must be pc or phone");
+    if (typeof b.iv !== "string" || !/^[A-Za-z0-9+/=]{12,32}$/.test(b.iv) || typeof b.ct !== "string" || !/^[A-Za-z0-9+/=]+$/.test(b.ct) || b.ct.length > 20_000)
+      return fail(400, "expected encrypted { iv, ct }");
+    const recent = await env.DB.prepare("SELECT COUNT(*) AS n FROM phone_rtc WHERE user_id = ? AND created_at > ?").bind(user.id, now - 60_000).first<{ n: number }>();
+    if ((recent?.n ?? 0) >= 240) return fail(429, "too many; wait a moment");
+    const r = await env.DB.prepare("INSERT INTO phone_rtc (user_id, to_side, iv, ct, created_at) VALUES (?, ?, ?, ?, ?)").bind(user.id, b.to, b.iv, b.ct, now).run();
+    await env.DB.prepare("DELETE FROM phone_rtc WHERE user_id = ?1 AND id NOT IN (SELECT id FROM phone_rtc WHERE user_id = ?1 ORDER BY id DESC LIMIT 80)").bind(user.id).run();
+    return json({ ok: true, id: (r as { meta?: { last_row_id?: number } }).meta?.last_row_id ?? null });
+  }
+  if (req.method === "GET" && path === "/phone/rtc") {
+    const side = url.searchParams.get("for") ?? "";
+    if (!SIDES.has(side)) return fail(400, "for must be pc or phone");
+    const after = Math.floor(Number(url.searchParams.get("after") ?? 0)) || 0;
+    const rows = await env.DB.prepare("SELECT id, iv, ct FROM phone_rtc WHERE user_id = ? AND to_side = ? AND id > ? AND created_at > ? ORDER BY id LIMIT 50")
+      .bind(user.id, side, after, now - 120_000)
+      .all<{ id: number; iv: string; ct: string }>();
+    const latest = (await env.DB.prepare("SELECT COALESCE(MAX(id), 0) AS n FROM phone_rtc WHERE user_id = ?").bind(user.id).first<{ n: number }>())?.n ?? 0;
+    return json({ messages: rows.results, latest });
+  }
+  // Network servers for the stream: STUN always; TURN relay too when a Cloudflare TURN key is set.
+  if (req.method === "GET" && path === "/phone/ice") {
+    if (env.TURN_KEY_ID && env.TURN_KEY_API_TOKEN) {
+      try {
+        const r = await fetch(`https://rtc.live.cloudflare.com/v1/turn/keys/${env.TURN_KEY_ID}/credentials/generate-ice-servers`, {
+          method: "POST",
+          headers: { authorization: `Bearer ${env.TURN_KEY_API_TOKEN}`, "content-type": "application/json" },
+          body: JSON.stringify({ ttl: 6 * 3600 }),
+        });
+        if (r.ok) {
+          const j = (await r.json()) as { iceServers?: unknown };
+          const list = Array.isArray(j.iceServers) ? j.iceServers : j.iceServers ? [j.iceServers] : [];
+          if (list.length) return json({ iceServers: list, relay: true });
+        }
+      } catch {
+        /* fall back to STUN */
+      }
+    }
+    return json({ iceServers: STUN, relay: false });
   }
   if (req.method === "POST" && path === "/phone/messages") {
     const b = await body<{ dir?: string; iv?: string; ct?: string }>(req, LIMITS.phoneUpload + 1024);

@@ -11,6 +11,7 @@
  *
  * Everything is end-to-end encrypted (phoneCrypto.ts).
  */
+import { LiveVideo } from "./liveVideo";
 import { create } from "zustand";
 import { load, type Store } from "@tauri-apps/plugin-store";
 import { native } from "@/lib/native";
@@ -178,8 +179,22 @@ class PhoneLink {
   private liveBeat = 0;
   private liveRun = 0;
 
+  /** Real video to the phone (WebRTC); while it's flowing, the picture-every-second loop rests. */
+  private videoOn = false;
+  private video = new LiveVideo({
+    token: () => this.token(),
+    key: () => this.key,
+    userId: () => this.userId,
+    until: () => this.liveUntil,
+    onVideo: (on) => {
+      this.videoOn = on;
+    },
+    log: (text) => this.liveProblem(text),
+  });
+
   private setLive(until: number, display: string) {
     this.liveUntil = until;
+    if (until > Date.now()) void this.video.run();
     this.liveDisplay = ["current", "all", "primary"].includes(display) ? display : "current";
     const stuck = this.streaming && Date.now() - this.liveBeat > LIVE_STUCK_MS;
     if (until > Date.now() && (!this.streaming || stuck)) void this.stream();
@@ -205,6 +220,10 @@ class PhoneLink {
       while (!this.stopped && run === this.liveRun && this.liveUntil > Date.now() && failures < 5) {
         const started = Date.now();
         this.liveBeat = started;
+        if (this.videoOn) {
+          await new Promise((r) => setTimeout(r, 1000));
+          continue;
+        }
         // Privacy mode: nothing leaves the PC, not even encrypted.
         if (useAssistant.getState().privacyMode) {
           if (!toldPrivacy) this.liveProblem("Privacy mode is on at the PC, so your screen isn't shared. Turn it off in BEV to watch live.");

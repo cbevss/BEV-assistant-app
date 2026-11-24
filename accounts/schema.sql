@@ -100,3 +100,15 @@ CREATE TABLE IF NOT EXISTS phone_live (
   until INTEGER NOT NULL,
   display TEXT NOT NULL DEFAULT 'current'
 );
+
+-- Live screen as real video (WebRTC): the PC and phone swap their connection details here.
+-- Sealed with the phone key like everything else, so the server can't read or change them.
+CREATE TABLE IF NOT EXISTS phone_rtc (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id TEXT NOT NULL,
+  to_side TEXT NOT NULL,
+  iv TEXT NOT NULL,
+  ct TEXT NOT NULL,
+  created_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS phone_rtc_user ON phone_rtc (user_id, to_side, id);

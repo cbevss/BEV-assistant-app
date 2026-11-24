@@ -98,4 +98,8 @@ export const api = {
     ),
   /** The newest live frame of the screen, for the phone watching it. */
   phoneFrame: (t: string, iv: string, ct: string) => call<{ ok: boolean; seq: number }>("/phone/frame", t, { method: "POST", body: { iv, ct } }),
+  /** Live video set-up messages (sealed) between the PC and the phone. */
+  phoneRtcSend: (t: string, to: "pc" | "phone", iv: string, ct: string) => call<{ ok: boolean }>("/phone/rtc", t, { method: "POST", body: { to, iv, ct } }),
+  phoneRtcInbox: (t: string, after: number) => call<{ messages: Array<{ id: number; iv: string; ct: string }>; latest: number }>(`/phone/rtc?for=pc&after=${after}`, t),
+  phoneIce: (t: string) => call<{ iceServers: RTCIceServer[]; relay: boolean }>("/phone/ice", t),
 };

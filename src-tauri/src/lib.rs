@@ -199,6 +199,7 @@ pub fn run() {
             overlay::show_overlay,
             annotate::show_annotate,
             folders::bev_folder,
+            screen::live_frame,
             folders::install_update_to_folder,
             annotate::hide_annotate,
             annotate::shot_points_to_screen,

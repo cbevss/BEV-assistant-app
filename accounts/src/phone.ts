@@ -50,6 +50,8 @@ main{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;padding:16p
 .live{flex:none;position:relative;height:40vh;height:40dvh;background:#000;border-bottom:1px solid var(--line);overflow:hidden;touch-action:none}
 .live[hidden]{display:none}
 .live img:not([src]){visibility:hidden}
+.zoom video{max-width:100%;max-height:100%;transform-origin:0 0;will-change:transform;pointer-events:none;background:#000}
+.zoom video[hidden],.zoom img[hidden]{display:none}
 .zoom{position:absolute;inset:0;display:grid;place-items:center;overflow:hidden;touch-action:none}
 .zoom img{max-width:100%;max-height:100%;transform-origin:0 0;will-change:transform;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;pointer-events:none}
 .livebar{position:absolute;left:8px;right:8px;top:8px;display:flex;gap:6px;align-items:center;pointer-events:none}
@@ -182,7 +184,7 @@ function zoomable(box,img){
       z.x=mx-(start.mx-start.x)*ns/start.s;z.y=my-(start.my-start.y)*ns/start.s;z.s=ns;clamp();apply();}
     else if(t.length===1&&start.px!==undefined&&z.s>1){var p=pt(t[0]);z.x=start.x+(p.x-start.px);z.y=start.y+(p.y-start.py);clamp();apply();}},{passive:false});
   box.addEventListener("touchend",function(e){if(e.touches.length===0)start=null;else if(e.touches.length===1){var p=pt(e.touches[0]);start={px:p.x,py:p.y,x:z.x,y:z.y};}});
-  return {reset:function(){z={s:1,x:0,y:0};apply();},zoomed:function(){return z.s>1;}};
+  return {reset:function(){z={s:1,x:0,y:0};apply();},zoomed:function(){return z.s>1;},target:function(el){img.style.transform="";img=el;z={s:1,x:0,y:0};apply();}};
 }
 
 // ---- attachments: pictures are shrunk on the phone; other files go as they are
@@ -213,19 +215,77 @@ function renderAtts(){
 function toast(msg){var id=newId();feed.set(id,{id:id,role:"tool",label:"Couldn't attach",text:msg,ok:false,at:Date.now(),local:true});stickToBottom=true;render();}
 
 // ---- live screen
-var live={on:false,seq:0,display:"current",lastAt:0,frameTimer:null,beatTimer:null,panel:null,img:null,msg:null,state:null,zoom:null,chip:null};
+var live={on:false,seq:0,display:"current",lastAt:0,frameTimer:null,beatTimer:null,panel:null,img:null,video:null,msg:null,state:null,zoom:null,chip:null};
+
+// ---- live video (WebRTC): the real stream, up to 60 fps. The picture-every-second
+// feed keeps going underneath until the video is playing, and takes over if it drops.
+var rtc={pc:null,sid:"",cursor:-1,timer:null,playing:false,pending:[]};
+function rtcAad(side){return te.encode("bev-phone:rtc_"+side+":"+userId);}
+function rtcSend(obj){var iv=rand(12);return crypto.subtle.encrypt({name:"AES-GCM",iv:iv,additionalData:rtcAad("pc")},key,te.encode(JSON.stringify(obj))).then(function(ct){return api("/phone/rtc",{method:"POST",body:{to:"pc",iv:b64(iv),ct:b64(new Uint8Array(ct))}});});}
+function rtcOpen(m){return crypto.subtle.decrypt({name:"AES-GCM",iv:unb64(m.iv),additionalData:rtcAad("phone")},key,unb64(m.ct)).then(function(pt){return JSON.parse(td.decode(pt));});}
+function rtcStart(){
+  if(!window.RTCPeerConnection||!key)return;
+  rtcStop(false);
+  rtc.sid=b64url(rand(9));rtc.cursor=-1;rtc.playing=false;rtc.pending=[];
+  api("/phone/rtc?for=phone&after=999999999999").then(function(r){rtc.cursor=r.latest||0;}).catch(function(){rtc.cursor=0;}).then(function(){
+    rtcSend({type:"hello",sid:rtc.sid,display:live.display}).catch(function(){});rtcPoll();});
+}
+function rtcPoll(){
+  clearTimeout(rtc.timer);
+  if(!live.on||!rtc.sid)return;
+  api("/phone/rtc?for=phone&after="+Math.max(0,rtc.cursor)).then(function(r){
+    var chain=Promise.resolve();
+    (r.messages||[]).forEach(function(m){rtc.cursor=Math.max(rtc.cursor,m.id);chain=chain.then(function(){return rtcOpen(m).then(rtcOn,function(){});});});
+    return chain;
+  }).catch(function(){}).then(function(){rtc.timer=setTimeout(rtcPoll,rtc.playing?2000:350);});
+}
+function rtcOn(s){
+  if(!s||s.sid!==rtc.sid)return;
+  if(s.type==="offer"){
+    return api("/phone/ice").catch(function(){return {iceServers:[{urls:"stun:stun.cloudflare.com:3478"}]};}).then(function(ice){
+      var pc=new RTCPeerConnection({iceServers:ice.iceServers});rtc.pc=pc;
+      pc.onicecandidate=function(e){if(e.candidate)rtcSend({type:"ice",sid:rtc.sid,c:e.candidate.toJSON()}).catch(function(){});};
+      pc.ontrack=function(e){var v=live.video;v.srcObject=e.streams[0]||new MediaStream([e.track]);v.play().catch(function(){});};
+      pc.onconnectionstatechange=function(){if(pc!==rtc.pc)return;
+        if(pc.connectionState==="failed"||pc.connectionState==="disconnected"){rtcFallback();}};
+      return pc.setRemoteDescription({type:"offer",sdp:s.sdp}).then(function(){var p=rtc.pending.splice(0);return Promise.all(p.map(function(c){return pc.addIceCandidate(c).catch(function(){});}));})
+        .then(function(){return pc.createAnswer();}).then(function(a){return pc.setLocalDescription(a).then(function(){return rtcSend({type:"answer",sid:rtc.sid,sdp:a.sdp});});});
+    });
+  }
+  if(s.type==="ice"){if(rtc.pc&&rtc.pc.remoteDescription)return rtc.pc.addIceCandidate(s.c).catch(function(){});rtc.pending.push(s.c);}
+}
+function rtcPlaying(){
+  if(!live.on)return;
+  rtc.playing=true;clearTimeout(live.frameTimer);
+  live.img.hidden=true;live.video.hidden=false;live.zoom.target(live.video);
+  live.msg.textContent="";live.state.textContent="Live video";
+}
+function rtcFallback(){
+  if(!rtc.playing)return;
+  rtc.playing=false;live.video.hidden=true;live.img.hidden=false;live.zoom.target(live.img);
+  live.state.textContent="Live (pictures)";if(live.on)pollFrame();
+}
+function rtcStop(tell){
+  clearTimeout(rtc.timer);
+  if(tell&&rtc.sid)rtcSend({type:"bye",sid:rtc.sid}).catch(function(){});
+  if(rtc.pc){rtc.pc.onconnectionstatechange=null;rtc.pc.close();rtc.pc=null;}
+  rtc.sid="";rtc.playing=false;
+  if(live.video){live.video.srcObject=null;live.video.hidden=true;}
+  if(live.img)live.img.hidden=false;
+  if(live.zoom)live.zoom.target(live.img);
+}
 var DISPLAY_NAMES={current:"Active screen",all:"All screens",primary:"Main screen"};
 function liveBeat(){if(!live.on||document.hidden)return;api("/phone/live",{method:"POST",body:{on:true,display:live.display}}).catch(function(){});}
 function startLive(){live.on=true;live.seq=0;live.lastAt=0;live.waitSince=0;live.panel.hidden=false;live.chip.classList.add("on");live.chip.textContent="Stop live screen";live.msg.textContent="Connecting to your PC…";live.img.removeAttribute("src");live.zoom.reset();
-  liveBeat();clearInterval(live.beatTimer);live.beatTimer=setInterval(liveBeat,15000);pollFrame();keepChatAtBottom();}
-function stopLive(){live.on=false;clearInterval(live.beatTimer);clearTimeout(live.frameTimer);live.panel.hidden=true;live.chip.classList.remove("on");live.chip.textContent="Live screen";
+  liveBeat();clearInterval(live.beatTimer);live.beatTimer=setInterval(liveBeat,15000);pollFrame();rtcStart();keepChatAtBottom();}
+function stopLive(){rtcStop(true);live.on=false;clearInterval(live.beatTimer);clearTimeout(live.frameTimer);live.panel.hidden=true;live.chip.classList.remove("on");live.chip.textContent="Live screen";
   api("/phone/live",{method:"POST",body:{on:false}}).catch(function(){});keepChatAtBottom();}
 // The chat gets shorter or taller when the live panel opens or closes: stay at the newest message.
 function keepChatAtBottom(){if(stickToBottom&&mainEl)requestAnimationFrame(function(){mainEl.scrollTop=mainEl.scrollHeight;});}
 function openFrame(f){return crypto.subtle.decrypt({name:"AES-GCM",iv:unb64(f.iv),additionalData:aad("frame")},key,unb64(f.ct)).then(function(pt){return JSON.parse(td.decode(pt));});}
 function pollFrame(){
   clearTimeout(live.frameTimer);
-  if(!live.on||document.hidden||!key)return;
+  if(!live.on||document.hidden||!key||rtc.playing)return;
   var got=false;
   api("/phone/frame?after="+live.seq).then(function(f){
     if(f.ct){got=true;live.seq=f.seq;return openFrame(f).then(function(p){if(p&&p.type==="frame"&&p.data){live.img.src="data:image/jpeg;base64,"+p.data;live.lastAt=Date.now();live.msg.textContent="";live.state.textContent=String(p.label||"Your screen");}},function(){});}
@@ -237,16 +297,19 @@ function pollFrame(){
 }
 function liveNode(){
   live.img=h("img",{alt:"Your PC's screen, live",draggable:"false"});
-  var box=h("div",{class:"zoom"},[live.img]);
+  live.video=h("video",{muted:"",playsinline:"",autoplay:"",hidden:true,"aria-label":"Your PC's screen, live video"});
+  live.video.muted=true;
+  live.video.addEventListener("playing",rtcPlaying);
+  var box=h("div",{class:"zoom"},[live.img,live.video]);
   live.zoom=zoomable(box,live.img);
   live.msg=h("div",{class:"livemsg",role:"status"});
   live.state=h("span",{text:"Live"});
-  var which=h("button",{class:"pill btn2",type:"button",on:{click:function(){var order=["current","all","primary"];live.display=order[(order.indexOf(live.display)+1)%3];which.textContent=DISPLAY_NAMES[live.display];live.zoom.reset();liveBeat();}}},[DISPLAY_NAMES[live.display]]);
+  var which=h("button",{class:"pill btn2",type:"button",on:{click:function(){var order=["current","all","primary"];live.display=order[(order.indexOf(live.display)+1)%3];which.textContent=DISPLAY_NAMES[live.display];live.zoom.reset();liveBeat();if(live.on)rtcStart();}}},[DISPLAY_NAMES[live.display]]);
   var close=h("button",{class:"pill btn2",type:"button","aria-label":"Stop live screen",on:{click:stopLive}},["✕"]);
   live.panel=h("section",{class:"live",hidden:true,"aria-label":"Live screen"},[box,live.msg,h("div",{class:"livebar"},[h("span",{class:"pill"},[h("span",{class:"dot on"}),live.state]),h("span",{class:"grow"}),which,close])]);
   return live.panel;
 }
-document.addEventListener("visibilitychange",function(){if(!live.on)return;if(document.hidden)clearTimeout(live.frameTimer);else{liveBeat();pollFrame();}});
+document.addEventListener("visibilitychange",function(){if(!live.on)return;if(document.hidden)clearTimeout(live.frameTimer);else{liveBeat();pollFrame();if(!rtc.playing)rtcStart();}});
 
 // ---- screens
 function logo(){return h("div",{class:"mark","aria-hidden":"true"},[h("i")]);}
@@ -426,7 +489,7 @@ export function phonePage(): Response {
     headers: {
       "content-type": "text/html; charset=utf-8",
       "cache-control": "no-store",
-      "content-security-policy": `default-src 'none'; script-src 'nonce-${nonce}'; style-src 'nonce-${nonce}'; img-src data: 'self'; manifest-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`,
+      "content-security-policy": `default-src 'none'; script-src 'nonce-${nonce}'; style-src 'nonce-${nonce}'; img-src data: 'self'; media-src blob: mediastream:; manifest-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`,
       "x-content-type-options": "nosniff",
       "referrer-policy": "no-referrer",
     },
