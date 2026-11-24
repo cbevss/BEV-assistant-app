@@ -9,6 +9,8 @@ import type { RemoteItem } from "./sync";
 export interface AccountUser {
   id: string;
   name: string;
+  /** The Discord account they signed in with (older account servers don't send it). */
+  discord_id?: string;
   avatar: string | null;
   created_at: number;
 }

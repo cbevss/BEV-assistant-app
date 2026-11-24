@@ -5,7 +5,8 @@ import { useSettings, type IntegrationSettings, type McpServerConfig } from "@/s
 import { HA_TOKEN, testHomeAssistant } from "@/integrations/homeassistant";
 import { GH_TOKEN, testGitHub } from "@/integrations/github";
 import { DISCORD_TOKEN, testDiscord } from "@/integrations/discord";
-import { BEVBOT_TOKEN, linkBot, unlinkBot } from "@/integrations/bevbot";
+import { BEVBOT_TOKEN, linkBot, unlinkBot, botOwnerIds, isOwnerLogin } from "@/integrations/bevbot";
+import { useAccount } from "@/account/account";
 import { spotifyOAuth } from "@/integrations/spotify";
 import { googleOAuth, GOOGLE_SECRET } from "@/integrations/google";
 import { signIn, signOut, isSignedIn } from "@/integrations/oauth";
@@ -403,7 +404,22 @@ export function DiscordCard() {
   );
 }
 
+/** Only shown when signed in to BEV with the bot owner's Discord account. */
 export function BevBotCard() {
+  const discordId = useAccount((a) => a.user?.discord_id);
+  const [ids, setIds] = useState<string[] | null>(null);
+  useEffect(() => {
+    let live = true;
+    void botOwnerIds().then((x) => live && setIds(x));
+    return () => {
+      live = false;
+    };
+  }, [discordId]);
+  if (!ids || !isOwnerLogin(discordId, ids)) return null;
+  return <BevBotCardInner />;
+}
+
+function BevBotCardInner() {
   const { i, patch } = usePatch();
   const cfg = i.bevbot ?? { enabled: false, url: "" };
   const [url, setUrl] = useState(cfg.url);
