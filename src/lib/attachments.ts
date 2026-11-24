@@ -102,3 +102,15 @@ export function messageWithAttachments(text: string, atts: readonly Attachment[]
   const head = text.trim() || "(No message: see the attachments.)";
   return `${head}\n\n${notes.join("\n")}`;
 }
+
+/** A file sent from the phone (base64): pictures go to the AI, text goes in as text, anything else is saved to Downloads\\BEV from phone. */
+export async function fromBase64(name: string, mime: string, data: string): Promise<Attachment> {
+  if (mime.startsWith("image/") || IMAGE_EXT.test(name)) return asImage(name, `data:${mime.startsWith("image/") ? mime : "image/jpeg"};base64,${data}`, Math.round(data.length * 0.75));
+  if (mime.startsWith("text/") || TEXT_EXT.test(name)) {
+    const bytes = Uint8Array.from(atob(data), (c) => c.charCodeAt(0));
+    const text = new TextDecoder().decode(bytes);
+    return { id: newId(), name, kind: "text", size: bytes.length, text: text.length > MAX_TEXT ? `${text.slice(0, MAX_TEXT)}\n[…cut off]` : text };
+  }
+  const path = await invoke<string>("save_phone_file", { name, data });
+  return { id: newId(), name, kind: "file", path, size: Math.round(data.length * 0.75) };
+}

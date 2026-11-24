@@ -18,7 +18,7 @@
  *
  * Phone control (the phone page signs in the same way, redirecting to /phone):
  *   GET  /phone                       the phone page
- *   POST /phone/messages  { dir, iv, ct }        relay one encrypted message
+ *   POST /phone/messages  { dir, iv, ct }        relay one encrypted message (big ones: screenshots, attachments)
  *   GET  /phone/messages?dir=to_pc|to_phone&since=N
  *   GET  /phone/status                when the PC last checked in
  *   POST /phone/live      { on, display }       the phone wants (or stops) a live feed
@@ -55,6 +55,10 @@ export const LIMITS = {
   phoneScreen: 900 * 1024,
   phoneKeep: 300,
   phoneScreensKeep: 2,
+  /** Pictures/files from the phone waiting for the PC. */
+  phoneUploadsKeep: 6,
+  /** Largest picture/file message from the phone (ciphertext, base64). */
+  phoneUpload: 1_800_000,
   phonePerMinute: 60,
   /** A phone keeps the live feed going by asking again within this long. */
   liveHold: 45_000,
@@ -553,11 +557,12 @@ async function phoneApi(req: Request, url: URL, path: string, env: Env, user: Us
     return json({ seq: f.seq, iv: f.iv, ct: f.ct, at: f.created_at, now, pc_last_seen: p?.last_seen ?? null });
   }
   if (req.method === "POST" && path === "/phone/messages") {
-    const b = await body<{ dir?: string; iv?: string; ct?: string }>(req, LIMITS.phoneScreen + 1024);
+    const b = await body<{ dir?: string; iv?: string; ct?: string }>(req, LIMITS.phoneUpload + 1024);
     if (!b || !DIRS.has(b.dir ?? "")) return fail(400, "dir must be to_pc or to_phone");
     if (typeof b.iv !== "string" || !/^[A-Za-z0-9+/=]{12,32}$/.test(b.iv) || typeof b.ct !== "string" || !/^[A-Za-z0-9+/=]+$/.test(b.ct)) return fail(400, "expected encrypted { iv, ct }");
     const big = b.ct.length > LIMITS.phoneMessage;
-    if (b.ct.length > LIMITS.phoneScreen || (big && b.dir !== "to_phone")) return fail(413, "message too large");
+    // Big messages: screenshots to the phone, pictures and files to the PC.
+    if (b.ct.length > (b.dir === "to_pc" ? LIMITS.phoneUpload : LIMITS.phoneScreen)) return fail(413, "message too large");
     const recent = await env.DB.prepare("SELECT COUNT(*) AS n FROM phone_messages WHERE user_id = ? AND created_at > ?").bind(user.id, now - 60_000).first<{ n: number }>();
     if ((recent?.n ?? 0) >= LIMITS.phonePerMinute) return fail(429, "too many messages; wait a moment");
     const r = await env.DB.prepare("INSERT INTO phone_messages (user_id, dir, iv, ct, big, created_at) VALUES (?, ?, ?, ?, ?, ?)")
@@ -566,10 +571,10 @@ async function phoneApi(req: Request, url: URL, path: string, env: Env, user: Us
     // Keep it small: the newest few screenshots and a few hundred messages.
     if (big) {
       await env.DB.prepare(
-        `DELETE FROM phone_messages WHERE user_id = ?1 AND big = 1 AND id NOT IN
-           (SELECT id FROM phone_messages WHERE user_id = ?1 AND big = 1 ORDER BY id DESC LIMIT ?2)`
+        `DELETE FROM phone_messages WHERE user_id = ?1 AND dir = ?3 AND big = 1 AND id NOT IN
+           (SELECT id FROM phone_messages WHERE user_id = ?1 AND dir = ?3 AND big = 1 ORDER BY id DESC LIMIT ?2)`
       )
-        .bind(user.id, LIMITS.phoneScreensKeep)
+        .bind(user.id, b.dir === "to_pc" ? LIMITS.phoneUploadsKeep : LIMITS.phoneScreensKeep, b.dir)
         .run();
     }
     await env.DB.prepare(

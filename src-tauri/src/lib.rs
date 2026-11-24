@@ -138,6 +138,7 @@ pub fn run() {
             audio::set_output_device,
             audio::list_app_audio,
             attach::read_image_attachment,
+            attach::save_phone_file,
             startup::fast_start_enabled,
             startup::set_fast_start,
             audio::set_app_audio,

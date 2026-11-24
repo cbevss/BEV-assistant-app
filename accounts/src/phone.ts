@@ -81,6 +81,15 @@ footer{flex:none;border-top:1px solid var(--line);padding:10px 12px calc(env(saf
 .compose{display:flex;gap:8px;align-items:flex-end}
 textarea{flex:1;resize:none;max-height:120px;min-height:44px;border-radius:14px;border:1px solid var(--line);background:var(--s1);padding:11px 13px;outline:none}
 textarea:focus{border-color:var(--acc2)}
+.attach{height:44px;width:44px;flex:none;border-radius:14px;border:1px solid var(--line);background:var(--s1);color:var(--ink2);font-size:20px;cursor:pointer}
+.attach:disabled{opacity:.4}
+.atts{display:flex;gap:8px;margin-bottom:8px;overflow-x:auto;scrollbar-width:none}.atts::-webkit-scrollbar{display:none}
+.att{flex:none;position:relative;display:flex;align-items:center;gap:6px;max-width:180px;border:1px solid var(--line);background:var(--s1);border-radius:10px;padding:4px 26px 4px 4px;font-size:12px;color:var(--ink2)}
+.att img{width:40px;height:40px;border-radius:7px;object-fit:cover;display:block}
+.att span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.att .fi{width:40px;height:40px;border-radius:7px;background:var(--s2);display:grid;place-items:center;font-size:18px}
+.att button{position:absolute;top:2px;right:2px;width:22px;height:22px;border-radius:50%;border:0;background:var(--s2);color:var(--ink2);cursor:pointer;font-size:12px}
+.files{font-size:12px;color:var(--ink2);margin-top:2px}
 .send{height:44px;min-width:64px;border-radius:14px;border:0;background:var(--acc);color:#05262a;font-weight:600;cursor:pointer}
 .send:disabled{opacity:.4}
 .tools{display:flex;gap:8px;margin-bottom:8px;overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch}.tools::-webkit-scrollbar{display:none}
@@ -108,7 +117,7 @@ textarea:focus{border-color:var(--acc2)}
 ["gesturestart","gesturechange","gestureend"].forEach(function(t){document.addEventListener(t,function(e){e.preventDefault();},{passive:false});});
 // Pinches only zoom the live screen and pictures (handled there); one finger
 // only scrolls the chat, the chip row and the message box.
-document.addEventListener("touchmove",function(e){if(e.touches&&e.touches.length>1){e.preventDefault();return;}var t=e.target;if(!(t&&t.closest&&t.closest("main,.tools,textarea")))e.preventDefault();},{passive:false});
+document.addEventListener("touchmove",function(e){if(e.touches&&e.touches.length>1){e.preventDefault();return;}var t=e.target;if(!(t&&t.closest&&t.closest("main,.tools,.atts,textarea")))e.preventDefault();},{passive:false});
 var lastTouch=0;document.addEventListener("touchend",function(e){var n=Date.now();if(n-lastTouch<300&&!(e.target&&e.target.closest&&e.target.closest("textarea,input")))e.preventDefault();lastTouch=n;},{passive:false});
 var te = new TextEncoder(), td = new TextDecoder();
 function b64(u8){var s="";for(var i=0;i<u8.length;i+=0x8000)s+=String.fromCharCode.apply(null,u8.subarray(i,i+0x8000));return btoa(s);}
@@ -174,6 +183,33 @@ function zoomable(box,img){
   box.addEventListener("touchend",function(e){if(e.touches.length===0)start=null;else if(e.touches.length===1){var p=pt(e.touches[0]);start={px:p.x,py:p.y,x:z.x,y:z.y};}});
   return {reset:function(){z={s:1,x:0,y:0};apply();},zoomed:function(){return z.s>1;}};
 }
+
+// ---- attachments: pictures are shrunk on the phone; other files go as they are
+var pend=[], attsEl=null, attachBtn=null, fileInput=null;
+var MAX_FILES=4, BUDGET=1000*1024, FILE_MAX=900*1024;
+function readB64(file){return new Promise(function(res,rej){var r=new FileReader();r.onload=function(){res(String(r.result).split(",")[1]||"");};r.onerror=function(){rej(r.error);};r.readAsDataURL(file);});}
+function shrinkPic(file,edge,q){return new Promise(function(res,rej){var url=URL.createObjectURL(file),img=new Image();img.onload=function(){var s=Math.min(1,edge/Math.max(img.width,img.height)),c=document.createElement("canvas");c.width=Math.max(1,Math.round(img.width*s));c.height=Math.max(1,Math.round(img.height*s));var g=c.getContext("2d");g.fillStyle="#fff";g.fillRect(0,0,c.width,c.height);g.drawImage(img,0,0,c.width,c.height);URL.revokeObjectURL(url);res(c.toDataURL("image/jpeg",q).split(",")[1]);};img.onerror=function(){URL.revokeObjectURL(url);rej(new Error("That picture couldn't be opened."));};img.src=url;});}
+function pendBytes(){return pend.reduce(function(n,p){return n+p.data.length*0.75;},0);}
+function addFiles(list){
+  var files=Array.prototype.slice.call(list||[]);
+  files.reduce(function(p,f){return p.then(function(){
+    if(pend.length>=MAX_FILES){toast("You can send up to "+MAX_FILES+" at once.");return;}
+    var isPic=/^image\//.test(f.type);
+    var make=isPic?shrinkPic(f,1600,0.8).then(function(d){return d.length*0.75>350*1024?shrinkPic(f,1280,0.65):d;}):(f.size>FILE_MAX?Promise.reject(new Error(f.name+" is too big to send from your phone (up to 900 KB).")):readB64(f));
+    return make.then(function(data){
+      if(pendBytes()+data.length*0.75>BUDGET)throw new Error("That's too much for one message. Send it on its own.");
+      pend.push({id:newId(),name:f.name||(isPic?"Photo.jpg":"File"),mime:isPic?"image/jpeg":(f.type||"application/octet-stream"),data:data,thumb:isPic?"data:image/jpeg;base64,"+data:null});
+    });
+  }).catch(function(e){toast(e.message||String(e));});},Promise.resolve()).then(renderAtts);
+}
+function renderAtts(){
+  if(!attsEl)return;attsEl.textContent="";attsEl.hidden=!pend.length;
+  pend.forEach(function(p){attsEl.appendChild(h("div",{class:"att",title:p.name},[p.thumb?h("img",{src:p.thumb,alt:""}):h("div",{class:"fi","aria-hidden":"true",text:"📄"}),h("span",{text:p.name}),h("button",{type:"button","aria-label":"Remove "+p.name,on:{click:function(){pend=pend.filter(function(x){return x!==p;});renderAtts();}}},["✕"])]));});
+  attachBtn.disabled=pend.length>=MAX_FILES;
+  sendBtn.disabled=!input.value.trim()&&!pend.length;
+}
+
+function toast(msg){var id=newId();feed.set(id,{id:id,role:"tool",label:"Couldn't attach",text:msg,ok:false,at:Date.now(),local:true});stickToBottom=true;render();}
 
 // ---- live screen
 var live={on:false,seq:0,display:"current",lastAt:0,frameTimer:null,beatTimer:null,panel:null,img:null,msg:null,state:null,zoom:null,chip:null};
@@ -248,7 +284,11 @@ function startMain(){
   mainEl=h("main",{"aria-live":"polite"});
   mainEl.addEventListener("scroll",function(){stickToBottom=mainEl.scrollHeight-mainEl.scrollTop-mainEl.clientHeight<80;});
   input=h("textarea",{rows:"1",placeholder:"Ask BEV…","aria-label":"Message BEV",enterkeyhint:"send"});
-  input.addEventListener("input",function(){input.style.height="auto";input.style.height=Math.min(120,input.scrollHeight)+"px";sendBtn.disabled=!input.value.trim();});
+  input.addEventListener("input",function(){input.style.height="auto";input.style.height=Math.min(120,input.scrollHeight)+"px";sendBtn.disabled=!input.value.trim()&&!pend.length;});
+  fileInput=h("input",{type:"file",multiple:true,hidden:true,"aria-hidden":"true"});
+  fileInput.addEventListener("change",function(){addFiles(fileInput.files);fileInput.value="";});
+  attachBtn=h("button",{class:"attach",type:"button","aria-label":"Attach pictures or files",on:{click:function(){fileInput.click();}}},["+"]);
+  attsEl=h("div",{class:"atts",hidden:true});
   input.addEventListener("keydown",function(e){if(e.key==="Enter"&&!e.shiftKey&&window.matchMedia("(pointer:fine)").matches){e.preventDefault();send();}});
   sendBtn=h("button",{class:"send",disabled:true,on:{click:send}},["Send"]);
   var screenBtn=h("button",{class:"chip",on:{click:askScreen}},["Show my screen"]);
@@ -259,7 +299,7 @@ function startMain(){
     h("header",{},[logo(),h("div",{class:"who"},[h("b",{text:"BEV"}),h("div",{class:"pc"},[statusDot,statusText])]),h("button",{class:"icon",on:{click:function(){if(confirm("Sign out of BEV on this phone?"))signOut();}}},["Sign out"])]),
     liveNode(),
     mainEl,
-    h("footer",{},[h("div",{class:"tools"},[live.chip,screenBtn].concat(quick)),h("div",{class:"compose"},[input,sendBtn])])
+    h("footer",{},[h("div",{class:"tools"},[live.chip,screenBtn].concat(quick)),attsEl,h("div",{class:"compose"},[attachBtn,input,sendBtn,fileInput])])
   ]);
   render();
   poll(true);
@@ -291,10 +331,11 @@ function handle(p){
 }
 
 function send(){
-  var text=input.value.trim();if(!text)return;
-  var id=newId();feed.set(id,{id:id,role:"user",text:text,at:Date.now(),source:"phone",pending:true});
-  input.value="";input.style.height="auto";sendBtn.disabled=true;stickToBottom=true;render();
-  sendToPc({type:"ask",id:id,text:text}).then(function(){poll();}).catch(function(e){var it=feed.get(id);if(it&&it.pending){it.failed=e.message;render();}});
+  var text=input.value.trim();if(!text&&!pend.length)return;
+  var files=pend.map(function(p){return {name:p.name,mime:p.mime,data:p.data};});
+  var id=newId();feed.set(id,{id:id,role:"user",text:text,files:files.map(function(f){return f.name;}),at:Date.now(),source:"phone",pending:true});
+  input.value="";input.style.height="auto";pend=[];renderAtts();sendBtn.disabled=true;stickToBottom=true;render();
+  sendToPc(files.length?{type:"ask",id:id,text:text,files:files}:{type:"ask",id:id,text:text}).then(function(){poll();}).catch(function(e){var it=feed.get(id);if(it&&it.pending){it.failed=e.message;render();}});
 }
 function askScreen(){var id=newId();feed.set(id,{id:id,role:"tool",label:"Asked your PC for a screenshot",text:"",ok:true,at:Date.now(),local:true});stickToBottom=true;render();sendToPc({type:"screen",id:id}).then(function(){poll();}).catch(function(e){var it=feed.get(id);it.ok=false;it.text=e.message;render();});}
 function answer(a,allow){a.stage=allow?"sent-allow":"sent-deny";render();sendToPc({type:"approve",id:newId(),re:a.id,allow:allow}).then(function(){poll();}).catch(function(e){a.stage="ask";a.err=e.message;render();});}
@@ -315,7 +356,8 @@ function feedNode(it){
   if(it.role==="tool"){var ok=it.ok!==false;return h("div",{class:"step "+(ok?"ok":"bad")},[h("span",{class:"s","aria-hidden":"true",text:ok?"✓":"✕"}),h("div",{},[h("span",{text:it.label||"Did something"}),it.text?h("small",{text:it.text}):null])]);}
   var who=it.role==="user"?(it.source==="phone"?"You, from your phone":"You, at the PC"):"BEV";
   var meta=who+" · "+clock(it.at||Date.now())+(it.pending?(it.failed?" · didn't send: "+it.failed:" · sending…"):"");
-  return h("div",{class:"row "+it.role+(it.pending?" pending":"")},[h("div",{class:"col"},[h("div",{class:"bubble",text:it.text||""}),h("div",{class:"meta",text:meta})])]);
+  var files=Array.isArray(it.files)&&it.files.length?h("div",{class:"files",text:"📎 "+it.files.map(String).join(", ")}):null;
+  return h("div",{class:"row "+it.role+(it.pending?" pending":"")},[h("div",{class:"col"},[it.text?h("div",{class:"bubble",text:it.text}):null,files,h("div",{class:"meta",text:meta})])]);
 }
 function approvalNode(a){
   var expired=a.stage!=="done"&&a.expires&&Date.now()>a.expires;

@@ -64,6 +64,17 @@ describe("phone encryption", () => {
     expect(acceptFromPhone({ type: "run_shell", id: "abcdefgh15", t: now }, now, new Set())).toBeNull();
     expect(acceptFromPhone(null, now, new Set())).toBeNull();
   });
+
+  it("takes pictures and files with a request, and rejects bad ones", () => {
+    const now = 1_000_000_000;
+    const pic = { name: "photo.jpg", mime: "image/jpeg", data: "QUJD" };
+    const ask = { type: "ask", id: "abcdefgh20", t: now, text: "", files: [pic] };
+    expect(acceptFromPhone(ask, now, new Set())).toMatchObject({ type: "ask", text: "", files: [pic] });
+    expect(acceptFromPhone({ ...ask, files: [] }, now, new Set())).toBeNull(); // nothing at all
+    expect(acceptFromPhone({ ...ask, files: [{ ...pic, data: "<script>" }] }, now, new Set())).toBeNull();
+    expect(acceptFromPhone({ ...ask, files: [pic, pic, pic, pic, pic] }, now, new Set())).toBeNull();
+    expect(acceptFromPhone({ ...ask, files: "nope" }, now, new Set())).toBeNull();
+  });
 });
 
 describe("phone feed", () => {

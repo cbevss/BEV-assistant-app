@@ -299,7 +299,9 @@ describe("phone control", () => {
     const h = app();
     expect((await h(req("/phone/messages", token, msg("sideways")), env)).status).toBe(400);
     expect((await h(req("/phone/messages", token, { method: "POST", body: JSON.stringify({ dir: "to_pc", iv: "x", ct: "<script>" }) }), env)).status).toBe(400);
-    expect((await h(req("/phone/messages", token, msg("to_pc", "A".repeat(LIMITS.phoneMessage + 4))), env)).status).toBe(413);
+    // Pictures and files from the phone can be big, up to the screenshot limit.
+    expect((await h(req("/phone/messages", token, msg("to_pc", "A".repeat(LIMITS.phoneMessage + 4))), env)).status).toBe(200);
+    expect((await h(req("/phone/messages", token, msg("to_pc", "A".repeat(LIMITS.phoneUpload + 4))), env)).status).toBe(413);
     // A screenshot can go to the phone; only the newest few are kept.
     for (let i = 0; i < 4; i++) expect((await h(req("/phone/messages", token, msg("to_phone", "A".repeat(LIMITS.phoneMessage + 4))), env)).status).toBe(200);
     const got = (await (await h(req("/phone/messages?dir=to_phone&since=0", token), env)).json()) as { messages: unknown[] };

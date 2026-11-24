@@ -31,6 +31,7 @@ const LABELS: Record<string, string> = {
   search_documents: "Searched your documents",
   phone_screenshot: "Sent your screen to your phone",
   phone_live: "Live screen",
+  phone_files: "Files from your phone",
   set_timer: "Set a timer",
   set_alarm: "Set an alarm",
   remind_me: "Set a reminder",
