@@ -40,6 +40,12 @@ export function sourceFor(display: string): "screen" | "frames" {
   return display === "all" ? "frames" : "screen";
 }
 
+/** Older hellos in a batch are from sessions the phone already replaced: only the newest counts. Pure; tested. */
+export function latestHelloOnly<T extends { type: string; sid: string }>(signals: T[]): T[] {
+  const last = [...signals].reverse().find((s) => s.type === "hello");
+  return signals.filter((s) => s.type !== "hello" || s === last).filter((s) => !last || s.type === "hello" || s.sid === last.sid || s.type === "bye");
+}
+
 export class LiveVideo {
   private cursor = -1;
   private pc: RTCPeerConnection | null = null;
@@ -56,8 +62,9 @@ export class LiveVideo {
     if (this.running) return;
     this.running = true;
     try {
-      const t = await this.d.token();
-      if (t && this.cursor < 0) this.cursor = (await api.phoneRtcInbox(t, 1e12).catch(() => ({ latest: 0 }))).latest ?? 0;
+      // Start from the beginning of what the server still keeps (the last 2 minutes): the phone usually says
+      // hello before the PC hears that the live screen is wanted, and that hello mustn't be skipped.
+      if (this.cursor < 0) this.cursor = 0;
       while (this.d.until() > Date.now()) {
         await this.poll().catch(() => {});
         await new Promise((r) => setTimeout(r, this.pc && this.pc.connectionState === "connected" ? 1500 : 350));
@@ -73,11 +80,13 @@ export class LiveVideo {
     const key = this.d.key();
     if (!t || !key) return;
     const r = await api.phoneRtcInbox(t, Math.max(0, this.cursor));
+    const signals: Signal[] = [];
     for (const m of r.messages) {
       this.cursor = Math.max(this.cursor, m.id);
       const s = await openPhone<Signal>(key, "rtc_pc", this.d.userId(), m.iv, m.ct).catch(() => null);
-      if (s) await this.on(s).catch((e) => this.d.log(`Live video: ${e instanceof Error ? e.message : String(e)}`));
+      if (s) signals.push(s);
     }
+    for (const s of latestHelloOnly(signals)) await this.on(s).catch((e) => this.d.log(`Live video: ${e instanceof Error ? e.message : String(e)}`));
   }
 
   private async signal(s: Record<string, unknown>) {
@@ -89,7 +98,11 @@ export class LiveVideo {
   }
 
   private async on(s: Signal) {
-    if (s.type === "hello") return this.offer(s.sid, s.display ?? "current");
+    if (s.type === "hello") {
+      // The phone repeats its hello until it gets an offer: answer each session once.
+      if (s.sid === this.sid && this.pc && this.pc.connectionState !== "failed") return;
+      return this.offer(s.sid, s.display ?? "current");
+    }
     if (s.sid !== this.sid || !this.pc) return;
     if (s.type === "answer") {
       await this.pc.setRemoteDescription({ type: "answer", sdp: s.sdp });
@@ -134,10 +147,14 @@ export class LiveVideo {
   private async source(display: string): Promise<MediaStreamTrack> {
     if (sourceFor(display) === "screen" && navigator.mediaDevices?.getDisplayMedia) {
       try {
-        const stream = await navigator.mediaDevices.getDisplayMedia({
-          video: { frameRate: { ideal: LIVE_FPS, max: LIVE_FPS }, width: { max: 2560 }, height: { max: 1440 } },
-          audio: false,
-        });
+        // If WebView2 shows its screen picker instead of picking by itself, nobody's there to click it: give up after 6s.
+        const stream = await Promise.race([
+          navigator.mediaDevices.getDisplayMedia({
+            video: { frameRate: { ideal: LIVE_FPS, max: LIVE_FPS }, width: { max: 2560 }, height: { max: 1440 } },
+            audio: false,
+          }),
+          new Promise<never>((_, reject) => setTimeout(() => reject(new Error("the screen picker didn't answer")), 6000)),
+        ]);
         const track = stream.getVideoTracks()[0];
         if (track) {
           track.contentHint = "motion";

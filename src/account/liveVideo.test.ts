@@ -10,3 +10,20 @@ describe("live video", () => {
     expect(LIVE_FPS).toBe(60);
   });
 });
+
+import { latestHelloOnly } from "./liveVideo";
+describe("live video set-up", () => {
+  it("answers only the newest hello in a batch, with its own messages", () => {
+    const out = latestHelloOnly([
+      { type: "hello", sid: "a" },
+      { type: "answer", sid: "a" },
+      { type: "hello", sid: "b" },
+      { type: "ice", sid: "b" },
+    ]);
+    expect(out).toEqual([{ type: "hello", sid: "b" }, { type: "ice", sid: "b" }]);
+  });
+  it("passes messages through when there's no hello", () => {
+    const sig = [{ type: "answer", sid: "a" }, { type: "ice", sid: "a" }];
+    expect(latestHelloOnly(sig)).toEqual(sig);
+  });
+});

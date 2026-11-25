@@ -219,16 +219,22 @@ var live={on:false,seq:0,display:"current",lastAt:0,frameTimer:null,beatTimer:nu
 
 // ---- live video (WebRTC): the real stream, up to 60 fps. The picture-every-second
 // feed keeps going underneath until the video is playing, and takes over if it drops.
-var rtc={pc:null,sid:"",cursor:-1,timer:null,playing:false,pending:[]};
+var rtc={pc:null,sid:"",cursor:-1,timer:null,playing:false,pending:[],gotOffer:false,hello:null,watch:null,note:"",label:"Your screen"};
+function showState(){if(!live.state)return;live.state.textContent=rtc.playing?"Live video":(rtc.label||"Your screen")+(rtc.note?" · "+rtc.note:"");}
 function rtcAad(side){return te.encode("bev-phone:rtc_"+side+":"+userId);}
 function rtcSend(obj){var iv=rand(12);return crypto.subtle.encrypt({name:"AES-GCM",iv:iv,additionalData:rtcAad("pc")},key,te.encode(JSON.stringify(obj))).then(function(ct){return api("/phone/rtc",{method:"POST",body:{to:"pc",iv:b64(iv),ct:b64(new Uint8Array(ct))}});});}
 function rtcOpen(m){return crypto.subtle.decrypt({name:"AES-GCM",iv:unb64(m.iv),additionalData:rtcAad("phone")},key,unb64(m.ct)).then(function(pt){return JSON.parse(td.decode(pt));});}
 function rtcStart(){
   if(!window.RTCPeerConnection||!key)return;
   rtcStop(false);
-  rtc.sid=b64url(rand(9));rtc.cursor=-1;rtc.playing=false;rtc.pending=[];
+  rtc.sid=b64url(rand(9));rtc.cursor=-1;rtc.playing=false;rtc.pending=[];rtc.gotOffer=false;rtc.note="connecting video…";showState();
+  var sid=rtc.sid;
+  function hello(){if(!live.on||rtc.sid!==sid||rtc.gotOffer)return;rtcSend({type:"hello",sid:sid,display:live.display}).catch(function(){});rtc.hello=setTimeout(hello,6000);}
   api("/phone/rtc?for=phone&after=999999999999").then(function(r){rtc.cursor=r.latest||0;}).catch(function(){rtc.cursor=0;}).then(function(){
-    rtcSend({type:"hello",sid:rtc.sid,display:live.display}).catch(function(){});rtcPoll();});
+    hello();rtcPoll();});
+  // No video 25s after asking: say why (usually a mobile network that needs a relay).
+  clearTimeout(rtc.watch);rtc.watch=setTimeout(function(){if(live.on&&rtc.sid===sid&&!rtc.playing){
+    rtc.note=rtc.gotOffer?(rtc.relay?"video couldn't connect, showing pictures":"video needs a relay on this network, showing pictures"):"your PC didn't answer for video (is BEV updated?), showing pictures";showState();}},25000);
 }
 function rtcPoll(){
   clearTimeout(rtc.timer);
@@ -242,12 +248,15 @@ function rtcPoll(){
 function rtcOn(s){
   if(!s||s.sid!==rtc.sid)return;
   if(s.type==="offer"){
+    if(rtc.gotOffer)return;rtc.gotOffer=true;rtc.relay=!!s.relay;clearTimeout(rtc.hello);
     return api("/phone/ice").catch(function(){return {iceServers:[{urls:"stun:stun.cloudflare.com:3478"}]};}).then(function(ice){
       var pc=new RTCPeerConnection({iceServers:ice.iceServers});rtc.pc=pc;
       pc.onicecandidate=function(e){if(e.candidate)rtcSend({type:"ice",sid:rtc.sid,c:e.candidate.toJSON()}).catch(function(){});};
       pc.ontrack=function(e){var v=live.video;v.srcObject=e.streams[0]||new MediaStream([e.track]);v.play().catch(function(){});};
-      pc.onconnectionstatechange=function(){if(pc!==rtc.pc)return;
-        if(pc.connectionState==="failed"||pc.connectionState==="disconnected"){rtcFallback();}};
+      pc.onconnectionstatechange=function(){if(pc!==rtc.pc)return;var st=pc.connectionState;
+        if(st==="connected"){if(live.video.readyState>=2)rtcPlaying();}
+        else if(st==="failed"){rtc.note=rtc.relay?"video connection failed, showing pictures":"video needs a relay on this network, showing pictures";rtcFallback();showState();}
+        else if(st==="disconnected"){setTimeout(function(){if(rtc.pc===pc&&pc.connectionState!=="connected"){rtc.note="video dropped, showing pictures";rtcFallback();showState();}},5000);}};
       return pc.setRemoteDescription({type:"offer",sdp:s.sdp}).then(function(){var p=rtc.pending.splice(0);return Promise.all(p.map(function(c){return pc.addIceCandidate(c).catch(function(){});}));})
         .then(function(){return pc.createAnswer();}).then(function(a){return pc.setLocalDescription(a).then(function(){return rtcSend({type:"answer",sid:rtc.sid,sdp:a.sdp});});});
     });
@@ -258,15 +267,15 @@ function rtcPlaying(){
   if(!live.on)return;
   rtc.playing=true;clearTimeout(live.frameTimer);
   live.img.hidden=true;live.video.hidden=false;live.zoom.target(live.video);
-  live.msg.textContent="";live.state.textContent="Live video";
+  live.msg.textContent="";rtc.note="";showState();
 }
 function rtcFallback(){
   if(!rtc.playing)return;
   rtc.playing=false;live.video.hidden=true;live.img.hidden=false;live.zoom.target(live.img);
-  live.state.textContent="Live (pictures)";if(live.on)pollFrame();
+  showState();if(live.on)pollFrame();
 }
 function rtcStop(tell){
-  clearTimeout(rtc.timer);
+  clearTimeout(rtc.timer);clearTimeout(rtc.hello);clearTimeout(rtc.watch);rtc.note="";
   if(tell&&rtc.sid)rtcSend({type:"bye",sid:rtc.sid}).catch(function(){});
   if(rtc.pc){rtc.pc.onconnectionstatechange=null;rtc.pc.close();rtc.pc=null;}
   rtc.sid="";rtc.playing=false;
@@ -288,7 +297,7 @@ function pollFrame(){
   if(!live.on||document.hidden||!key||rtc.playing)return;
   var got=false;
   api("/phone/frame?after="+live.seq).then(function(f){
-    if(f.ct){got=true;live.seq=f.seq;return openFrame(f).then(function(p){if(p&&p.type==="frame"&&p.data){live.img.src="data:image/jpeg;base64,"+p.data;live.lastAt=Date.now();live.msg.textContent="";live.state.textContent=String(p.label||"Your screen");}},function(){});}
+    if(f.ct){got=true;live.seq=f.seq;return openFrame(f).then(function(p){if(p&&p.type==="frame"&&p.data){live.img.src="data:image/jpeg;base64,"+p.data;live.lastAt=Date.now();live.msg.textContent="";rtc.label=String(p.label||"Your screen");showState();}},function(){});}
     if(!live.lastAt){var on=f.pc_last_seen&&f.now-f.pc_last_seen<30000;live.waitSince=live.waitSince||Date.now();
       live.msg.textContent=!on?"Your PC isn't connected. Is BEV open with Phone control on?":Date.now()-live.waitSince>20000?"Still no picture. Check the chat below for a message from your PC, or stop and start the live screen.":"Waiting for the first picture…";}
   }).catch(function(){}).then(function(){
