@@ -43,3 +43,21 @@ describe("WhatsApp", () => {
     expect(newlyUnread(before, now).map((c) => c.name)).toEqual(["Mum", "Dan"]);
   });
 });
+
+import { chatsFromNotifications } from "./whatsapp";
+
+describe("chatsFromNotifications", () => {
+  it("groups by chat and drops old ones", () => {
+    const now = 1_000_000;
+    const chats = chatsFromNotifications(
+      [
+        { id: 1, time: now - 60, chat: "Mum", text: "hi" },
+        { id: 2, time: now - 30, chat: "Mum", text: "you there?" },
+        { id: 3, time: now - 90_000, chat: "Old", text: "x" },
+        { id: 4, time: now - 10, chat: "Sam", text: "yo" },
+      ],
+      now,
+    );
+    expect(chats.map((c) => [c.name, c.unread, c.preview])).toEqual([["Mum", 2, "you there?"], ["Sam", 1, "yo"]]);
+  });
+});
