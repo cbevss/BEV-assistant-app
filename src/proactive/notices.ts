@@ -6,7 +6,7 @@
  */
 import { create } from "zustand";
 
-export type NoticeKind = "resources" | "crash" | "network" | "disk" | "stability" | "briefing" | "task";
+export type NoticeKind = "resources" | "crash" | "network" | "disk" | "stability" | "briefing" | "task" | "message";
 
 export interface Notice {
   id: number;

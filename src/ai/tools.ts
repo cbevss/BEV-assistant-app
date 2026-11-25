@@ -1,3 +1,4 @@
+import { unreadChats, readChat, sendMessage } from "@/lib/whatsapp";
 import { findSources, LAUNCHER_NAME, type Launcher } from "@/lib/gameDownloads";
 import { api as integrationApi } from "@/integrations/http";
 import { teachTools } from "@/annotate/teach";
@@ -417,6 +418,58 @@ export const tools: Record<string, RegisteredTool> = {
         );
       }
       return native.launchGame(game.id, mode);
+    },
+  },
+
+  whatsapp_unread: {
+    spec: {
+      name: "whatsapp_unread",
+      description:
+        "WhatsApp chats with unread messages (from the WhatsApp desktop app on this PC): who, how many, and the latest message's preview. Use for \"any new WhatsApp messages?\". Say who messaged; only read out what they said when the user asks.",
+      parameters: { type: "object", properties: {}, required: [] },
+    },
+    untrustedOutput: true,
+    timeoutMs: 30_000,
+    run: async () => {
+      const chats = await unreadChats();
+      if (!chats.length) return "No unread WhatsApp messages.";
+      return chats.map((c) => `${c.name}: ${c.unread} unread${c.time ? ` (${c.time})` : ""}${c.preview ? ` — latest: ${c.preview}` : ""}`).join("\n");
+    },
+  },
+
+  whatsapp_read: {
+    spec: {
+      name: "whatsapp_read",
+      description: "Open a WhatsApp chat (by contact or group name) and read its latest messages, newest last. Use when the user asks what someone said.",
+      parameters: { type: "object", properties: { chat: { type: "string" }, count: { type: "number", description: "how many messages (default 10)" } }, required: ["chat"] },
+    },
+    untrustedOutput: true,
+    timeoutMs: 40_000,
+    run: async (a) => {
+      const chat = str(a.chat, "chat");
+      const msgs = await readChat(chat, Math.min(30, Math.max(1, Math.round(Number(a.count) || 10))));
+      return msgs.length ? `Latest in ${chat}:\n${msgs.join("\n")}` : `Opened ${chat}, but couldn't read any messages from it.`;
+    },
+  },
+
+  whatsapp_send: {
+    spec: {
+      name: "whatsapp_send",
+      description:
+        "Send a WhatsApp message from the user's WhatsApp desktop app: to a contact or group by name, or to a phone number (with country code, e.g. +44…). Use the user's own words for the message; check the recipient and text with them if anything is unclear.",
+      parameters: {
+        type: "object",
+        properties: { to: { type: "string", description: "contact or group name, or a phone number" }, text: { type: "string" } },
+        required: ["to", "text"],
+      },
+      sensitive: true,
+    },
+    timeoutMs: 45_000,
+    run: async (a) => {
+      const to = str(a.to, "to");
+      const text = str(a.text, "text");
+      if (text.length > 4000) throw new Error("That message is too long for one WhatsApp message.");
+      return `WhatsApp to ${to}: ${await sendMessage(to, text)}.`;
     },
   },
 
