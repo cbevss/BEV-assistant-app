@@ -1,3 +1,5 @@
+import { raise } from "@/proactive/notices";
+import { startWhatsAppWatch } from "@/lib/whatsapp";
 import { setFileManagerPref } from "@/lib/native";
 import { useEffect, useState } from "react";
 import { Routes, Route, Navigate, useLocation } from "react-router-dom";
@@ -184,6 +186,11 @@ export function App() {
       // Updates: look for a newer signed release now and every half hour; the
       // title bar shows a download button when one is ready.
       startUpdateChecks();
+      // A new WhatsApp message: say who it's from (what it says only when asked).
+      startWhatsAppWatch((chats) => {
+        for (const c of chats)
+          void raise("message", `New WhatsApp message from ${c.name}`, `${c.unread} unread. Ask BEV what it says.`, { key: `whatsapp:${c.name}:${c.unread}`, cooldownMs: 60_000 });
+      });
       // Folders open in the file manager picked in Settings.
       setFileManagerPref(useSettings.getState().settings.fileManager);
       useSettings.subscribe((s) => setFileManagerPref(s.settings.fileManager));
