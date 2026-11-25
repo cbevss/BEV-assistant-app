@@ -2,12 +2,42 @@
  * WhatsApp through the WhatsApp desktop app on this PC (no unofficial WhatsApp
  * clients: those break WhatsApp's terms and can get the number banned). BEV
  * reads the app's chat list and chats through Windows' accessibility tree, and
- * sends by opening the chat and typing, like the user would.
+ * sends by opening the chat and typing, like the user would. While WhatsApp is
+ * minimised or in the tray, new messages come from Windows' notifications, and
+ * after sending BEV minimises WhatsApp again.
  */
 import { native, type UiElement, type UiSnapshot } from "./native";
 import { layoutApi, findWindows } from "./layouts";
 import { appsApi } from "./apps";
 import { controlCache, findControl } from "./control";
+import { invoke } from "@tauri-apps/api/core";
+
+/** A WhatsApp message as Windows showed it in a notification. */
+export interface WaNotification {
+  id: number;
+  time: number;
+  chat: string;
+  text: string;
+}
+
+/** WhatsApp toasts Windows still has (works while WhatsApp is minimised or in the tray). */
+export const notificationsApi = {
+  since: (sinceId = 0) => invoke<WaNotification[]>("whatsapp_notifications", { sinceId }),
+};
+
+/** Group notifications into chats, newest message last, for the last `hours`. Pure; tested. */
+export function chatsFromNotifications(ns: WaNotification[], nowSec: number, hours = 24): ChatSummary[] {
+  const byChat = new Map<string, WaNotification[]>();
+  for (const n of ns) {
+    if (nowSec - n.time > hours * 3600) continue;
+    byChat.set(n.chat, [...(byChat.get(n.chat) ?? []), n]);
+  }
+  return [...byChat.entries()].map(([name, list]) => {
+    const lastN = list[list.length - 1];
+    const d = new Date(lastN.time * 1000);
+    return { name, unread: list.length, preview: lastN.text.slice(0, 300), time: `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}` };
+  });
+}
 
 export interface ChatSummary {
   name: string;
@@ -89,10 +119,18 @@ async function read(hwnd: number): Promise<UiSnapshot> {
   return snap;
 }
 
-/** Unread chats (needs WhatsApp's window open, even if it's behind other windows). */
+const nowSec = () => Math.floor(Date.now() / 1000);
+
+/**
+ * Unread chats. When WhatsApp's window is showing, from its chat list; when it's
+ * minimised, closed to the tray or not running, from Windows' notifications, so
+ * BEV doesn't pop WhatsApp open just to look.
+ */
 export async function unreadChats(): Promise<ChatSummary[]> {
-  const w = await whatsappWindow(true);
-  return parseChatList((await read(w!.hwnd)).elements).filter((c) => c.unread > 0);
+  const w = await whatsappWindow(false);
+  if (w && w.state !== "minimized") return parseChatList((await read(w.hwnd)).elements).filter((c) => c.unread > 0);
+  const fromToasts = chatsFromNotifications(await notificationsApi.since(0).catch(() => []), nowSec());
+  return fromToasts;
 }
 
 /** Open a chat by searching for it. Returns the snapshot of the opened chat. */
@@ -117,12 +155,35 @@ async function openChat(name: string): Promise<{ hwnd: number; snap: UiSnapshot 
   return { hwnd: w!.hwnd, snap: await read(w!.hwnd) };
 }
 
+/** Put WhatsApp back the way it was (minimised) if BEV had to show it. */
+async function restoreHidden(hwnd: number, wasHidden: boolean) {
+  if (!wasHidden) return;
+  await sleep(400);
+  const p = (await layoutApi.placements()).find((x) => x.hwnd === hwnd);
+  if (p) await layoutApi.place(hwnd, { x: p.x, y: p.y, w: p.w, h: p.h }, "minimized").catch(() => {});
+}
+
+async function hiddenNow(): Promise<boolean> {
+  const w = await whatsappWindow(false);
+  return !w || w.state === "minimized";
+}
+
 export async function readChat(name: string, max = 15): Promise<string[]> {
-  const { snap } = await openChat(name);
-  return parseMessages(snap.elements, name, max);
+  // Minimised or closed: the notifications already have the new messages, no need to open it.
+  if (await hiddenNow()) {
+    const lower = name.toLowerCase();
+    const msgs = (await notificationsApi.since(0).catch(() => [])).filter((n) => n.chat.toLowerCase().includes(lower) && nowSec() - n.time < 48 * 3600);
+    if (msgs.length) return msgs.slice(-max).map((n) => n.text);
+  }
+  const wasHidden = await hiddenNow();
+  const { hwnd, snap } = await openChat(name);
+  const out = parseMessages(snap.elements, name, max);
+  await restoreHidden(hwnd, wasHidden);
+  return out;
 }
 
 export async function sendMessage(to: string, text: string): Promise<string> {
+  const wasHidden = await hiddenNow();
   const number = phoneNumber(to);
   let hwnd: number;
   if (number) {
@@ -146,6 +207,7 @@ export async function sendMessage(to: string, text: string): Promise<string> {
   await sleep(1200);
   const after = parseMessages((await read(hwnd)).elements, to, 6);
   const sent = after.some((m) => m.includes(text.slice(0, 40)));
+  await restoreHidden(hwnd, wasHidden);
   return sent ? "sent" : "sent (couldn't confirm it appeared in the chat)";
 }
 
@@ -160,15 +222,30 @@ export function newlyUnread(before: Map<string, number>, now: ChatSummary[]): Ch
   return now.filter((c) => c.unread > (before.get(c.name) ?? 0));
 }
 
-export function startWhatsAppWatch(onNew: (chats: ChatSummary[]) => void, everyMs = 30_000) {
+let lastToast = -1;
+
+export function startWhatsAppWatch(onNew: (chats: ChatSummary[]) => void, everyMs = 20_000) {
   if (timer) return;
   const tick = async () => {
+    const told = new Set<string>();
+    try {
+      // Windows' notifications: works minimised, in the tray, or behind other windows.
+      const ns = await notificationsApi.since(Math.max(lastToast, 0));
+      if (lastToast >= 0 && ns.length) {
+        const chats = chatsFromNotifications(ns, nowSec(), 1);
+        chats.forEach((c) => told.add(c.name));
+        if (chats.length) onNew(chats);
+      }
+      lastToast = ns.reduce((m, n) => Math.max(m, n.id), Math.max(lastToast, 0));
+    } catch {
+      /* not on Windows, or the store couldn't be read: the window check below still works */
+    }
     try {
       const w = await whatsappWindow(false);
       // A minimised window would have to be restored to read it: leave it alone.
       if (w && w.state !== "minimized") {
         const chats = parseChatList((await native.uiRead(w.hwnd)).elements);
-        const fresh = last.size || chats.length ? newlyUnread(last, chats) : [];
+        const fresh = newlyUnread(last, chats).filter((c) => !told.has(c.name));
         if (last.size && fresh.length) onNew(fresh);
         last = new Map(chats.map((c) => [c.name, c.unread]));
       }

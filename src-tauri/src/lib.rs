@@ -31,6 +31,7 @@ mod overlay;
 mod annotate;
 mod folders;
 mod gamelib;
+mod wanotify;
 mod filemanagers;
 mod replay;
 mod screen;
@@ -204,6 +205,7 @@ pub fn run() {
             gamelib::game_libraries,
             filemanagers::list_file_managers,
             gamelib::start_game_download,
+            wanotify::whatsapp_notifications,
             screen::live_frame,
             folders::install_update_to_folder,
             annotate::hide_annotate,

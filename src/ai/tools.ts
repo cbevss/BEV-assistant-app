@@ -440,7 +440,7 @@ export const tools: Record<string, RegisteredTool> = {
   whatsapp_read: {
     spec: {
       name: "whatsapp_read",
-      description: "Open a WhatsApp chat (by contact or group name) and read its latest messages, newest last. Use when the user asks what someone said.",
+      description: "Read the latest messages in a WhatsApp chat (by contact or group name), newest last. Works while WhatsApp is minimised (from Windows notifications) and leaves it minimised. Use when the user asks what someone said.",
       parameters: { type: "object", properties: { chat: { type: "string" }, count: { type: "number", description: "how many messages (default 10)" } }, required: ["chat"] },
     },
     untrustedOutput: true,
