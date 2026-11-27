@@ -175,6 +175,8 @@ export interface Settings {
   autoApproveActions: boolean;
   /** Which file manager folders open in: "system" (Windows' choice) or an id from list_file_managers. */
   fileManager: string;
+  /** WhatsApp as a linked device (the bev-wa helper): works with WhatsApp closed. Off until the user links it. */
+  whatsappLinked: boolean;
 }
 
 export const defaultSettings: Settings = {
@@ -248,6 +250,7 @@ export const defaultSettings: Settings = {
   toolPermissions: {},
   autoApproveActions: false,
   fileManager: "system",
+  whatsappLinked: false,
 };
 
 interface SettingsStore {

@@ -61,3 +61,11 @@ describe("chatsFromNotifications", () => {
     expect(chats.map((c) => [c.name, c.unread, c.preview])).toEqual([["Mum", 2, "you there?"], ["Sam", 1, "yo"]]);
   });
 });
+
+import { formatLinked } from "./whatsappLinked";
+describe("formatLinked", () => {
+  it("adds the sender in groups", () => {
+    expect(formatLinked({ chat: "Family", chatId: "1@g.us", from: "Mum", text: "tea?", time: 0 })).toBe("Mum: tea?");
+    expect(formatLinked({ chat: "Mum", chatId: "4@s", from: "Mum", text: "tea?", time: 0 })).toBe("tea?");
+  });
+});

@@ -11,6 +11,7 @@ import { layoutApi, findWindows } from "./layouts";
 import { appsApi } from "./apps";
 import { controlCache, findControl } from "./control";
 import { invoke } from "@tauri-apps/api/core";
+import { isLinked, linked, formatLinked } from "./whatsappLinked";
 
 /** A WhatsApp message as Windows showed it in a notification. */
 export interface WaNotification {
@@ -127,6 +128,10 @@ const nowSec = () => Math.floor(Date.now() / 1000);
  * BEV doesn't pop WhatsApp open just to look.
  */
 export async function unreadChats(): Promise<ChatSummary[]> {
+  if (isLinked()) {
+    const chats = await linked.chats();
+    return chats.filter((c) => c.unread > 0).map((c) => ({ name: c.name, unread: c.unread, preview: c.preview, time: "" }));
+  }
   const w = await whatsappWindow(false);
   if (w && w.state !== "minimized") return parseChatList((await read(w.hwnd)).elements).filter((c) => c.unread > 0);
   const fromToasts = chatsFromNotifications(await notificationsApi.since(0).catch(() => []), nowSec());
@@ -169,6 +174,13 @@ async function hiddenNow(): Promise<boolean> {
 }
 
 export async function readChat(name: string, max = 15): Promise<string[]> {
+  if (isLinked()) {
+    try {
+      return (await linked.read(name, max)).map(formatLinked);
+    } catch {
+      /* no messages since linking: fall back to the app's window below */
+    }
+  }
   // Minimised or closed: the notifications already have the new messages, no need to open it.
   if (await hiddenNow()) {
     const lower = name.toLowerCase();
@@ -183,6 +195,10 @@ export async function readChat(name: string, max = 15): Promise<string[]> {
 }
 
 export async function sendMessage(to: string, text: string): Promise<string> {
+  if (isLinked()) {
+    const r = await linked.send(to, text);
+    return `sent to ${r.to}`;
+  }
   const wasHidden = await hiddenNow();
   const number = phoneNumber(to);
   let hwnd: number;
@@ -227,6 +243,11 @@ let lastToast = -1;
 export function startWhatsAppWatch(onNew: (chats: ChatSummary[]) => void, everyMs = 20_000) {
   if (timer) return;
   const tick = async () => {
+    if (isLinked()) {
+      // The linked device announces new messages itself.
+      timer = setTimeout(() => void tick(), everyMs);
+      return;
+    }
     const told = new Set<string>();
     try {
       // Windows' notifications: works minimised, in the tray, or behind other windows.
