@@ -202,6 +202,22 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev libssl-dev libasound2-dev libdbus-1-dev libxdo-dev rpm patchelf
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.24"
+          cache-dependency-path: sidecar/wa/go.sum
+      # The WhatsApp helper is a bundled resource (tauri.conf.json: binaries/bev-wa*);
+      # without it the Tauri build script fails, same as in the build jobs above.
+      - name: Build WhatsApp helper
+        working-directory: sidecar/wa
+        shell: bash
+        run: |
+          go mod tidy
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -H windowsgui" -o ../../src-tauri/binaries/bev-wa.exe .
+          else
+            CGO_ENABLED=0 go build -trimpath -o ../../src-tauri/binaries/bev-wa .
+          fi
       - run: npm ci
         env:
           # onnxruntime-node (via kokoro-js) otherwise fetches a CUDA build on Linux.
