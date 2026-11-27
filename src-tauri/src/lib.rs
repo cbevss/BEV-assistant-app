@@ -32,6 +32,7 @@ mod annotate;
 mod folders;
 mod gamelib;
 mod wanotify;
+mod walinked;
 mod filemanagers;
 mod replay;
 mod screen;
@@ -206,6 +207,10 @@ pub fn run() {
             filemanagers::list_file_managers,
             gamelib::start_game_download,
             wanotify::whatsapp_notifications,
+            walinked::wa_link_start,
+            walinked::wa_link_request,
+            walinked::wa_link_running,
+            walinked::wa_link_stop,
             screen::live_frame,
             folders::install_update_to_folder,
             annotate::hide_annotate,

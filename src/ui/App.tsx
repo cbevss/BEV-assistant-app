@@ -191,6 +191,14 @@ export function App() {
         for (const c of chats)
           void raise("message", `New WhatsApp message from ${c.name}`, `${c.unread} unread. Ask BEV what it says.`, { key: `whatsapp:${c.name}:${c.unread}`, cooldownMs: 60_000 });
       });
+      // WhatsApp linked as a device (if the user turned it on): start it, and tell them about new messages.
+      void import("@/lib/whatsappLinked").then(({ linkApi }) => {
+        void linkApi.onEvent((e) => {
+          if (e.event === "message")
+            void raise("message", `New WhatsApp message from ${e.from === e.chat ? e.chat : `${e.from} in ${e.chat}`}`, "Ask BEV what it says.", { key: `whatsapp-linked:${e.chatId}`, cooldownMs: 60_000 });
+        });
+        if (useSettings.getState().settings.whatsappLinked) linkApi.start().catch(() => {});
+      });
       // Folders open in the file manager picked in Settings.
       setFileManagerPref(useSettings.getState().settings.fileManager);
       useSettings.subscribe((s) => setFileManagerPref(s.settings.fileManager));

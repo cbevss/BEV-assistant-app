@@ -10,6 +10,7 @@ import { PageHeader, Section, Field, Select, Slider, Toggle, TextArea, TextInput
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { AppsIndex } from "../components/AppsIndex";
 import { DataControls } from "../components/DataControls";
+import { WhatsAppLink } from "../components/WhatsAppLink";
 import { applyAppearance } from "@/lib/appearance";
 
 export function Settings({ part = "general" }: { part?: "general" | "apps" | "advanced" }) {
@@ -194,6 +195,9 @@ export function Settings({ part = "general" }: { part?: "general" | "apps" | "ad
       {part === "advanced" && (
         <>
       <PageHeader title="Advanced" subtitle="Version information, your data, and resetting BEV." />
+      <Section title="WhatsApp">
+        <WhatsAppLink />
+      </Section>
       <Section title="Diagnostics">
         <Field label="Version">
           <span className="font-mono text-sm text-ink-2">BEV {version}</span>
