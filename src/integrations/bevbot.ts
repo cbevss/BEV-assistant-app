@@ -369,7 +369,86 @@ export function bevBotTools(): Record<string, RegisteredTool> {
       },
       run: async (a) => `Left ${(await bot<{ left: string }>("/api/owner/leave", { guild_id: id(a.guild_id, "guild_id") })).left}.`,
     },
+    bev_bot_track_price: {
+      spec: {
+        name: "bev_bot_track_price",
+        description:
+          "Make the user's Discord bot BEV keep track of an item's price on a shop's website and DM him a panel on Discord when the price drops (or reaches target). Use when he asks to watch/track/keep an eye on a price. Needs the full https link to the item's page.",
+        parameters: {
+          type: "object",
+          properties: {
+            url: { type: "string", description: "full https link to the item's page" },
+            target: { type: "number", description: "optional: also tell him when it's this price or lower" },
+          },
+          required: ["url"],
+        },
+      },
+      untrustedOutput: true,
+      run: async (a) => {
+        const r = await bot<{ item: PriceItem }>("/api/owner/price", {
+          action: "track",
+          url: String(a.url ?? ""),
+          target: typeof a.target === "number" ? a.target : undefined,
+        });
+        return `Tracking ${r.item.name}: ${r.item.price_text} now. BEV bot will DM him on Discord when it drops${r.item.target ? ` or reaches ${r.item.target}` : ""}.`;
+      },
+    },
+    bev_bot_prices: {
+      spec: {
+        name: "bev_bot_prices",
+        description: "The prices BEV bot is tracking for the user (ids, item names, price now, lowest seen, target, problems).",
+        parameters: { type: "object", properties: {}, required: [] },
+      },
+      untrustedOutput: true,
+      run: async () => describePrices((await bot<{ items: PriceItem[] }>("/api/owner/price")).items),
+    },
+    bev_bot_check_price: {
+      spec: {
+        name: "bev_bot_check_price",
+        description: "Look up an item's price right now through BEV bot. With dm:true BEV bot also DMs the price to the user on Discord as a panel.",
+        parameters: {
+          type: "object",
+          properties: { url: { type: "string" }, dm: { type: "boolean" } },
+          required: ["url"],
+        },
+      },
+      untrustedOutput: true,
+      run: async (a) => {
+        const r = await bot<{ name: string; price_text: string }>("/api/owner/price", { action: "check", url: String(a.url ?? ""), dm: !!a.dm });
+        return `${r.name}: ${r.price_text}${a.dm ? " (sent to his Discord DMs)" : ""}`;
+      },
+    },
+    bev_bot_untrack_price: {
+      spec: {
+        name: "bev_bot_untrack_price",
+        description: "Stop BEV bot tracking one price (id from bev_bot_prices).",
+        parameters: { type: "object", properties: { id: { type: "number" } }, required: ["id"] },
+      },
+      run: async (a) => {
+        await bot("/api/owner/price", { action: "remove", id: Number(a.id) });
+        return "Stopped tracking it.";
+      },
+    },
   };
+}
+
+export interface PriceItem {
+  id: number;
+  name: string;
+  url: string;
+  price_text: string;
+  target: number | null;
+  lowest: number | null;
+  currency: string | null;
+  problem: string | null;
+}
+
+/** Pure; tested. One line per tracked price. */
+export function describePrices(items: PriceItem[]): string {
+  if (!items.length) return "BEV bot isn't tracking any prices.";
+  return items
+    .map((i) => `#${i.id} ${i.name}: ${i.price_text}${i.target ? ` (target ${i.target})` : ""}${i.problem ? ` [last check failed: ${i.problem}]` : ""} ${i.url}`)
+    .join("\n");
 }
 
 // ---------------------------------------------------------------------------
@@ -387,7 +466,8 @@ export function noticeFor(e: BotEvent): {
   body: string;
   key: string;
 } {
-  const title = e.kind === "error" ? "BEV bot hit an error" : e.kind === "server" ? "BEV bot servers" : e.kind === "link" ? "BEV bot: new device linked" : "BEV bot";
+  const title =
+    e.kind === "error" ? "BEV bot hit an error" : e.kind === "server" ? "BEV bot servers" : e.kind === "link" ? "BEV bot: new device linked" : e.kind === "price" ? (e.text.startsWith("Price drop") ? "Price drop" : "Price tracker") : "BEV bot";
   return {
     title,
     body: e.text,
