@@ -31,7 +31,10 @@ export type WaEvent =
   | { event: "error"; error: string };
 
 export const linkApi = {
-  start: () => invoke<boolean>("wa_link_start"),
+  start: () => {
+    watchLinkStatus();
+    return invoke<boolean>("wa_link_start");
+  },
   stop: () => invoke<void>("wa_link_stop"),
   running: () => invoke<boolean>("wa_link_running"),
   request: <T>(request: Record<string, unknown>) => invoke<T>("wa_link_request", { request }),
@@ -39,10 +42,20 @@ export const linkApi = {
 };
 
 let connected = false;
-void linkApi.onEvent((e) => {
-  if (e.event === "ready") connected = true;
-  if (e.event === "loggedOut" || e.event === "stopped" || e.event === "qr") connected = false;
-});
+let watching = false;
+/** Keep track of whether the helper is signed in (started with the helper, not on import). */
+export function watchLinkStatus() {
+  if (watching) return;
+  watching = true;
+  void linkApi
+    .onEvent((e) => {
+      if (e.event === "ready") connected = true;
+      if (e.event === "loggedOut" || e.event === "stopped" || e.event === "qr") connected = false;
+    })
+    .catch(() => {
+      watching = false;
+    });
+}
 
 /** Linked and signed in (requests can go through the helper). */
 export function isLinked(): boolean {
